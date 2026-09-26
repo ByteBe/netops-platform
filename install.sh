@@ -12,7 +12,7 @@ set -e
 
 APP_NAME="netops-server"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-APP_DIR="$SCRIPT_DIR/backend"
+APP_DIR="$SCRIPT_DIR"
 APP="$APP_DIR/$APP_NAME"
 LOG_DIR="$APP_DIR/logs"
 PID_FILE="$APP_DIR/$APP_NAME.pid"
