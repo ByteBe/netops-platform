@@ -1,0 +1,5 @@
+2026/09/24 00:13:24 [INFO] 平台初始化完成：数据库=sqlite 时序库=builtin
+2026/09/24 00:13:24 [embed] web/dist/assets 文件数: 111
+2026/09/24 00:13:24 [internal] 内部服务监听 127.0.0.1:30001
+2026/09/24 00:13:24 [web] NetOps 平台启动: http://0.0.0.0:30821  (前端静态资源已内嵌)
+2026/09/24 00:13:24 [web] 服务异常退出: listen tcp 0.0.0.0:30821: bind: Only one usage of each socket address (protocol/network address/port) is normally permitted.

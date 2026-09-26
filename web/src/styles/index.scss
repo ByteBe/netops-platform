@@ -1,0 +1,111 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  width: 100%;
+  font-family: $font-family;
+  color: var(--np-text-1);
+  background: var(--np-bg);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--np-primary);
+  text-decoration: none;
+}
+
+// 通用滚动条
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--np-border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+// Element Plus 主题变量适配
+html.dark {
+  --el-bg-color: #1e293b;
+  --el-bg-color-overlay: #1e293b;
+  --el-fill-color-blank: #1e293b;
+  --el-text-color-primary: #e2e8f0;
+  --el-border-color: #334155;
+  --el-border-color-light: #334155;
+  --el-border-color-lighter: #2c3a52;
+}
+
+// 通用卡片
+.np-card {
+  background: var(--np-card-bg);
+  border: 1px solid var(--np-border);
+  border-radius: $radius-md;
+  box-shadow: var(--np-shadow);
+  padding: 16px;
+}
+
+.np-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.np-page {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.np-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  .spacer {
+    flex: 1;
+  }
+}
+
+.np-table {
+  width: 100%;
+}
+
+.np-empty {
+  text-align: center;
+  color: var(--np-text-2);
+  padding: 40px 0;
+}
+
+// 数字/文本省略
+.np-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// 状态点
+.np-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  &.up { background: $color-success; }
+  &.down { background: $color-danger; }
+  &.warn { background: $color-warning; }
+  &.idle { background: $color-info; }
+}

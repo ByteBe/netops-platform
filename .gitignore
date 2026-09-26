@@ -1,0 +1,22 @@
+# 编译产物
+backend/netops-server
+backend/netops-server.exe
+
+# 前端构建产物（自动生成）
+web/dist/
+backend/web/dist/
+
+# 运行时数据
+backend/data/
+backend/logs/
+backend/config.yaml
+
+# Node
+web/node_modules/
+web/*.log
+web/stale-session.json
+web/stress-out.txt
+
+# IDE
+.idea/
+*.iml

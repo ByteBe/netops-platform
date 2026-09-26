@@ -1,0 +1,5 @@
+[docker] enable=true interval=30 hosts=["tcp://10.0.0.200:2375"]
+2026/09/25 14:05:58 [INFO] 平台初始化完成：数据库=sqlite 时序库=builtin
+2026/09/25 14:05:58 [embed] web/dist/assets 文件数: 39
+2026/09/25 14:05:58 [web] NetOps 平台启动: http://0.0.0.0:30821  (前端静态资源已内嵌)
+2026/09/25 14:05:58 [internal] 内部服务监听 127.0.0.1:30001

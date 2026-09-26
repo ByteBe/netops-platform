@@ -1,0 +1,35 @@
+
+
+[31m2026/09/24 17:50:51 [Recovery] 2026/09/24 - 17:50:51 panic recovered:
+runtime error: slice bounds out of range [1:0]
+D:/go/src/runtime/panic.go:155 (0x7ff6d68628b3)
+	goPanicSliceB: panic(boundsError{x: int64(x), signed: true, y: y, code: boundsSliceB})
+D:/gopath/pkg/mod/github.com/tjfoc/gmsm@v1.4.1/sm2/sm2.go:317 (0x7ff6d700637e)
+	Decrypt: data = data[1:]
+E:/IDEA/netops-platform/backend/internal/common/crypto/sm.go:83 (0x7ff6d700880d)
+	trySM2Decrypt: out, err := sm2.Decrypt(priv, cipher, sm2.C1C3C2)
+E:/IDEA/netops-platform/backend/internal/common/crypto/sm.go:65 (0x7ff6d7008652)
+	SM2Decrypt: out, err := trySM2Decrypt(priv, cipher)
+E:/IDEA/netops-platform/backend/internal/module/auth/auth.go:43 (0x7ff6d743343d)
+	Register.func1: sm4Key, err := crypto.SM2Decrypt(a.SM2.PrivateHex, req.Key)
+D:/gopath/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185 (0x7ff6d71c79ca)
+	(*Context).Next: c.handlers[c.index](c)
+E:/IDEA/netops-platform/backend/internal/middleware/middleware.go:42 (0x7ff6d74a1730)
+	Register.CORS.func4: c.Next()
+D:/gopath/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185 (0x7ff6d71d4c0e)
+	(*Context).Next: c.handlers[c.index](c)
+D:/gopath/pkg/mod/github.com/gin-gonic/gin@v1.10.0/recovery.go:102 (0x7ff6d71d4bfb)
+	CustomRecoveryWithWriter.func1: c.Next()
+D:/gopath/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185 (0x7ff6d71d39ca)
+	(*Context).Next: c.handlers[c.index](c)
+D:/gopath/pkg/mod/github.com/gin-gonic/gin@v1.10.0/gin.go:633 (0x7ff6d71d3387)
+	(*Engine).handleHTTPRequest: c.Next()
+D:/gopath/pkg/mod/github.com/gin-gonic/gin@v1.10.0/gin.go:589 (0x7ff6d71d2eac)
+	(*Engine).ServeHTTP: engine.handleHTTPRequest(c)
+D:/go/src/net/http/server.go:3340 (0x7ff6d6b647ed)
+	serverHandler.ServeHTTP: handler.ServeHTTP(rw, req)
+D:/go/src/net/http/server.go:2109 (0x7ff6d6b431e4)
+	(*conn).serve: serverHandler{c.server}.ServeHTTP(w, w.req)
+D:/go/src/runtime/asm_amd64.s:1693 (0x7ff6d68a14c0)
+	goexit: BYTE	$0x90	// NOP
+[0m
