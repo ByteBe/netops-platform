@@ -2,21 +2,21 @@
 rem ============================================
 rem NetOps 网络运维监控平台 - Windows 部署脚本
 rem 用法:
-rem   install.bat           安装并启动（开机自启 + 后台运行）
-rem   install.bat start     仅启动
-rem   install.bat stop      停止
-rem   install.bat restart   重启
-rem   install.bat status    查看状态
-rem   install.bat uninstall 卸载服务
-rem   install.bat logs      打开日志目录
+rem   install.bat install     安装任务计划 + 开机自启 + 启动
+rem   install.bat start       启动
+rem   install.bat stop        停止
+rem   install.bat restart     重启
+rem   install.bat status      查看状态
+rem   install.bat uninstall  卸载服务
+rem   install.bat logs        打开日志目录
 rem ============================================
 setlocal enabledelayedexpansion
 chcp 65001 >nul
 
 set "APP_NAME=netops-server.exe"
-set "APP_DIR=%~dp0backend"
-set "APP=%APP_DIR%\%APP_NAME%"
-set "LOG_DIR=%APP_DIR%\logs"
+set "APP_DIR=%~dp0"
+set "APP=%APP_DIR%%APP_NAME%"
+set "LOG_DIR=%APP_DIR%logs"
 set "TASK_NAME=NetOpsServer"
 
 if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
