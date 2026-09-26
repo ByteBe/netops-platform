@@ -67,11 +67,12 @@ router.beforeEach(async (to) => {
   const auth = useAuthStore()
   const { getEnc } = await import('@/utils/request')
 
-  // 检查系统是否已初始化（只查一次）
+  // 检查系统是否已初始化（只查一次，用原生 fetch 避免拦截器干扰）
   if (!_setupChecked) {
     try {
-      const s = await getEnc<{ initialized: boolean }>('/setup/status')
-      _initialized = !!s.initialized
+      const r = await fetch('/api/v1/setup/status')
+      const j = await r.json()
+      _initialized = !!(j.data && j.data.initialized)
     } catch { _initialized = true }
     _setupChecked = true
   }

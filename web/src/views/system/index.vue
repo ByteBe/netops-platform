@@ -27,7 +27,7 @@ const userDialog = ref(false)
 const userForm = reactive({ id: 0, username: '', employee_no: '', email: '', role: 'operator', status: 'active', password: '' })
 
 async function loadUsers() {
-  users.value = await getEnc<SysUser[]>('/user/users')
+  const res = await getEnc<{list: SysUser[]}>('/user/users'); users.value = res.list || []
 }
 function openUser(u?: SysUser) {
   if (u) {
@@ -305,7 +305,7 @@ const uploadResult = ref<any>(null)
 const applying = ref(false)
 
 async function loadVersion() {
-  ver.value = await getEnc('/update/version')
+  try { ver.value = await getEnc('/update/version') } catch {}
 }
 
 async function doUpload(opt: any) {

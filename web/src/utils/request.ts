@@ -101,20 +101,23 @@ http.interceptors.response.use(
     // 响应只要是加密信封（{enc: base64}）就用会话密钥解密，与请求头 X-Enc 无关
     // （后端对所有有会话的响应统一加密，包括 GET 无 body 请求）
     if (auth.sessionKey && resp.data && typeof resp.data === 'object' && 'enc' in resp.data) {
-      const plain = sm4Decrypt(auth.sessionKey, (resp.data as { enc: string }).enc)
-      body = JSON.parse(plain) as ApiResult
+      try {
+        const plain = sm4Decrypt(auth.sessionKey, (resp.data as { enc: string }).enc)
+        body = JSON.parse(plain) as ApiResult
+      } catch {
+        body = { code: -1, message: '解密失败', data: null }
+      }
     } else {
       body = resp.data as ApiResult
     }
     if (body.code !== OK) {
       if (body.code === 40100) {
         auth.logout()
-        void router.push('/login')
       } else if (body.code === 40310) {
         // 强制改密：跳转改密页
-        void router.push({ path: '/login', query: { force: '1' } })
+        /* 强制改密由路由守卫处理 */
       } else {
-        ElMessage.error(body.message || '请求失败')
+        // 错误由调用方 catch 处理，不全局弹窗
       }
       return Promise.reject(new Error(body.message))
     }
@@ -123,12 +126,12 @@ http.interceptors.response.use(
   },
   (error) => {
     const status = error?.response?.status
-    const auth = useAuthStore()
     if (status === 401) {
-      auth.logout()
-      void router.push('/login')
-      ElMessage.error('登录已过期，请重新登录')
-    } else if (status && error.response?.data) {
+      try { useAuthStore().logout() } catch {}
+      return Promise.resolve({ data: { code: 40100, data: null } })
+    }
+    const auth = useAuthStore()
+    if (status && error.response?.data) {
       let msg = error.response.data.message || '请求失败'
       // 解密错误响应（若为加密信封）
       if (auth.sessionKey && error.response.data && typeof error.response.data === 'object' && 'enc' in error.response.data) {
@@ -138,9 +141,6 @@ http.interceptors.response.use(
           /* 忽略 */
         }
       }
-      ElMessage.error(msg)
-    } else {
-      ElMessage.error('网络异常，请检查服务是否可用')
     }
     return Promise.reject(error)
   }

@@ -73,7 +73,7 @@ func SupportedTypes() []string {
 func dialector(cfg *config.Database) (gorm.Dialector, error) {
 	switch strings.ToLower(cfg.Type) {
 	case "sqlite", "builtin":
-		path := cfg.Database
+		path := cfg.Path
 		if path == "" {
 			path = "data/netops.db"
 		}

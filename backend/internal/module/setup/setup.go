@@ -2,9 +2,9 @@
 package setup
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -19,6 +19,52 @@ import (
 	"netops/internal/storage"
 )
 
+type encReq struct {
+	Key  string `json:"key"`
+	Data string `json:"data"`
+}
+
+// doEnc 处理加密请求：解密 body -> fn(plain) -> 加密响应
+func doEnc(a *core.App, c *gin.Context, fn func(plain []byte) (any, error)) {
+	var req encReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Bad(c, "请求格式错误")
+		return
+	}
+	sm4Key, err := crypto.SM2Decrypt(a.SM2.PrivateHex, req.Key)
+	if err != nil {
+		response.Bad(c, "密钥解密失败")
+		return
+	}
+	plain, err := crypto.SM4Decrypt(sm4Key, req.Data)
+	if err != nil {
+		response.Bad(c, "数据解密失败")
+		return
+	}
+	result, err := fn(plain)
+	if err != nil {
+		if bizErr, ok := err.(*bizError); ok {
+			response.Fail(c, bizErr.status, bizErr.code, bizErr.msg)
+		} else {
+			response.Bad(c, err.Error())
+		}
+		return
+	}
+	raw, _ := json.Marshal(result)
+	env, _ := crypto.SM4Encrypt(sm4Key, raw)
+	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": gin.H{"enc": env}})
+}
+
+type bizError struct {
+	status int
+	code   int
+	msg    string
+}
+
+func (e *bizError) Error() string { return e.msg }
+
+func bizFail(status, code int, msg string) error { return &bizError{status, code, msg} }
+
 // Register 注册公开路由
 func Register(a *core.App, g *gin.RouterGroup) {
 	g.GET("/status", func(c *gin.Context) {
@@ -31,148 +77,126 @@ func Register(a *core.App, g *gin.RouterGroup) {
 		})
 	})
 
-	// 测试存储数据库连接
 	g.POST("/db-test", func(c *gin.Context) {
 		if a.Ready {
 			response.Fail(c, http.StatusConflict, response.CodeConflict, "系统已初始化")
 			return
 		}
-		var req config.Database
-		if err := c.ShouldBindJSON(&req); err != nil {
-			response.Bad(c, "参数错误: "+err.Error())
-			return
-		}
-		if err := storage.TestConnection(req); err != nil {
-			response.Fail(c, http.StatusBadRequest, response.CodeBadRequest, err.Error())
-			return
-		}
-		response.OK(c, gin.H{"ok": true})
+		doEnc(a, c, func(plain []byte) (any, error) {
+			var req config.Database
+			if err := json.Unmarshal(plain, &req); err != nil {
+				return nil, fmt.Errorf("参数错误: %w", err)
+			}
+			if err := storage.TestConnection(req); err != nil {
+				return nil, bizFail(http.StatusBadRequest, response.CodeBadRequest, err.Error())
+			}
+			return gin.H{"ok": true}, nil
+		})
 	})
 
-	// 测试时序数据库连接
 	g.POST("/tsdb-test", func(c *gin.Context) {
 		if a.Ready {
 			response.Fail(c, http.StatusConflict, response.CodeConflict, "系统已初始化")
 			return
 		}
-		var req config.TSDB
-		if err := c.ShouldBindJSON(&req); err != nil {
-			response.Bad(c, "参数错误: "+err.Error())
-			return
-		}
-		eng, err := appinit.OpenTSDB(&req)
-		if err != nil {
-			response.Fail(c, http.StatusBadRequest, response.CodeBadRequest, err.Error())
-			return
-		}
-		if err := eng.Ping(); err != nil {
-			response.Fail(c, http.StatusBadRequest, response.CodeBadRequest, "时序库探活失败: "+err.Error())
-			return
-		}
-		eng.Close()
-		response.OK(c, gin.H{"ok": true})
+		doEnc(a, c, func(plain []byte) (any, error) {
+			var req config.TSDB
+			if err := json.Unmarshal(plain, &req); err != nil {
+				return nil, fmt.Errorf("参数错误: %w", err)
+			}
+			eng, err := appinit.OpenTSDB(&req)
+			if err != nil {
+				return nil, bizFail(http.StatusBadRequest, response.CodeBadRequest, err.Error())
+			}
+			if err := eng.Ping(); err != nil {
+				eng.Close()
+				return nil, bizFail(http.StatusBadRequest, response.CodeBadRequest, "时序库探活失败: "+err.Error())
+			}
+			eng.Close()
+			return gin.H{"ok": true}, nil
+		})
 	})
 
-	// 完成初始化
 	g.POST("/init", func(c *gin.Context) {
 		if a.Ready {
 			response.Fail(c, http.StatusConflict, response.CodeConflict, "系统已初始化")
 			return
 		}
-		var req struct {
-			Database config.Database `json:"database"`
-			TSDB     config.TSDB     `json:"tsdb"`
-			Admin    struct {
-				Username   string `json:"username"`
-				Password   string `json:"password"`
-				Email      string `json:"email"`
-				EmployeeNo string `json:"employee_no"`
-			} `json:"admin"`
-		}
-		if err := c.ShouldBindJSON(&req); err != nil {
-			response.Bad(c, "参数错误: "+err.Error())
-			return
-		}
-		// 校验
-		if req.Database.Type == "" {
-			response.Bad(c, "请选择存储数据库")
-			return
-		}
-		if req.TSDB.Type == "" {
-			response.Bad(c, "请选择时序数据库")
-			return
-		}
-		if req.Admin.Username == "" || req.Admin.Password == "" {
-			response.Bad(c, "请填写管理员账号与初始密码")
-			return
-		}
-		if err := password.Validate(req.Admin.Password); err != nil {
-			response.Fail(c, http.StatusUnprocessableEntity, response.CodeWeakPassword, err.Error())
-			return
-		}
-
-		// 1. 测试连接
-		if err := storage.TestConnection(req.Database); err != nil {
-			response.Fail(c, http.StatusBadRequest, response.CodeBadRequest, "存储数据库: "+err.Error())
-			return
-		}
-		if eng, err := appinit.OpenTSDB(&req.TSDB); err != nil {
-			response.Fail(c, http.StatusBadRequest, response.CodeBadRequest, "时序数据库: "+err.Error())
-			return
-		} else if err := eng.Ping(); err != nil {
-			response.Fail(c, http.StatusBadRequest, response.CodeBadRequest, "时序数据库: "+err.Error())
-			return
-		} else {
+		doEnc(a, c, func(plain []byte) (any, error) {
+			var req struct {
+				Database config.Database `json:"database"`
+				TSDB     config.TSDB     `json:"tsdb"`
+				Admin    struct {
+					Username   string `json:"username"`
+					Password   string `json:"password"`
+					Email      string `json:"email"`
+					EmployeeNo string `json:"employee_no"`
+				} `json:"admin"`
+			}
+			if err := json.Unmarshal(plain, &req); err != nil {
+				return nil, fmt.Errorf("参数错误: %w", err)
+			}
+			if req.Database.Type == "" {
+				return nil, fmt.Errorf("请选择存储数据库")
+			}
+			if req.TSDB.Type == "" {
+				return nil, fmt.Errorf("请选择时序数据库")
+			}
+			if req.Admin.Username == "" || req.Admin.Password == "" {
+				return nil, fmt.Errorf("请填写管理员账号与初始密码")
+			}
+			if err := password.Validate(req.Admin.Password); err != nil {
+				return nil, bizFail(http.StatusUnprocessableEntity, response.CodeWeakPassword, err.Error())
+			}
+			if err := storage.TestConnection(req.Database); err != nil {
+				return nil, bizFail(http.StatusBadRequest, response.CodeBadRequest, "存储数据库: "+err.Error())
+			}
+			eng, err := appinit.OpenTSDB(&req.TSDB)
+			if err != nil {
+				return nil, bizFail(http.StatusBadRequest, response.CodeBadRequest, "时序数据库: "+err.Error())
+			}
+			if err := eng.Ping(); err != nil {
+				eng.Close()
+				return nil, bizFail(http.StatusBadRequest, response.CodeBadRequest, "时序数据库: "+err.Error())
+			}
 			eng.Close()
-		}
 
-		// 2. 持久化配置
-		if err := appinit.EnsureJWTKey(a.Cfg); err != nil {
-			response.Err(c, err)
-			return
-		}
-		a.Cfg.Database = req.Database
-		a.Cfg.TSDB = req.TSDB
-		a.Cfg.Initialized = true
-		if err := a.Cfg.Save(); err != nil {
-			response.Err(c, fmt.Errorf("保存配置失败: %w", err))
-			return
-		}
-
-		// 3. 初始化存储与迁移
-		if err := appinit.InitRuntimeAndDB(a); err != nil {
-			a.Cfg.Initialized = false
-			_ = a.Cfg.Save()
-			response.Err(c, err)
-			return
-		}
-
-		// 4. 创建管理员
-		salt, _ := crypto.GenerateSalt()
-		admin := model.User{
-			Username:      req.Admin.Username,
-			EmployeeNo:    req.Admin.EmployeeNo,
-			Email:         req.Admin.Email,
-			PasswordHash:  crypto.PasswordHash(req.Admin.Password, salt),
-			Salt:          salt,
-			Role:          "admin",
-			Status:        "active",
-			MustChangePwd: true, // 初始登录强制修改密码
-		}
-		if err := a.DB.Create(&admin).Error; err != nil {
-			response.Err(c, fmt.Errorf("创建管理员失败: %w", err))
-			return
-		}
-
-		a.Ready = true
-		appinit.SyncManagers(a)
-		response.OK(c, gin.H{"ok": true, "message": "初始化完成，请使用管理员账号登录并修改初始密码"})
+			if err := appinit.EnsureJWTKey(a.Cfg); err != nil {
+				return nil, err
+			}
+			a.Cfg.Database = req.Database
+			a.Cfg.TSDB = req.TSDB
+			a.Cfg.Initialized = true
+			if err := a.Cfg.Save(); err != nil {
+				return nil, fmt.Errorf("保存配置失败: %w", err)
+			}
+			if err := appinit.InitRuntimeAndDB(a); err != nil {
+				a.Cfg.Initialized = false
+				_ = a.Cfg.Save()
+				return nil, err
+			}
+			salt, _ := crypto.GenerateSalt()
+			a.DB.Where("username = ?", req.Admin.Username).Delete(&model.User{})
+			admin := model.User{
+				Username:      req.Admin.Username,
+				EmployeeNo:    req.Admin.EmployeeNo,
+				Email:         req.Admin.Email,
+				PasswordHash:  crypto.PasswordHash(req.Admin.Password, salt),
+				Salt:          salt,
+				Role:          "admin",
+				Status:        "active",
+				MustChangePwd: false,
+			}
+			if err := a.DB.Create(&admin).Error; err != nil {
+				return nil, fmt.Errorf("创建管理员失败: %w", err)
+			}
+			a.Ready = true
+			appinit.SyncManagers(a)
+			return gin.H{"ok": true, "message": "初始化完成，请使用管理员账号登录"}, nil
+		})
 	})
 }
 
-var _ = time.Now
-
-// init 自动注册路由
 func init() {
 	modreg.Register("setup", Register)
 }

@@ -22,14 +22,14 @@ var buildVersion = "v1.0.0"
 var buildTime = "2026-09-26"
 
 func RegisterProtected(a *core.App, g *gin.RouterGroup) {
-	g.GET("/update/version", func(c *gin.Context) {
+	g.GET("/version", func(c *gin.Context) {
 		response.OK(c, gin.H{
 			"version": buildVersion, "build": buildTime,
 			"os": runtime.GOOS, "arch": runtime.GOARCH,
 		})
 	})
 
-	g.POST("/update/upload", func(c *gin.Context) {
+	g.POST("/upload", func(c *gin.Context) {
 		file, err := c.FormFile("file")
 		if err != nil {
 			response.Bad(c, "请选择文件")
@@ -50,7 +50,7 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		})
 	})
 
-	g.POST("/update/apply", func(c *gin.Context) {
+	g.POST("/apply", func(c *gin.Context) {
 		var req struct {
 			TmpPath string `json:"tmp_path"`
 		}

@@ -20,3 +20,13 @@ web/stress-out.txt
 # IDE
 .idea/
 *.iml
+
+# 构建产物
+*.zip
+netops-platform-v*/
+backend/netops-server.exe
+backend/data/
+backend/config.yaml
+backend/web/dist/
+backend/logs/
+*.log

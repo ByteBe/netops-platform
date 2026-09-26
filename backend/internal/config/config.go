@@ -27,6 +27,7 @@ type Database struct {
 	User     string `yaml:"user"`
 	Password string `yaml:"password"`
 	Database string `yaml:"database"`
+	Path     string `yaml:"path"`     // sqlite 专用：数据库文件路径
 	Params   string `yaml:"params"` // 附加连接参数
 	MaxIdle  int    `yaml:"max_idle_conns"`
 	MaxOpen  int    `yaml:"max_open_conns"`

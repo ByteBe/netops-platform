@@ -62,7 +62,7 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		}
 		pwd := req.Password
 		if pwd == "" {
-			pwd = password.Generate()
+			pwd = "123456"
 		} else if err := password.Validate(pwd); err != nil {
 			response.Fail(c, 422, response.CodeWeakPassword, err.Error())
 			return
@@ -137,7 +137,7 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			response.NotFound(c, "用户不存在")
 			return
 		}
-		pwd := password.Generate()
+		pwd := "123456"
 		salt, _ := crypto.GenerateSalt()
 		a.DB.Model(&u).Updates(map[string]any{
 			"password_hash": crypto.PasswordHash(pwd, salt), "salt": salt, "must_change_pwd": true,

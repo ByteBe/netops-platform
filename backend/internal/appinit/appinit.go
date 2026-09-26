@@ -111,7 +111,7 @@ func SeedData(db *gorm.DB) {
 	db.Model(&model.User{}).Count(&userCnt)
 	if userCnt == 0 {
 		salt, _ := crypto.GenerateSalt()
-		db.Create(&model.User{Username: "admin", EmployeeNo: "admin", Email: "admin@localhost", PasswordHash: crypto.PasswordHash("admin123", salt), Salt: salt, Role: "admin", Status: "active", MustChangePwd: true})
+		db.Create(&model.User{Username: "admin", EmployeeNo: "admin", Email: "admin@localhost", PasswordHash: crypto.PasswordHash("admin123", salt), Salt: salt, Role: "admin", Status: "active", MustChangePwd: false})
 	}
 	var cnt int64
 	db.Model(&model.DeviceGroup{}).Count(&cnt)
