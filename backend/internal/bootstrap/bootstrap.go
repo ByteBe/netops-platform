@@ -2,6 +2,8 @@
 package bootstrap
 
 import (
+	"os"
+
 	"netops/internal/appinit"
 	"netops/internal/common/logger"
 	"netops/internal/config"
@@ -26,6 +28,11 @@ func InitMCPServer(a *core.App) { appinit.InitMCPServer(a) }
 
 // Init 初始化应用
 func Init(cfg *config.Config) (*core.App, error) {
+	// 自动创建运行时目录（无论选择什么数据库）
+	os.MkdirAll("data", 0o755)
+	os.MkdirAll("data/uploads", 0o755)
+	os.MkdirAll("logs", 0o755)
+
 	if err := logger.Init("logs"); err != nil {
 		return nil, err
 	}
