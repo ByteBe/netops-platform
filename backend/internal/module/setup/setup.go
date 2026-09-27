@@ -1,4 +1,4 @@
-// Package setup 系统初始化向导（首次启动时选择存储数据库与时序数据库、创建管理员）
+﻿// Package setup 系统初始化向导（首次启动时选择存储数据库与时序数据库、创建管理员）
 package setup
 
 import (
@@ -190,6 +190,7 @@ func Register(a *core.App, g *gin.RouterGroup) {
 			if err := a.DB.Create(&admin).Error; err != nil {
 				return nil, fmt.Errorf("创建管理员失败: %w", err)
 			}
+			a.DB.Model(&admin).Update("must_change_pwd", false)
 			a.Ready = true
 			appinit.SyncManagers(a)
 			return gin.H{"ok": true, "message": "初始化完成，请使用管理员账号登录"}, nil

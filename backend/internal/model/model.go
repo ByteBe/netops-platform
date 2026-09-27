@@ -1,4 +1,4 @@
-// Package model 统一数据模型（GORM）
+﻿// Package model 统一数据模型（GORM）
 package model
 
 import "time"
@@ -13,7 +13,7 @@ type User struct {
 	Salt           string     `gorm:"size:32" json:"-"`
 	Role           string     `gorm:"size:16;default:operator" json:"role"` // admin/operator/viewer
 	Status         string     `gorm:"size:16;default:active" json:"status"` // active/disabled
-	MustChangePwd  bool       `gorm:"default:true" json:"must_change_pwd"`  // 首次登录强制改密
+	MustChangePwd  bool       `gorm:"default:false" json:"must_change_pwd"`  // 首次登录强制改密
 	LastLoginAt    *time.Time `json:"last_login_at"`
 	LastLoginIP    string     `gorm:"size:64" json:"last_login_ip"`
 	CreatedAt      time.Time  `json:"created_at"`
@@ -61,7 +61,7 @@ type MonitorDevice struct {
 	PrivPass    string    `gorm:"size:128" json:"priv_pass"`
 	Port        int       `gorm:"default:161" json:"port"`
 	Interval    int       `gorm:"default:60" json:"interval"` // 采集周期秒
-	Enable      bool      `gorm:"default:true" json:"enable"`
+	Enable      bool      `gorm:"default:false" json:"enable"`
 	Status      string    `gorm:"size:16;default:unknown" json:"status"` // up/down/unknown
 	Remark      string    `gorm:"size:256" json:"remark"`
 	CreatedAt   time.Time `json:"created_at"`
@@ -79,7 +79,7 @@ type LinkTask struct {
 	Timeout   int       `gorm:"default:5" json:"timeout"`              // 秒
 	GroupID   uint      `gorm:"index;default:0" json:"group_id"`
 	Color     string    `gorm:"size:16;default:#409EFF" json:"color"` // 曲线颜色
-	Enabled   bool      `gorm:"default:true" json:"enabled"`
+	Enabled   bool      `gorm:"default:false" json:"enabled"`
 	Status    string    `gorm:"size:16;default:unknown" json:"status"` // up/down/unknown
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -130,7 +130,7 @@ type DBInstance struct {
 	User      string    `gorm:"size:64" json:"user"`
 	Password  string    `gorm:"size:256" json:"password"`
 	Interval  int       `gorm:"default:60" json:"interval"`
-	Enable    bool      `gorm:"default:true" json:"enable"`
+	Enable    bool      `gorm:"default:false" json:"enable"`
 	Status    string    `gorm:"size:16;default:unknown" json:"status"`
 	GroupID   uint      `gorm:"index;default:0" json:"group_id"`
 	Remark    string    `gorm:"size:256" json:"remark"`
@@ -147,7 +147,7 @@ type ScriptTemplate struct {
 	Name        string    `gorm:"size:128" json:"name"`
 	Description string    `gorm:"size:512" json:"description"`
 	SchemaJSON  string    `gorm:"type:text" json:"-"` // 参数表单定义
-	Enabled     bool      `gorm:"default:true" json:"enabled"`
+	Enabled     bool      `gorm:"default:false" json:"enabled"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
@@ -203,7 +203,7 @@ type BindDevice struct {
 	AuthType  string    `gorm:"size:16;default:password" json:"auth_type"` // password/key
 	Credential string   `gorm:"size:512" json:"credential,omitempty"`
 	Vendor    string    `gorm:"size:16;default:huawei" json:"vendor"` // huawei/h3c
-	Enable    bool      `gorm:"default:true" json:"enable"`
+	Enable    bool      `gorm:"default:false" json:"enable"`
 	Remark    string    `gorm:"size:256" json:"remark"`
 	CreatedAt time.Time `json:"created_at"`
 }
@@ -218,7 +218,7 @@ type TrafficRule struct {
 	UpRate      float64   `gorm:"default:1000" json:"up_rate"`        // 上行速率 Mbps
 	DownRate    float64   `gorm:"default:1000" json:"down_rate"`      // 下行速率 Mbps
 	Color       string    `gorm:"size:16;default:#409EFF" json:"color"`
-	Enable      bool      `gorm:"default:true" json:"enable"`
+	Enable      bool      `gorm:"default:false" json:"enable"`
 	Remark      string    `gorm:"size:256" json:"remark"`
 	CreatedAt   time.Time `json:"created_at"`
 }
@@ -233,7 +233,7 @@ type AIConfig struct {
 	Model       string    `gorm:"size:128" json:"model"`
 	Temperature float64   `gorm:"default:0.7" json:"temperature"`
 	Priority    int       `gorm:"default:0" json:"priority"` // 调度优先级
-	Enable      bool      `gorm:"default:true" json:"enable"`
+	Enable      bool      `gorm:"default:false" json:"enable"`
 	Remark      string    `gorm:"size:256" json:"remark"`
 	CreatedAt   time.Time `json:"created_at"`
 }
@@ -246,7 +246,7 @@ type MCPAgent struct {
 	Endpoint  string    `gorm:"size:256" json:"endpoint"`
 	AuthType  string    `gorm:"size:16;default:none" json:"auth_type"` // none/bearer/basic
 	AuthToken string    `gorm:"size:512" json:"-"`
-	Enable    bool      `gorm:"default:true" json:"enable"`
+	Enable    bool      `gorm:"default:false" json:"enable"`
 	Remark    string    `gorm:"size:256" json:"remark"`
 	CreatedAt time.Time `json:"created_at"`
 }
@@ -259,7 +259,7 @@ type EmailConfig struct {
 	SMTPPort     int       `gorm:"default:465" json:"smtp_port"`
 	User         string    `gorm:"size:128;not null" json:"user"`
 	Password     string    `gorm:"size:256" json:"-"`
-	UseSSL       bool      `gorm:"default:true" json:"use_ssl"`
+	UseSSL       bool      `gorm:"default:false" json:"use_ssl"`
 	Enable       bool      `gorm:"default:false" json:"enable"` // 是否启用
 	DefaultTo    string    `gorm:"size:512" json:"default_to"`
 	Remark       string    `gorm:"size:256" json:"remark"`
@@ -293,7 +293,7 @@ type DockerHost struct {
 	ID      uint   `gorm:"primaryKey" json:"id"`
 	Name    string `gorm:"size:128" json:"name"`
 	Address string `gorm:"size:256" json:"address"`
-	Enabled bool   `gorm:"default:true" json:"enabled"`
+	Enabled bool   `gorm:"default:false" json:"enabled"`
 	Remark  string `gorm:"size:256" json:"remark"`
 }
 
@@ -303,6 +303,6 @@ type K8sCluster struct {
 	Name      string `gorm:"size:128" json:"name"`
 	APIServer string `gorm:"size:256" json:"api_server"`
 	Token     string `gorm:"size:512" json:"token"`
-	Enabled   bool   `gorm:"default:true" json:"enabled"`
+	Enabled   bool   `gorm:"default:false" json:"enabled"`
 	Remark    string `gorm:"size:256" json:"remark"`
 }
