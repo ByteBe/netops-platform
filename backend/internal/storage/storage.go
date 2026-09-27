@@ -4,6 +4,7 @@
 package storage
 
 import (
+	"database/sql"
 	"fmt"
 	"strings"
 	"time"
@@ -46,6 +47,36 @@ func Open(cfg *config.Database) (*gorm.DB, error) {
 
 // TestConnection 测试连接（初始化向导使用）
 func TestConnection(t config.Database) error {
+	// MySQL: 先连接无数据库，自动创建数据库
+	if strings.ToLower(t.Type) == "mysql" && t.Database != "" {
+		adminDSN := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8mb4&parseTime=True&loc=Local",
+			t.User, t.Password, t.Host, t.Port)
+		adminDB, err := sql.Open("mysql", adminDSN)
+		if err == nil {
+			_, err = adminDB.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci", t.Database))
+			adminDB.Close()
+		}
+		if err != nil {
+			return fmt.Errorf("自动创建数据库失败: %w", err)
+		}
+	}
+	// Kingbase/PostgreSQL: 自动创建数据库
+	if strings.ToLower(t.Type) == "kingbase" || strings.ToLower(t.Type) == "postgres" {
+		adminDSN := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=postgres sslmode=disable",
+			t.Host, t.Port, t.User, t.Password)
+		adminDB, err := sql.Open("postgres", adminDSN)
+		if err == nil {
+			var exists int
+			adminDB.QueryRow("SELECT 1 FROM pg_database WHERE datname=$1", t.Database).Scan(&exists)
+			if exists == 0 {
+				_, err = adminDB.Exec(fmt.Sprintf("CREATE DATABASE \"%s\"", t.Database))
+			}
+			adminDB.Close()
+		}
+		if err != nil {
+			return fmt.Errorf("自动创建数据库失败: %w", err)
+		}
+	}
 	dl, err := dialector(&t)
 	if err != nil {
 		return err
