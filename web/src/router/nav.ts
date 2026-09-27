@@ -18,5 +18,6 @@ export const navMeta: Record<string, NavMeta> = {
   report: { title: 'nav.report', icon: 'Document' },
   scriptgen: { title: 'nav.scriptgen', icon: 'MagicStick' },
   ipam: { title: 'nav.ipam', icon: 'MapLocation' },
+  subnet: { title: '子网计算', icon: 'Grid' },
   system: { title: 'nav.system', icon: 'Setting' }
 }
