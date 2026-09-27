@@ -3,6 +3,7 @@
 > 仓库：[Gitee](https://gitee.com/ergn/netops-platform) | [GitHub](https://github.com/ByteBe/netops-platform)
 
 前后端一体、单二进制部署的网络运维监控平台。Windows / Linux 直接运行二进制即可。
+路由与 API 全自动化注册，新增功能只需写前端页面和后端模块代码，无需手动配置路由表或菜单。
 
 ---
 
@@ -11,10 +12,10 @@
 | 层 | 技术 |
 |----|------|
 | 后端 | Go 1.25+（Gin + GORM），全部静态编译 |
-| 前端 | Vue 3 + TypeScript + Vite + Element Plus + Pinia + ECharts + Three.js，样式全部 SCSS |
+| 前端 | Vue 3 + TypeScript + Vite + Element Plus + Pinia + ECharts + Three.js |
 | 加密 | 国密 SM2（会话密钥交换）+ SM4-CBC（请求/响应信封），密码 SM3 摘要存储 |
 | 关系库 | MySQL / Oracle / 达梦 DM8 / 人大金仓 KingbaseES / SQLite（内置） |
-| 时序库 | TDengine / InfluxDB / 内置 TSDB（不使用 Redis） |
+| 时序库 | TDengine / InfluxDB / 内置 TSDB |
 
 ## 端口
 
@@ -25,131 +26,116 @@
 
 ---
 
+## 快速开始
+
+### 下载二进制
+
+在 [Releases](https://gitee.com/ergn/netops-platform/releases) 下载最新版本：
+- `netops-windows-x64.zip` — Windows
+- `netops-linux-x64.tar.gz` — Linux
+
+### Linux 启动
+
+```bash
+tar -zxvf netops-linux-x64.tar.gz
+cd netops-platform
+chmod +x install.sh netops-server
+./install.sh install
+```
+
+浏览器打开 `http://服务器IP:30821`，自动进入初始化向导。
+
+### Windows 启动
+
+解压后管理员运行：
+
+```cmd
+install.bat install
+```
+
+浏览器打开 `http://localhost:30821`。
+
+---
+
 ## 目录结构
 
 ```
 netops-platform/
-├── backend/                    # 纯后端（Go）
+├── backend/
 │   ├── main.go
-│   ├── go.mod / go.sum
 │   ├── internal/
-│   │   ├── appinit/           # 数据库迁移 + 种子数据
-│   │   ├── bootstrap/          # 应用启动入口
+│   │   ├── modreg/            # 模块注册中心（路由自动注册）
+│   │   ├── module/            # 业务模块（每个目录一个模块，init()自注册）
 │   │   ├── collector/         # 采集器（ping/snmp/db/docker/k8s）
-│   │   ├── common/             # 国密/日志/密码/响应
-│   │   ├── config/            # 配置加载
-│   │   ├── core/               # App 核心结构
-│   │   ├── middleware/         # 中间件（认证/加密/审计/CORS）
-│   │   ├── model/              # 数据模型（GORM）
-│   │   ├── module/             # 业务模块
-│   │   ├── router/             # 路由自动注册
-│   │   ├── service/            # 公共服务（AI/邮箱/MCP/SSH）
-│   │   ├── storage/             # 关系数据库驱动
-│   │   └── tsdb/               # 时序数据库驱动
-│   └── web/dist/              # 前端构建产物（go:embed 嵌入）
+│   │   ├── middleware/        # 中间件（认证/加密/审计/CORS）
+│   │   ├── storage/          # 关系数据库驱动
+│   │   ├── tsdb/             # 时序数据库驱动
+│   │   └── ...
+│   └── web/dist/             # 前端构建产物（go:embed 嵌入）
 │
-├── web/                        # 纯前端（Vue3/TS）
+├── web/
 │   └── src/
-│       ├── api/                # API 接口 + 类型
-│       ├── views/              # Vue 页面
-│       ├── router/              # 路由
-│       ├── stores/              # Pinia 状态
-│       ├── styles/              # 全局 SCSS
-│       └── utils/               # 请求/WS/加密工具
+│       ├── api/index.ts      # 通用 useApi() 客户端
+│       ├── views/            # Vue 页面（自动路由）
+│       ├── router/nav.ts     # 菜单元数据（自动扫描）
+│       ├── stores/           # Pinia 状态
+│       └── utils/            # 请求/WS/加密
 │
-├── build.ps1                   # Windows 一键构建（输出 dist-release/）
-├── install.bat                 # Windows 部署脚本
-├── install.sh                  # Linux 部署脚本
-├── LICENSE
+├── build.ps1                 # 一键构建
+├── install.bat / install.sh  # 部署脚本
 └── README.md
 ```
 
 ---
 
-## 构建
+## 开发指南
 
-### 前置要求
-- Go 1.25+
-- Node.js 18+
+### 新增一个功能模块（全自动注册）
 
-### Windows 一键构建
+**后端**：在 `backend/internal/module/新模块名/` 新建文件，写 `init()` 注册路由：
+
+```go
+package mymodule
+
+import (
+    "github.com/gin-gonic/gin"
+    "netops/internal/core"
+    "netops/internal/modreg"
+)
+
+func init() {
+    modreg.RegisterProtected("mymodule", func(a *core.App, g *gin.RouterGroup) {
+        g.GET("/list", func(c *gin.Context) {
+            c.JSON(200, gin.H{"data": []string{}})
+        })
+    })
+}
+```
+
+**前端**：在 `web/src/views/mymodule/` 新建 `index.vue`，路由自动生成 `/mymodule`，菜单自动出现。
+
+**调用 API**：在 Vue 组件里用通用客户端：
+
+```ts
+import { useApi } from '@/api'
+const api = useApi('mymodule')
+const list = await api.list()
+```
+
+无需修改任何路由表、菜单配置或 API 文件。
+
+### 构建
 
 ```powershell
-.\build.ps1
+# 前端
+cd web
+npm install
+npm run build
+
+# 后端
+cd ..\backend
+go build -o netops-server.exe .
 ```
-
-输出在 `dist-release/` 目录，包含：
-- `netops-server.exe` — 后端二进制（含前端嵌入）
-- `web/dist/` — 前端静态文件
-- `install.bat` / `install.sh` — 部署脚本
-
-### 交叉编译 Linux 版本
-
-```powershell
-$env:GOOS='linux'; $env:GOARCH='amd64'
-.\build.ps1
-```
-
-> **注意**：每次修改前端后必须重新完整构建，因为 `go:embed` 在编译时把前端嵌入二进制。
-
----
-
-## 部署
-
-### Linux（systemd 后台运行 + 开机自启）
-
-```bash
-# 1. 上传 dist-release 整个目录到服务器
-scp -r dist-release/* root@<服务器IP>:/opt/netops-platform/
-
-# 2. 进入目录
-cd /opt/netops-platform
-chmod +x install.sh netops-server
-
-# 3. 安装服务（自动创建 systemd、开机自启、启动）
-./install.sh install
-```
-
-| 命令 | 作用 |
-|------|------|
-| `./install.sh install` | 安装 systemd 服务 + 开机自启 + 启动 |
-| `./install.sh start` | nohup 后台启动 |
-| `./install.sh stop` | 停止 |
-| `./install.sh restart` | 重启 |
-| `./install.sh status` | 查看状态 |
-| `./install.sh uninstall` | 卸载服务 |
-| `./install.sh logs` | 查看日志 |
-
-### Windows（任务计划后台运行 + 开机自启）
-
-```cmd
-:: 管理员身份运行
-install.bat install
-```
-
-| 命令 | 作用 |
-|------|------|
-| `install.bat install` | 安装任务计划 + 开机自启 + 启动 |
-| `install.bat start` | 启动 |
-| `install.bat stop` | 停止 |
-| `install.bat restart` | 重启 |
-| `install.bat status` | 查看状态 |
-| `install.bat uninstall` | 卸载服务 |
-| `install.bat logs` | 打开日志目录 |
-
----
-
-## 首次初始化
-
-浏览器打开 `http://<服务器IP>:30821`，系统自动进入初始化向导：
-
-1. **选择存储数据库**：MySQL / Oracle / 达梦 DM8 / 人大金仓 / SQLite（内置，无需安装）
-2. **选择时序数据库**：内置 TSDB（无需安装）/ TDengine / InfluxDB
-3. **创建管理员账号**：用户名 + 密码（>12位，大写+小写+数字+符号）
-
-每步可点"测试连接"验证数据库连通性。完成后自动建表、创建管理员、跳转登录页。
-
-> 管理员创建新用户时，新用户初始密码统一为 `123456`。
 
 ---
 
@@ -157,44 +143,42 @@ install.bat install
 
 | 模块 | 说明 |
 |------|------|
-| 链路检测 | 多地址并行监控、实时曲线（WebSocket）、历史数据查询、拖拽缩放 |
-| 网络拓扑 | 2D/3D 视图、设备图标、连线多 IP、设备可拖拽、支持上传背景图 |
-| 设备监控 | SNMPv2/v3 采集服务器/交换机/路由器，CPU/内存/接口流量 |
-| Docker 监控 | 独立配置 Docker 主机，容器状态/CPU/内存 |
-| K8s 监控 | 独立配置 K8s 集群，Pod/节点/Deployment 状态 |
-| 巡检报告 | 链路通断 + 设备 + 数据库状态，HTML 格式，可邮件发送 |
-| 数据库监控 | MySQL/Oracle/达梦/人大金仓，可用性/容量/事务/错误 |
-| 脚本生成器 | 华为/华三，路由器/交换机/AC，ACL/NAT/OSPF/BGP/VRRP/VLAN 等 |
-| IP 地址管理 | 已用/未用地址、ARP 读取、使用人登记、SSH 下发绑定 |
-| 资源管理 | 设备分组分类、自动归集、组内设备实时状态 |
-| 流量监控 | 上下行独立速率、专线带宽设置 |
-| 数据大屏 | 右上角入口，链路实时趋势 + 状态汇总 |
-| 系统管理 | 用户管理、AI 接入、MCP 配置、邮箱、审计日志、在线更新 |
+| 链路检测 | 多地址并行监控、实时曲线（WebSocket）、历史数据 |
+| 网络拓扑 | 2D/3D 视图、设备图标、连线、可拖拽 |
+| 设备监控 | SNMPv2/v3，支持 Cisco/Huawei/H3C/Windows/Linux |
+| 磁盘采集 | HR-Storage 表，磁盘使用率实时监控 |
+| Docker/K8s | 容器与集群状态监控 |
+| 巡检报告 | HTML 格式，可邮件发送 |
+| 数据库监控 | MySQL/Oracle/达梦/人大金仓/TDengine/InfluxDB |
+| 脚本生成器 | 华为/华三设备配置生成 |
+| IP 地址管理 | 地址分配、ARP 读取 |
+| 子网计算器 | IP 计算、子网划分、批量复制 |
+| 流量监控 | 上下行速率、带宽设置 |
+| 数据大屏 | 实时趋势 + 状态汇总 |
+| 系统管理 | 用户、审计日志、在线更新 |
 
 ---
 
-## 健康检查
+## 常用命令
 
-```bash
-curl http://127.0.0.1:30001/internal/health
-```
+| 命令 | 作用 |
+|------|------|
+| `./install.sh install` | 安装 systemd 服务并启动 |
+| `./install.sh stop` | 停止 |
+| `./install.sh restart` | 重启 |
+| `./install.sh status` | 查看状态 |
+| `./install.sh logs` | 查看日志 |
+| `./install.sh uninstall` | 卸载服务 |
+
+Windows 对应 `install.bat`。
 
 ---
 
 ## 重置初始化
 
 ```bash
-# Linux
 ./install.sh stop
 rm -f config.yaml
 rm -rf data/
 ./install.sh start
-```
-
-```cmd
-:: Windows
-install.bat stop
-del config.yaml
-rmdir /s /q data
-install.bat start
 ```
