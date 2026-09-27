@@ -142,6 +142,7 @@ async function showHistory(r: TrafficRule) {
   })
 }
 
+let _timer: any = null
 onMounted(async () => {
   await Promise.all([loadDevices(), loadRules()])
   ws = new WSClient(['traffic'])
@@ -160,6 +161,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  if (_timer) clearInterval(_timer)
   ws?.close()
   histChart?.dispose()
 })

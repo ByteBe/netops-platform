@@ -11,7 +11,7 @@ export type WSChannel =
 
 export interface WSMessage {
   channel: string
-  event: string
+  type: string
   data: Record<string, unknown>
 }
 
@@ -54,18 +54,18 @@ export class WSClient {
     }
   }
 
-  on(channel: WSChannel, event: string, handler: Handler): void {
-    const key = `${channel}:${event}`
+  on(channel: WSChannel, type: string, handler: Handler): void {
+    const key = `${channel}:${type}`
     if (!this.handlers.has(key)) this.handlers.set(key, new Set())
     this.handlers.get(key)!.add(handler)
   }
 
-  off(channel: WSChannel, event: string, handler: Handler): void {
-    this.handlers.get(`${channel}:${event}`)?.delete(handler)
+  off(channel: WSChannel, type: string, handler: Handler): void {
+    this.handlers.get(`${channel}:${type}`)?.delete(handler)
   }
 
   private dispatch(msg: WSMessage): void {
-    const set = this.handlers.get(`${msg.channel}:${msg.event}`)
+    const set = this.handlers.get(`${msg.channel}:${msg.type}`)
     set?.forEach((h) => h(msg))
   }
 

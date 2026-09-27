@@ -1,4 +1,4 @@
-﻿// Package model 统一数据模型（GORM）
+// Package model 统一数据模型（GORM）
 package model
 
 import "time"
@@ -129,6 +129,7 @@ type DBInstance struct {
 	Port      int       `json:"port"`
 	User      string    `gorm:"size:64" json:"user"`
 	Password  string    `gorm:"size:256" json:"password"`
+	DBName    string    `gorm:"size:128" json:"db_name"`
 	Interval  int       `gorm:"default:60" json:"interval"`
 	Enable    bool      `gorm:"default:false" json:"enable"`
 	Status    string    `gorm:"size:16;default:unknown" json:"status"`

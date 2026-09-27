@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getEnc, postEnc, putEnc, delEnc } from '@/utils/request'
 
@@ -51,7 +51,9 @@ async function saveConfig() {
   ElMessage.success('已保存'); await load()
 }
 async function collect() { await postEnc('/containermon/k8s/collect', {}); ElMessage.success('完成'); await load() }
-onMounted(load)
+let _timer: any = null
+onMounted(() => { load(); _timer = setInterval(load, 10000) })
+onBeforeUnmount(() => { if (_timer) clearInterval(_timer) })
 </script>
 
 <template>

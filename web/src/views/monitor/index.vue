@@ -44,6 +44,7 @@ interface DeviceSnap {
   mem_used: number
   uptime_s: number
   interfaces: Array<{ index: string; name: string; speed: number; oper: string; in_bps: number; out_bps: number }>
+  disks: Array<{ mount: string; total: number; used: number; used_pct: number }>
   ts: string
   message: string
 }
@@ -55,7 +56,7 @@ const loading = ref(false)
 const dialogVisible = ref(false)
 const editingId = ref(0)
 const form = reactive<MonitorDevice>({
-  id: 0, name: '', ip: '', type: 'switch', snmp_version: '2c', community: 'public',
+  id: 0, name: '', ip: '', type: 'switch', vendor: '', snmp_version: '2c', community: 'public',
   username: '', auth_proto: 'md5', priv_proto: 'des', auth_pass: '', priv_pass: '',
   port: 161, interval: 60, group_id: 0, enable: true, remark: ''
 })
@@ -81,7 +82,7 @@ async function loadDevices() {
         up: d.online || false,
         cpu: d.cpu || 0, mem_used: d.mem || 0,
         uptime_s: d.uptime || 0, message: d.message || '',
-        interfaces: [], ts: new Date().toISOString()
+        interfaces: [], disks: [], ts: new Date().toISOString()
       }
     }
   } finally {
@@ -92,7 +93,7 @@ async function loadDevices() {
 function openAdd() {
   editingId.value = 0
   Object.assign(form, {
-    id: 0, name: '', ip: '', type: 'switch', snmp_version: '2c', community: 'public',
+    id: 0, name: '', ip: '', type: 'switch', vendor: '', snmp_version: '2c', community: 'public',
     username: '', auth_proto: 'md5', priv_proto: 'des', auth_pass: '', priv_pass: '',
     port: 161, interval: 60, group_id: 0, enable: true, remark: ''
   })
@@ -209,6 +210,13 @@ onBeforeUnmount(() => {
             <el-progress :percentage="snaps[d.id]?.mem_used ?? 0" :stroke-width="8" :color="(snaps[d.id]?.mem_used ?? 0) > 80 ? '#ef4444' : '#22c55e'" />
           </div>
         </div>
+        <div v-if="(snaps[d.id]?.disks || []).length" class="np-dev-disks">
+          <div v-for="disk in snaps[d.id]?.disks" :key="disk.mount" class="np-disk-row">
+            <span class="np-disk-mount">{{ disk.mount }}</span>
+            <el-progress :percentage="disk.used_pct" :stroke-width="6" :color="disk.used_pct > 80 ? '#ef4444' : '#f59e0b'" style="flex:1" />
+            <span class="np-disk-size">{{ (disk.used/1024/1024/1024).toFixed(1) }}G / {{ (disk.total/1024/1024/1024).toFixed(1) }}G</span>
+          </div>
+        </div>
         <div class="np-dev-ifs">
           <div v-for="ifs in (snaps[d.id]?.interfaces || []).slice(0, 5)" :key="ifs.index" class="np-if-row">
             <span class="np-if-name">{{ ifs.name }}</span>
@@ -219,7 +227,7 @@ onBeforeUnmount(() => {
           <div v-if="!snaps[d.id]" class="np-if-empty">{{ t('common.loading') }}</div>
         </div>
         <div class="np-dev-foot">
-          <span>Uptime: {{ fmtDuration(snaps[d.id]?.uptime_s || 0) }}</span>
+          <span>系统运行: {{ fmtDuration(snaps[d.id]?.uptime_s || 0) }}</span>
           <span>更新: {{ snaps[d.id] ? fmtTime(snaps[d.id].ts) : '--' }}</span>
         </div>
         <div class="np-dev-actions">
@@ -265,9 +273,20 @@ onBeforeUnmount(() => {
           <el-select v-model="form.type">
             <el-option label="交换机" value="switch" />
             <el-option label="路由器" value="router" />
-            <el-option label="服务器" value="server" />
+            <el-option label="Linux服务器" value="server" />
+            <el-option label="Windows服务器" value="windows" />
             <el-option label="防火墙" value="firewall" />
             <el-option label="其他" value="other" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="厂商">
+          <el-select v-model="form.vendor" placeholder="自动识别" clearable>
+            <el-option label="自动识别" value="" />
+            <el-option label="Cisco 思科" value="cisco" />
+            <el-option label="Huawei 华为" value="huawei" />
+            <el-option label="H3C 华三" value="h3c" />
+            <el-option label="Windows" value="windows" />
+            <el-option label="Linux" value="linux" />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('monitor.snmpVersion')">
@@ -369,6 +388,29 @@ onBeforeUnmount(() => {
       font-size: 12px;
       color: var(--np-text-2);
       margin-bottom: 2px;
+    }
+  }
+
+  .np-dev-disks {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    .np-disk-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      .np-disk-mount {
+        width: 60px;
+        color: var(--np-text-2);
+        @include ellipsis;
+      }
+      .np-disk-size {
+        color: var(--np-text-2);
+        font-size: 11px;
+        width: 110px;
+        text-align: right;
+      }
     }
   }
 

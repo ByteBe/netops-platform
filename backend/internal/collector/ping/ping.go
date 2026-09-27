@@ -57,9 +57,9 @@ var (
 func (CMDProbe) Run(target string, _ int, timeout time.Duration) (float64, float64, error) {
 	var args []string
 	if runtime.GOOS == "windows" {
-		args = []string{"-n", "3", "-w", fmt.Sprintf("%d", int(timeout.Milliseconds())), target}
+		args = []string{"-n", "1", "-w", fmt.Sprintf("%d", int(timeout.Milliseconds())), target}
 	} else {
-		args = []string{"-c", "3", "-W", "3", target}
+		args = []string{"-c", "1", "-W", "3", target}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout+10*time.Second)
 	defer cancel()

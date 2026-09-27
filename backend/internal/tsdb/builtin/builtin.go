@@ -1,4 +1,4 @@
-// Package builtin 内置时序引擎（本地 SQLite 文件存储，零依赖、跨平台）
+﻿// Package builtin 内置时序引擎（本地 SQLite 文件存储，零依赖、跨平台）
 // 生产环境建议使用 TDengine / InfluxDB
 package builtin
 
@@ -30,9 +30,10 @@ type point struct {
 
 // Engine 内置时序引擎
 type Engine struct {
-	db  *gorm.DB
-	mu  sync.Mutex
-	dir string
+	db       *gorm.DB
+	mu       sync.Mutex
+	dir      string
+	lastCleanup time.Time
 }
 
 // NewBuiltin 创建内置时序引擎（db 参数为数据目录，缺省 data）
@@ -48,6 +49,12 @@ func NewBuiltin(db string) (*Engine, error) {
 	})
 	if err != nil {
 		return nil, err
+	}
+	// 开启 WAL 模式提升并发读写
+	if sqlDB, err := g.DB(); err == nil {
+		sqlDB.Exec("PRAGMA journal_mode=WAL")
+		sqlDB.Exec("PRAGMA synchronous=NORMAL")
+		sqlDB.Exec("PRAGMA cache_size=-64000")
 	}
 	if err := g.AutoMigrate(&point{}); err != nil {
 		return nil, err
@@ -84,17 +91,14 @@ func (e *Engine) Write(rows []tsdb.Row) error {
 			TS:     r.TS.UnixMilli(),
 		})
 	}
-	const batch = 500
-	for i := 0; i < len(pts); i += batch {
-		end := i + batch
-		if end > len(pts) {
-			end = len(pts)
-		}
-		if err := e.db.CreateInBatches(pts[i:end], batch).Error; err != nil {
-			return err
-		}
+	if err := e.db.CreateInBatches(pts, 500).Error; err != nil {
+		return err
 	}
-	go e.cleanup()
+	// 每小时最多清理一次过期数据
+	if time.Since(e.lastCleanup) > time.Hour {
+		e.lastCleanup = time.Now()
+		go e.cleanup()
+	}
 	return nil
 }
 

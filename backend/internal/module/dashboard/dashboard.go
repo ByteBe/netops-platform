@@ -2,6 +2,7 @@
 package dashboard
 
 import (
+	"sort"
 	"strconv"
 	"time"
 
@@ -73,12 +74,24 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			if err != nil || len(rt) == 0 {
 				continue
 			}
+			merged := map[int64]float64{}
+			for _, s := range rt {
+				for _, p := range s.Points {
+					merged[int64(p[0])] = p[1]
+				}
+			}
 			filtered := [][2]float64{}
-			for _, p := range rt[0].Points {
-				if p[1] > 0 {
-					filtered = append(filtered, p)
+			keys := make([]int64, 0, len(merged))
+			for k := range merged {
+				keys = append(keys, k)
+			}
+			sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+			for _, k := range keys {
+				v := merged[k]
+				if v > 0 {
+					filtered = append(filtered, [2]float64{float64(k), v})
 				} else {
-					filtered = append(filtered, [2]float64{p[0], -1})
+					filtered = append(filtered, [2]float64{float64(k), -1})
 				}
 			}
 			series = append(series, gin.H{"name": t.Name, "color": t.Color, "points": filtered})

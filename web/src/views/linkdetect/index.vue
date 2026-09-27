@@ -52,10 +52,6 @@ async function loadTasks() {
       }
     }
     statuses.value = st
-    // 用HTTP快照数据初始化折线点
-    for (const tt of list) {
-      pushPoint(tt.id, tt.status ? (tt.rt || 0) : null)
-    }
   } finally { loading.value = false }
 }
 
@@ -142,6 +138,7 @@ function pushPoint(taskId: number, val: number | null) {
 }
 
 let renderTimer: number | null = null
+let pollTimer: any = null
 function renderRealtime() {
   if (!rtChartRef.value) return
   rtChart ??= echarts.init(rtChartRef.value)
@@ -227,10 +224,14 @@ onMounted(async () => {
   } catch { }
 
   window.addEventListener('resize', onResize)
+
+  // 每5秒轮询状态（WebSocket断连兜底，新任务状态自动更新）
+  pollTimer = setInterval(async () => { await loadTasks(); renderRealtime() }, 5000)
 })
 
 onBeforeUnmount(() => {
   if (renderTimer) { clearTimeout(renderTimer); renderTimer = null }
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
   ws?.close()
   chart?.dispose()
   rtChart?.dispose()

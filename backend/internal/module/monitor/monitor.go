@@ -201,7 +201,7 @@ func refreshSnmp(a *core.App) {
 	devs := make([]snmp.Device, 0, len(devices))
 	for _, d := range devices {
 		if d.Enable {
-			devs = append(devs, snmp.Device{ID: d.ID, Name: d.Name, IP: d.IP, Type: d.Type,
+			devs = append(devs, snmp.Device{ID: d.ID, Name: d.Name, IP: d.IP, Type: d.Type, Vendor: d.Vendor,
 				SNMPVersion: d.SNMPVersion, Community: d.Community, Username: d.Username,
 				AuthProto: d.AuthProto, PrivProto: d.PrivProto, AuthPass: d.AuthPass,
 				PrivPass: d.PrivPass, Port: d.Port, Interval: d.Interval})

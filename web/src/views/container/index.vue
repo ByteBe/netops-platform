@@ -1,11 +1,16 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getEnc, postEnc, putEnc, delEnc } from '@/utils/request'
 
 interface Config { docker_enable: boolean; docker_interval: number }
 interface DockerHost { id: number; name: string; address: string; enabled: boolean; remark: string; online: boolean }
 interface ContainerInfo { id: string; names: string; image: string; state: string; cpu: number; mem_pct: number; host: string }
+
+function stateText(s: string) {
+  const m: Record<string, string> = { running: '运行中', paused: '已暂停', exited: '已退出', dead: '异常', created: '已创建', restarting: '重启中' }
+  return m[s] || s || '-'
+}
 
 const config = reactive<Config>({ docker_enable: false, docker_interval: 30 })
 const hosts = ref<DockerHost[]>([])
@@ -53,7 +58,9 @@ function hostName(addr: string): string {
   const h = hosts.value.find(x => x.address === addr)
   return h ? h.name : addr
 }
-onMounted(load)
+let _timer: any = null
+onMounted(() => { load(); _timer = setInterval(load, 10000) })
+onBeforeUnmount(() => { if (_timer) clearInterval(_timer) })
 </script>
 
 <template>
@@ -108,7 +115,7 @@ onMounted(load)
         <el-table-column prop="image" label="镜像" min-width="180" show-overflow-tooltip />
         <el-table-column label="状态" width="90">
           <template #default="{ row }">
-            <el-tag :type="row.state === 'running' ? 'success' : 'info'" size="small">{{ row.state || '-' }}</el-tag>
+            <el-tag :type="row.state === 'running' ? 'success' : 'info'" size="small">{{ stateText(row.state) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="CPU" width="100"><template #default="{ row }">{{ (row.cpu||0).toFixed(1) }}%</template></el-table-column>

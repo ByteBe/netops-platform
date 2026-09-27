@@ -3,6 +3,7 @@
 package linkdetect
 
 import (
+	"sort"
 	"strconv"
 	"time"
 
@@ -249,7 +250,18 @@ func firstPoints(series []tsdb.Series) [][2]float64 {
 	if len(series) == 0 {
 		return [][2]float64{}
 	}
-	return series[0].Points
+	merged := map[int64]float64{}
+	for _, s := range series {
+		for _, p := range s.Points {
+			merged[int64(p[0])] = p[1]
+		}
+	}
+	out := make([][2]float64, 0, len(merged))
+	for ts, v := range merged {
+		out = append(out, [2]float64{float64(ts), v})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i][0] < out[j][0] })
+	return out
 }
 
 var _ = ping.TaskConfig{}

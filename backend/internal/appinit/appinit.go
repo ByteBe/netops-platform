@@ -183,7 +183,7 @@ func SyncManagers(a *core.App) {
 	for _, d := range insts {
 		if d.Enable {
 			dbs = append(dbs, dbprobe.Instance{ID: d.ID, Name: d.Name, Type: d.Type, Host: d.Host,
-				Port: d.Port, User: d.User, Password: d.Password, DBName: d.Name, Interval: d.Interval})
+				Port: d.Port, User: d.User, Password: d.Password, DBName: d.DBName, Interval: d.Interval})
 		}
 	}
 	a.DBProbe.Sync(dbs)

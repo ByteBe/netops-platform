@@ -18,6 +18,7 @@ interface DBInstance {
   port: number
   user: string
   password: string
+  db_name: string
   interval: number
   enable: boolean
   remark: string
@@ -48,12 +49,12 @@ const loading = ref(false)
 const dialogVisible = ref(false)
 const editingId = ref(0)
 const form = reactive<DBInstance>({
-  id: 0, name: '', type: 'mysql', host: '127.0.0.1', port: 3306, user: '', password: '',
+  id: 0, name: '', type: 'mysql', host: '127.0.0.1', port: 3306, user: '', password: '', db_name: '',
   interval: 60, enable: true, remark: ''
 })
 
 const defaultPorts: Record<string, number> = {
-  mysql: 3306, oracle: 1521, postgresql: 5432, sqlserver: 1433,
+  mysql: 3306, oracle: 1521, postgresql: 5432, sqlserver: 1433, tdengine: 6030, influxdb: 8086,
   mongodb: 27017, clickhouse: 8123, tidb: 4000, oceanbase: 2881,
   dm: 5236, kingbase: 54321, opengauss: 5432, gbase: 5258,
   db2: 50000, sybase: 5000, sqlite: 0
@@ -172,7 +173,7 @@ onMounted(async () => {
   try {
     types.value = await getEnc<any[]>('/dbmonitor/types')
   } catch {
-    types.value = [{label:'MySQL',value:'mysql'},{label:'Oracle',value:'oracle'},{label:'PostgreSQL',value:'postgresql'},{label:'Microsoft SQL Server',value:'sqlserver'},{label:'MongoDB',value:'mongodb'},{label:'ClickHouse',value:'clickhouse'},{label:'TiDB',value:'tidb'},{label:'OceanBase',value:'oceanbase'},{label:'达梦 DM',value:'dm'},{label:'人大金仓 KingbaseES',value:'kingbase'},{label:'openGauss',value:'opengauss'},{label:'GBase 8s/8a',value:'gbase'},{label:'IBM DB2',value:'db2'},{label:'SAP Sybase',value:'sybase'},{label:'内置数据库',value:'sqlite'}]
+    types.value = [{label:'MySQL',value:'mysql'},{label:'Oracle',value:'oracle'},{label:'PostgreSQL',value:'postgresql'},{label:'Microsoft SQL Server',value:'sqlserver'},{label:'MongoDB',value:'mongodb'},{label:'ClickHouse',value:'clickhouse'},{label:'TiDB',value:'tidb'},{label:'OceanBase',value:'oceanbase'},{label:'达梦 DM',value:'dm'},{label:'人大金仓 KingbaseES',value:'kingbase'},{label:'openGauss',value:'opengauss'},{label:'GBase 8s/8a',value:'gbase'},{label:'IBM DB2',value:'db2'},{label:'SAP Sybase',value:'sybase'},{label:'内置数据库',value:'sqlite'},{label:'TDengine',value:'tdengine'},{label:'InfluxDB',value:'influxdb'}]
   }
   ws = new WSClient(['dbmonitor'])
   ws.on('dbmonitor', 'db_snapshot', (msg) => {
@@ -249,6 +250,9 @@ onBeforeUnmount(() => {
         </el-form-item>
         <el-form-item :label="t('dbmon.user')">
           <el-input v-model="form.user" />
+        </el-form-item>
+        <el-form-item label="数据库名">
+          <el-input v-model="form.db_name" placeholder="留空默认mysql" />
         </el-form-item>
         <el-form-item :label="t('dbmon.password')">
           <el-input v-model="form.password" type="password" show-password />

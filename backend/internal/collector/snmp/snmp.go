@@ -4,6 +4,7 @@ package snmp
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"strings"
 	"sync"
@@ -24,15 +25,34 @@ const (
 	oidIfOperStatus     = "1.3.6.1.2.1.2.2.1.8"
 	oidIfInOctets       = "1.3.6.1.2.1.2.2.1.10"
 	oidIfOutOctets      = "1.3.6.1.2.1.2.2.1.16"
+	oidIfHCInOctets    = "1.3.6.1.2.1.31.1.1.1.6"
+	oidIfHCOutOctets   = "1.3.6.1.2.1.31.1.1.1.10"
 	oidHrProcessorLoad  = "1.3.6.1.2.1.25.3.3.1.2"
 	oidHrStorageIndex   = "1.3.6.1.2.1.25.2.3.1.1"
 	oidHrStorageType    = "1.3.6.1.2.1.25.2.3.1.2"
 	oidHrStorageSize    = "1.3.6.1.2.1.25.2.3.1.5"
 	oidHrStorageUsed    = "1.3.6.1.2.1.25.2.3.1.6"
+	oidHrStorageDescr   = "1.3.6.1.2.1.25.2.3.1.3"
 	hrStorageRam        = "1.3.6.1.2.1.25.2.1.2"
 	oidUcdCpuRawIdle    = "1.3.6.1.4.1.2021.11.11.0"
 	oidUcdCpuRawSystem  = "1.3.6.1.4.1.2021.11.10.0"
 	oidUcdCpuRawUser    = "1.3.6.1.4.1.2021.11.9.0"
+
+	// Cisco: CPU (cpmCPUTotal5minRev), Memory pool
+	oidCiscoCpu5min   = "1.3.6.1.4.1.9.9.109.1.1.1.1.8"
+	oidCiscoMemUsed   = "1.3.6.1.4.1.9.9.48.1.1.1.5"
+	oidCiscoMemFree   = "1.3.6.1.4.1.9.9.48.1.1.1.6"
+
+	// Huawei: hwEntityCpuUsage, hwEntityMemUsage
+	oidHuaweiCpu = "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5"
+	oidHuaweiMem = "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7"
+
+	// H3C: hh3cEntityCpuUsage, hh3cEntityMemoryUsage
+	oidH3cCpu = "1.3.6.1.4.1.25506.2.6.1.1.1.1.6"
+	oidH3cMem = "1.3.6.1.4.1.25506.2.6.1.1.1.1.7"
+
+	// Windows: hrProcessorLoad + hrStorage 已覆盖，额外采集 logical disk
+	// Windows 逻辑磁盘 hrStorageDescr 通常是 "C:" "D:" 等
 )
 
 // Device 采集设备配置
@@ -41,6 +61,7 @@ type Device struct {
 	Name        string
 	IP          string
 	Type        string
+	Vendor      string // cisco/huawei/h3c/windows/linux
 	SNMPVersion string // 1/2c/3
 	Community   string
 	Username    string
@@ -65,6 +86,13 @@ type IfStats struct {
 }
 
 // DeviceSnapshot 设备采集快照
+type DiskInfo struct {
+	Mount  string  `json:"mount"`
+	Total  uint64  `json:"total"`  // bytes
+	Used   uint64  `json:"used"`   // bytes
+	UsedPct float64 `json:"used_pct"`
+}
+
 type DeviceSnapshot struct {
 	DeviceID   uint      `json:"device_id"`
 	Name       string    `json:"name"`
@@ -74,6 +102,7 @@ type DeviceSnapshot struct {
 	MemUsed    float64   `json:"mem_used"` // %
 	Uptime     float64   `json:"uptime_s"`
 	Interfaces []IfStats `json:"interfaces"`
+	Disks      []DiskInfo `json:"disks"`
 	TS         time.Time `json:"ts"`
 	Message    string    `json:"message"`
 }
@@ -82,8 +111,8 @@ type DeviceSnapshot struct {
 type Manager struct {
 	mu       sync.RWMutex
 	devices  map[uint]*Device
-	runs     map[uint]chan struct{} // 每设备停止信号
-	lastOct  map[string]map[string]uint64 // deviceID|ifIndex -> last octets
+	runs     map[uint]chan struct{}
+	lastOct  map[string]map[string]uint64
 	lastTime map[string]time.Time
 	snap     map[uint]*DeviceSnapshot
 	ts       tsdb.Engine
@@ -106,7 +135,7 @@ func NewManager(ts tsdb.Engine, hub *notify.Hub) *Manager {
 	}
 }
 
-// SyncDevices 同步设备列表（启用的进入采集，停用/删除的退出；变更设备重启循环）
+// SyncDevices 同步设备列表
 func (m *Manager) SyncDevices(devs []Device) {
 	m.mu.Lock()
 	next := map[uint]*Device{}
@@ -114,7 +143,6 @@ func (m *Manager) SyncDevices(devs []Device) {
 		d := devs[i]
 		next[d.ID] = &d
 	}
-	// 停止已移除或变更的设备循环
 	for id, stop := range m.runs {
 		if _, ok := next[id]; !ok {
 			close(stop)
@@ -125,7 +153,6 @@ func (m *Manager) SyncDevices(devs []Device) {
 	m.devices = next
 	m.mu.Unlock()
 
-	// 为全部启用设备启动采集循环（幂等）
 	m.mu.RLock()
 	cur := make([]Device, 0, len(m.devices))
 	for _, d := range m.devices {
@@ -135,7 +162,7 @@ func (m *Manager) SyncDevices(devs []Device) {
 	for _, d := range cur {
 		m.mu.Lock()
 		if stop, ok := m.runs[d.ID]; ok {
-			close(stop) // 重启
+			close(stop)
 		}
 		stop := make(chan struct{})
 		m.runs[d.ID] = stop
@@ -195,7 +222,6 @@ func (m *Manager) collect(d Device) {
 	m.snap[d.ID] = snap
 	m.mu.Unlock()
 
-	// 写入时序库
 	now := time.Now()
 	up := 0.0
 	if snap.Up {
@@ -216,7 +242,6 @@ func (m *Manager) collect(d Device) {
 		_ = m.ts.Write(rows)
 	}
 
-	// 推送
 	m.hub.Publish("monitor", "device_snapshot", snap)
 	for _, ifs := range snap.Interfaces {
 		m.hub.Publish("traffic", "if_rate", map[string]any{
@@ -266,18 +291,93 @@ func (m *Manager) collectOnce(d Device) (*DeviceSnapshot, error) {
 
 	snap := &DeviceSnapshot{DeviceID: d.ID, Name: d.Name, IP: d.IP, Up: true, TS: time.Now()}
 
-	// Uptime
-	if uptime, err := params.Get([]string{oidSysUpTime}); err == nil && len(uptime.Variables) > 0 {
-		snap.Uptime = float64(uptime.Variables[0].Value.(uint32)) / 100
+	// Uptime: hrSystemUptime 优先，sysUpTime 回退
+	if uptime, err := params.Get([]string{"1.3.6.1.2.1.25.1.1.0"}); err == nil && len(uptime.Variables) > 0 {
+		snap.Uptime = float64(toUint32(uptime.Variables[0].Value)) / 100
+	} else if uptime2, err2 := params.Get([]string{oidSysUpTime}); err2 == nil && len(uptime2.Variables) > 0 {
+		snap.Uptime = float64(toUint32(uptime2.Variables[0].Value)) / 100
 	}
 
-	// CPU（HR 表，多核取平均）
+	// 采集 CPU
+	m.collectCPU(params, d, snap)
+
+	// 采集内存
+	m.collectMemory(params, d, snap)
+
+	// 采集磁盘
+	m.collectDisks(params, d, snap)
+
+	// 接口表
+	m.collectInterfaces(params, d, snap)
+	return snap, nil
+}
+
+// collectCPU 采集 CPU 使用率（多厂商回退）
+func (m *Manager) collectCPU(params *gosnmp.GoSNMP, d Device, snap *DeviceSnapshot) {
+	vendor := strings.ToLower(d.Vendor)
+
+	// 1. Cisco: cpmCPUTotal5minRev
+	if vendor == "cisco" || vendor == "" {
+		if rows, err := params.BulkWalkAll(oidCiscoCpu5min); err == nil && len(rows) > 0 {
+			var sum float64
+			cnt := 0
+			for _, v := range rows {
+				val := float64(toUint32(v.Value))
+				if val > 0 && val <= 100 {
+					sum += val
+					cnt++
+				}
+			}
+			if cnt > 0 {
+				snap.CPU = math.Round(sum/float64(cnt)*10) / 10
+				return
+			}
+		}
+	}
+
+	// 2. Huawei: hwEntityCpuUsage
+	if vendor == "huawei" || vendor == "" {
+		if rows, err := params.BulkWalkAll(oidHuaweiCpu); err == nil && len(rows) > 0 {
+			var sum float64
+			cnt := 0
+			for _, v := range rows {
+				val := float64(toUint32(v.Value))
+				if val > 0 && val <= 100 {
+					sum += val
+					cnt++
+				}
+			}
+			if cnt > 0 {
+				snap.CPU = math.Round(sum/float64(cnt)*10) / 10
+				return
+			}
+		}
+	}
+
+	// 3. H3C: hh3cEntityCpuUsage
+	if vendor == "h3c" || vendor == "" {
+		if rows, err := params.BulkWalkAll(oidH3cCpu); err == nil && len(rows) > 0 {
+			var sum float64
+			cnt := 0
+			for _, v := range rows {
+				val := float64(toUint32(v.Value))
+				if val > 0 && val <= 100 {
+					sum += val
+					cnt++
+					}
+			}
+			if cnt > 0 {
+				snap.CPU = math.Round(sum/float64(cnt)*10) / 10
+				return
+			}
+		}
+	}
+
+	// 4. HR-Storage hrProcessorLoad (Linux/Windows)
 	loads := map[string]uint32{}
 	if rows, err := params.BulkWalkAll(oidHrProcessorLoad); err == nil {
 		for _, v := range rows {
-			if v.Type == gosnmp.Integer || v.Type == gosnmp.Gauge32 || v.Type == gosnmp.Counter32 {
-				loads[oidLast(v.Name)] = toUint32(v.Value)
-			}
+			loads[oidLast(v.Name)] = toUint32(v.Value)
 		}
 	}
 	if len(loads) > 0 {
@@ -286,8 +386,11 @@ func (m *Manager) collectOnce(d Device) (*DeviceSnapshot, error) {
 			sum += float64(l)
 		}
 		snap.CPU = math.Round(sum/float64(len(loads))*10) / 10
-	} else if raw, err := params.Get([]string{oidUcdCpuRawIdle, oidUcdCpuRawUser, oidUcdCpuRawSystem}); err == nil && len(raw.Variables) == 3 {
-		// UCD-SNMP 差值计算：cpu% = (1 - Δidle / Δtotal) * 100
+		return
+	}
+
+	// 5. UCD-SNMP raw counters (Linux net-snmp)
+	if raw, err := params.Get([]string{oidUcdCpuRawIdle, oidUcdCpuRawUser, oidUcdCpuRawSystem}); err == nil && len(raw.Variables) == 3 {
 		now := time.Now()
 		key := fmt.Sprintf("%d", d.ID)
 		m.mu.Lock()
@@ -312,8 +415,70 @@ func (m *Manager) collectOnce(d Device) (*DeviceSnapshot, error) {
 			}
 		}
 	}
+}
 
-	// 内存（HR Storage：取 hrStorageRam 类型）
+// collectMemory 采集内存使用率（多厂商回退）
+func (m *Manager) collectMemory(params *gosnmp.GoSNMP, d Device, snap *DeviceSnapshot) {
+	vendor := strings.ToLower(d.Vendor)
+
+	// 1. Cisco: ciscoMemoryPoolUsed/Free
+	if vendor == "cisco" || vendor == "" {
+		usedRows, err1 := params.BulkWalkAll(oidCiscoMemUsed)
+		freeRows, err2 := params.BulkWalkAll(oidCiscoMemFree)
+		if err1 == nil && err2 == nil && len(usedRows) > 0 && len(freeRows) > 0 {
+			var totalUsed, totalFree uint64
+			for _, v := range usedRows {
+				totalUsed += toUint64(v.Value)
+			}
+			for _, v := range freeRows {
+				totalFree += toUint64(v.Value)
+			}
+			if totalUsed+totalFree > 0 {
+				snap.MemUsed = math.Round(float64(totalUsed)/float64(totalUsed+totalFree)*1000) / 10
+				return
+			}
+		}
+	}
+
+	// 2. Huawei: hwEntityMemUsage (百分比)
+	if vendor == "huawei" || vendor == "" {
+		if rows, err := params.BulkWalkAll(oidHuaweiMem); err == nil && len(rows) > 0 {
+			var sum float64
+			cnt := 0
+			for _, v := range rows {
+				val := float64(toUint32(v.Value))
+				if val > 0 && val <= 100 {
+					sum += val
+					cnt++
+				}
+			}
+			if cnt > 0 {
+				snap.MemUsed = math.Round(sum/float64(cnt)*10) / 10
+				return
+			}
+		}
+	}
+
+	// 3. H3C: hh3cEntityMemoryUsage (百分比)
+	if vendor == "h3c" || vendor == "" {
+		if rows, err := params.BulkWalkAll(oidH3cMem); err == nil && len(rows) > 0 {
+			var sum float64
+			cnt := 0
+			for _, v := range rows {
+				val := float64(toUint32(v.Value))
+				if val > 0 && val <= 100 {
+					sum += val
+					cnt++
+				}
+			}
+			if cnt > 0 {
+				snap.MemUsed = math.Round(sum/float64(cnt)*10) / 10
+				return
+			}
+		}
+	}
+
+	// 4. HR-Storage (Linux/Windows)
 	types := map[string]string{}
 	sizes := map[string]uint64{}
 	useds := map[string]uint64{}
@@ -332,16 +497,105 @@ func (m *Manager) collectOnce(d Device) (*DeviceSnapshot, error) {
 			useds[oidLast(v.Name)] = toUint64(v.Value)
 		}
 	}
+	var totalMem, usedMem uint64
 	for idx, t := range types {
-		if t == hrStorageRam && sizes[idx] > 0 {
-			snap.MemUsed = math.Round(float64(useds[idx])/float64(sizes[idx])*1000) / 10
-			break
+		if (t == hrStorageRam || t == "4") && sizes[idx] > 0 {
+			totalMem += sizes[idx]
+			usedMem += useds[idx]
 		}
 	}
+	if totalMem > 0 {
+		snap.MemUsed = math.Round(float64(usedMem)/float64(totalMem)*1000) / 10
+	}
 
-	// 接口表
-	m.collectInterfaces(params, d, snap)
-	return snap, nil
+	// 5. UCD-SNMP-MIB (Linux net-snmp) 覆盖
+	if totalReal, err := params.Get([]string{"1.3.6.1.4.1.2021.4.5.0"}); err == nil && len(totalReal.Variables) > 0 {
+		totalKB := toUint64(totalReal.Variables[0].Value)
+		if totalKB > 0 {
+			availKB := uint64(0)
+			if avail, err := params.Get([]string{"1.3.6.1.4.1.2021.4.6.0"}); err == nil && len(avail.Variables) > 0 {
+				availKB = toUint64(avail.Variables[0].Value)
+			}
+			cachedKB := uint64(0)
+			if cached, err := params.Get([]string{"1.3.6.1.4.1.2021.4.14.0"}); err == nil && len(cached.Variables) > 0 {
+				cachedKB = toUint64(cached.Variables[0].Value)
+			}
+			bufKB := uint64(0)
+			if buf, err := params.Get([]string{"1.3.6.1.4.1.2021.4.15.0"}); err == nil && len(buf.Variables) > 0 {
+				bufKB = toUint64(buf.Variables[0].Value)
+			}
+			usedKB := totalKB - availKB - cachedKB - bufKB
+			if usedKB < 0 {
+				usedKB = totalKB - availKB
+			}
+			snap.MemUsed = math.Round(float64(usedKB)/float64(totalKB)*1000) / 10
+		}
+	}
+}
+
+// collectDisks 采集磁盘使用率
+func (m *Manager) collectDisks(params *gosnmp.GoSNMP, d Device, snap *DeviceSnapshot) {
+	types := map[string]string{}
+	sizes := map[string]uint64{}
+	useds := map[string]uint64{}
+	if rows, err := params.BulkWalkAll(oidHrStorageType); err == nil {
+		for _, v := range rows {
+			types[oidLast(v.Name)] = oidStr(v.Value)
+		}
+	}
+	if rows, err := params.BulkWalkAll(oidHrStorageSize); err == nil {
+		for _, v := range rows {
+			sizes[oidLast(v.Name)] = toUint64(v.Value)
+		}
+	}
+	if rows, err := params.BulkWalkAll(oidHrStorageUsed); err == nil {
+		for _, v := range rows {
+			useds[oidLast(v.Name)] = toUint64(v.Value)
+		}
+	}
+	hrDesc := map[string]string{}
+	if rows, err := params.BulkWalkAll(oidHrStorageDescr); err == nil {
+		for _, v := range rows {
+			hrDesc[oidLast(v.Name)] = oidStr(v.Value)
+		}
+	}
+	hrUnits := map[string]uint64{}
+	if rows, err := params.BulkWalkAll("1.3.6.1.2.1.25.2.3.1.4"); err == nil {
+		for _, v := range rows {
+			hrUnits[oidLast(v.Name)] = toUint64(v.Value)
+		}
+	}
+	for idx, t := range types {
+		if sizes[idx] == 0 {
+			continue
+		}
+		if !strings.HasSuffix(t, ".25.2.1.4") {
+			continue
+		}
+		mount := hrDesc[idx]
+		if mount == "" {
+			continue
+		}
+		// 过滤虚拟文件系统（Linux）
+		if strings.HasPrefix(mount, "/run") || strings.HasPrefix(mount, "/dev/") ||
+			strings.HasPrefix(mount, "/tmp") || strings.HasPrefix(mount, "/var/lib/docker") ||
+			strings.HasPrefix(mount, "/sys") || strings.HasPrefix(mount, "/proc") {
+			continue
+		}
+		units := hrUnits[idx]
+		if units == 0 {
+			units = 4096
+		}
+		total := sizes[idx] * units
+		used := useds[idx] * units
+		if total > 0 {
+			pct := math.Round(float64(used)/float64(total)*1000) / 10
+			snap.Disks = append(snap.Disks, DiskInfo{
+				Mount: mount, Total: total, Used: used, UsedPct: pct,
+			})
+		}
+	}
+	log.Printf("[snmp] device=%s disks=%v cpu=%.1f mem=%.1f", d.Name, snap.Disks, snap.CPU, snap.MemUsed)
 }
 
 func (m *Manager) collectInterfaces(params *gosnmp.GoSNMP, d Device, snap *DeviceSnapshot) {
@@ -382,6 +636,18 @@ func (m *Manager) collectInterfaces(params *gosnmp.GoSNMP, d Device, snap *Devic
 			outs[oidLast(v.Name)] = toUint64(v.Value)
 		}
 	}
+	hcIn := map[string]uint64{}
+	hcOut := map[string]uint64{}
+	if rows, err := params.BulkWalkAll(oidIfHCInOctets); err == nil {
+		for _, v := range rows {
+			hcIn[oidLast(v.Name)] = toUint64(v.Value)
+		}
+	}
+	if rows, err := params.BulkWalkAll(oidIfHCOutOctets); err == nil {
+		for _, v := range rows {
+			hcOut[oidLast(v.Name)] = toUint64(v.Value)
+		}
+	}
 
 	now := time.Now()
 	key := fmt.Sprintf("%d", d.ID)
@@ -393,10 +659,6 @@ func (m *Manager) collectInterfaces(params *gosnmp.GoSNMP, d Device, snap *Devic
 	curOuts := map[string]uint64{}
 	m.mu.Unlock()
 
-	idxNames := map[string]string{}
-	for oid, idx := range indexes {
-		idxNames[idx] = oid
-	}
 	for oid, idx := range indexes {
 		name := names[oid]
 		if name == "" {
@@ -408,6 +670,12 @@ func (m *Manager) collectInterfaces(params *gosnmp.GoSNMP, d Device, snap *Devic
 			oper = "up"
 		}
 		inO, outO := ins[oid], outs[oid]
+		if hc, ok := hcIn[idx]; ok && hc > 0 {
+			inO = hc
+		}
+		if hc, ok := hcOut[idx]; ok && hc > 0 {
+			outO = hc
+		}
 		curIns[idx] = inO
 		curOuts[idx] = outO
 
@@ -424,7 +692,6 @@ func (m *Manager) collectInterfaces(params *gosnmp.GoSNMP, d Device, snap *Devic
 			}
 		}
 		snap.Interfaces = append(snap.Interfaces, ifs)
-		_ = idxNames
 	}
 	m.mu.Lock()
 	m.lastOct[key+"_in"] = curIns
@@ -433,8 +700,7 @@ func (m *Manager) collectInterfaces(params *gosnmp.GoSNMP, d Device, snap *Devic
 	m.mu.Unlock()
 }
 
-// StopAll 停止
-// TestDevice 即时测试一个设备配置（不加入采集循环）
+// TestDevice 即时测试
 func (m *Manager) TestDevice(d Device) (bool, float64, string) {
 	snap, err := m.collectOnce(d)
 	if err != nil {

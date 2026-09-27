@@ -79,10 +79,10 @@ async function view(r: ReportRecord) {
   try {
     const detail = await getEnc<ReportRecord>(`/report/${r.id}`)
     let html = detail.content || r.content || ''
-    // 去掉完整HTML文档外壳，只保留body内部内容
-    html = html.replace(/<!DOCTYPE[^>]*>/gi, '').replace(/<html[^>]*>/gi, '').replace(/<\/html>/gi, '')
-    html = html.replace(/<head[^>]*>[\s\S]*?<\/head>/gi, '')
-    html = html.replace(/<body[^>]*>/gi, '').replace(/<\/body>/gi, '')
+    // 保留完整HTML（含样式），直接用iframe srcdoc渲染
+    if (!html.toLowerCase().includes('<html')) {
+      html = '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>' + html + '</body></html>'
+    }
     viewContent.value = html || '<p>报告内容为空</p>'
   } catch (e: any) {
     viewContent.value = '<p>加载失败: ' + (e.message || '未知错误') + '</p>'

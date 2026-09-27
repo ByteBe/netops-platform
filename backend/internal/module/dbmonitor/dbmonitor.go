@@ -3,6 +3,7 @@
 package dbmonitor
 
 import (
+	"netops/internal/common/logger"
 	"strconv"
 	"time"
 
@@ -26,7 +27,7 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		for _, d := range list {
 			item := gin.H{
 				"id": d.ID, "name": d.Name, "type": d.Type, "host": d.Host,
-				"port": d.Port, "user": d.User, "interval": d.Interval,
+				"port": d.Port, "user": d.User, "db_name": d.DBName, "interval": d.Interval,
 				"enable": d.Enable, "remark": d.Remark, "status": d.Status,
 			}
 			for _, s := range a.DBProbe.SnapshotAll() {
@@ -88,7 +89,7 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		}
 		updates := map[string]any{
 			"name": req.Name, "type": req.Type, "host": req.Host, "port": req.Port,
-			"user": req.User, "interval": req.Interval,
+			"user": req.User, "db_name": req.DBName, "interval": req.Interval,
 			"enable": req.Enable, "remark": req.Remark,
 		}
 		if req.Password != "" {
@@ -179,6 +180,8 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			{"value": "db2", "label": "IBM DB2", "port": 50000},
 			{"value": "sybase", "label": "SAP Sybase", "port": 5000},
 			{"value": "sqlite", "label": "内置数据库", "port": 0},
+			{"value": "tdengine", "label": "TDengine", "port": 6030},
+			{"value": "influxdb", "label": "InfluxDB", "port": 8086},
 		})
 	})
 }
@@ -188,10 +191,11 @@ func syncDB(a *core.App) {
 	a.DB.Find(&insts)
 	dbs := make([]dbprobe.Instance, 0, len(insts))
 	for _, d := range insts {
+		logger.Infof("[dbmonitor] sync: id=%d name=%s db_name=%q", d.ID, d.Name, d.DBName)
 		if d.Enable {
 			dbs = append(dbs, dbprobe.Instance{ID: d.ID, Name: d.Name, Type: d.Type,
 				Host: d.Host, Port: d.Port, User: d.User, Password: d.Password,
-				DBName: "", Interval: d.Interval})
+				DBName: d.DBName, Interval: d.Interval})
 		}
 	}
 	a.DBProbe.Sync(dbs)

@@ -5,6 +5,7 @@ package dbprobe
 
 import (
 	"context"
+	"netops/internal/common/logger"
 	"database/sql"
 	"fmt"
 	"strconv"
@@ -177,6 +178,7 @@ func (m *Manager) collect(d Instance) {
 func (m *Manager) probe(d Instance) Snapshot {
 	snap := Snapshot{InstanceID: d.ID, Name: d.Name, Type: d.Type, TS: time.Now()}
 	dsn := buildDSN(d)
+	logger.Infof("[dbprobe] id=%d type=%s host=%s dbname=%q dsn=%s", d.ID, d.Type, d.Host, d.DBName, dsn)
 	if dsn == "" {
 		snap.Message = "不支持的数据库类型: " + d.Type
 		return snap
@@ -261,6 +263,8 @@ func driverName(t string) string {
 		return "pgx"
 	case "sqlite", "builtin":
 		return "sqlite"
+	case "tdengine":
+		return "mysql" // TDengine 兼容 MySQL 协议
 	default:
 		return "mysql"
 	}
@@ -284,6 +288,12 @@ func buildDSN(d Instance) string {
 		return fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", d.Host, d.Port, d.User, d.Password, dbn)
 	case "sqlite", "builtin":
 		return d.Host
+	case "tdengine":
+		dbn := d.DBName
+		if dbn == "" {
+			dbn = "log"
+		}
+		return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?timeout=5s", d.User, d.Password, d.Host, d.Port, dbn)
 	default: // mysql
 		dbn := d.DBName
 		if dbn == "" {
@@ -314,6 +324,8 @@ func versionSQL(t string) string {
 		return "SELECT version()"
 	case "sqlite", "builtin":
 		return "SELECT sqlite_version()"
+	case "tdengine":
+		return "SELECT server_version()"
 	default:
 		return "SELECT VERSION()"
 	}
@@ -340,6 +352,8 @@ func connSQL(t string) string {
 		return "SELECT COUNT(*) FROM v$sessions"
 	case "kingbase", "postgres":
 		return "SELECT COUNT(*) FROM pg_stat_activity"
+	case "tdengine":
+		return "SELECT COUNT(*) FROM information_schema.ins_connections"
 	default:
 		return "SHOW GLOBAL STATUS LIKE 'Threads_connected'"
 	}
@@ -355,6 +369,8 @@ func sizeSQL(t string) string {
 		return "SELECT pg_database_size(current_database())"
 	case "sqlite", "builtin":
 		return "SELECT page_count*page_size FROM pragma_page_count(), pragma_page_size()"
+	case "tdengine":
+		return "SELECT SUM(disk_total) FROM information_schema.ins_dnodes"
 	default:
 		return "SHOW GLOBAL STATUS LIKE 'Innodb_data_bytes'"
 	}
@@ -368,6 +384,8 @@ func tableSQL(t string) string {
 		return "SELECT COUNT(*) FROM pg_tables WHERE schemaname='public'"
 	case "sqlite", "builtin":
 		return "SELECT COUNT(*) FROM sqlite_master WHERE type='table'"
+	case "tdengine":
+		return "SELECT COUNT(*) FROM information_schema.ins_tables"
 	default:
 		return "SELECT COUNT(*) FROM information_schema.tables"
 	}
@@ -416,6 +434,8 @@ func uptimeSQL(t string) string {
 		return "SELECT EXTRACT(EPOCH FROM now()-pg_postmaster_start_time())"
 	case "sqlite", "builtin":
 		return "SELECT 0"
+	case "tdengine":
+		return "SELECT uptime()"
 	default:
 		return "SHOW GLOBAL STATUS LIKE 'Uptime'"
 	}

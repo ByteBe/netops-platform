@@ -1,6 +1,6 @@
 module netops
 
-go 1.25
+go 1.23
 
 require (
 	gitee.com/chunanyong/dm v1.8.23
