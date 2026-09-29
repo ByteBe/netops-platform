@@ -30,3 +30,8 @@ backend/config.yaml
 backend/web/dist/
 backend/logs/
 *.log
+
+# 跨平台编译产物
+backend/netops-server-windows-amd64.exe
+backend/netops-server-linux-amd64
+
