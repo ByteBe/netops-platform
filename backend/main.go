@@ -1,12 +1,11 @@
 ﻿// NetOps 网络运维监控平台入口
-// 架构：单体二进制，内嵌前端静态资源（web/dist）
+// 架构：后端二进制 + 外部前端静态资源（./web/dist，与可执行文件同目录）
 //   - 外部 Web 服务端口：30821（用户访问：API + 静态页面）
 //   - 内部服务端口：30001（模块间通讯 / 数据库探活 / 健康检查）
 package main
 
 import (
 	"context"
-	"embed"
 	"fmt"
 	"io/fs"
 	"log"
@@ -24,9 +23,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
-
-//go:embed web/dist
-var webFS embed.FS
 
 func main() {
 	// 1. 加载配置（支持 --config 指定，缺省自动探测 ./config.yaml 与可执行文件同目录）
@@ -49,27 +45,32 @@ func main() {
 	// 3.1 上传文件静态服务（/uploads/ 映射到 data/uploads/）
 	engine.Static("/uploads", "./data/uploads")
 
-	// 3.2 内嵌前端资源（构建产物）
-	if sub, err := fs.Sub(webFS, "web/dist"); err == nil {
-		entries, _ := fs.ReadDir(sub, "assets")
-		log.Printf("[embed] web/dist/assets 文件数: %d", len(entries))
+	// 3.2 前端资源：从外部目录 ./web/dist 读取（不再 go:embed）
+	webDir := "./web/dist"
+	if st, err := os.Stat(webDir); err == nil && st.IsDir() {
+		sub := os.DirFS(webDir)
+		if entries, err := fs.ReadDir(sub, "assets"); err == nil {
+			log.Printf("[web] 前端静态资源目录: %s, assets 文件数: %d", webDir, len(entries))
+		}
 		engine.NoRoute(func(c *gin.Context) {
 			if c.Request.Method != http.MethodGet {
 				c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 				return
 			}
-			path := path.Clean(c.Request.URL.Path)
-			if path != "/" {
-				if _, err := fs.Stat(sub, path[1:]); err == nil {
-					c.FileFromFS(path, http.FS(sub))
+			reqPath := path.Clean(c.Request.URL.Path)
+			if reqPath != "/" {
+				if _, err := fs.Stat(sub, reqPath[1:]); err == nil {
+					c.FileFromFS(reqPath, http.FS(sub))
 					return
 				}
 			}
 			c.FileFromFS("/", http.FS(sub))
 		})
+	} else {
+		log.Printf("[web] 警告: 未找到前端目录 %s（请将前端构建产物放在该目录）", webDir)
 	}
 
-	// 3.2 注册 API 路由（含前端路由自动注册 & 内嵌静态资源）
+	// 3.3 注册 API 路由
 	router.Register(engine, app)
 
 	// 4. 启动内部服务（30001：模块间通讯 / 探活 / 健康）
@@ -93,7 +94,7 @@ func main() {
 		if useTLS {
 			scheme = "https"
 		}
-		log.Printf("[web] NetOps 平台启动: %s://%s  (前端静态资源已内嵌)", scheme, addr)
+		log.Printf("[web] NetOps 平台启动: %s://%s", scheme, addr)
 		var err error
 		if useTLS {
 			err = srv.ListenAndServeTLS(cfg.Server.TLSCert, cfg.Server.TLSKey)
@@ -128,4 +129,3 @@ func main() {
 	app.Shutdown()
 	log.Println("[web] 服务已安全退出")
 }
-
