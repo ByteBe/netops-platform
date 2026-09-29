@@ -17,6 +17,8 @@ type Server struct {
 	Port         int    `yaml:"port"`          // 外部 Web 端口（默认 30821）
 	InternalHost string `yaml:"internal_host"` // 内部服务监听地址（默认 127.0.0.1）
 	InternalPort int    `yaml:"internal_port"` // 内部服务端口（默认 30001，数据库通讯）
+	TLSCert      string `yaml:"tls_cert"`      // TLS证书路径（留空=HTTP）
+	TLSKey       string `yaml:"tls_key"`       // TLS私钥路径
 }
 
 // Database 存储数据库配置（系统初始化时选择：mysql/oracle/dm/kingbase/sqlite(内置)）

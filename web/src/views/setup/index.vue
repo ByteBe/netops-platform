@@ -10,6 +10,11 @@ import { validatePasswordStrength } from '@/utils'
 const router = useRouter()
 const { t } = useI18n()
 const api = axios.create({ baseURL: '/api/v1', timeout: 60000 })
+api.interceptors.request.use((config) => {
+  config.headers['X-Timestamp'] = String(Math.floor(Date.now() / 1000))
+  config.headers['X-Nonce'] = Math.random().toString(36).substring(2, 15) + Date.now().toString(36)
+  return config
+})
 
 const step = ref(0)
 const testing = ref(false)

@@ -13,9 +13,10 @@ type User struct {
 	Salt           string     `gorm:"size:32" json:"-"`
 	Role           string     `gorm:"size:16;default:operator" json:"role"` // admin/operator/viewer
 	Status         string     `gorm:"size:16;default:active" json:"status"` // active/disabled
-	MustChangePwd  bool       `gorm:"default:false" json:"must_change_pwd"`  // 首次登录强制改密
-	LastLoginAt    *time.Time `json:"last_login_at"`
-	LastLoginIP    string     `gorm:"size:64" json:"last_login_ip"`
+	MustChangePwd    bool       `gorm:"default:false" json:"must_change_pwd"`
+	LastPwdChangeAt *time.Time `json:"last_pwd_change_at"`
+	LastLoginAt     *time.Time `json:"last_login_at"`
+	LastLoginIP     string     `gorm:"size:64" json:"last_login_ip"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
 }

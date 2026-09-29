@@ -1,321 +1,178 @@
-<script setup lang="ts">
-// 脚本生成器：模板代码内置（存库、前后端不可配置），支持华为/华三，路由/交换/AC 全协议
+﻿<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { useI18n } from 'vue-i18n'
 import { getEnc, postEnc } from '@/utils/request'
-import { downloadText, fmtTime } from '@/utils'
 
-const { t } = useI18n()
-
-interface TemplateField {
-  key: string
-  label: string
-  type: string
-  required: boolean
-  default: string
-  options: string[]
-  placeholder: string
+interface Field {
+  key: string; label: string; type: string; required: boolean
+  placeholder: string; options: string[]
+  showIf?: { key: string; eq?: string; notEq?: string; eqAny?: string[] }
 }
-interface ScriptTemplate {
-  id: number
-  code: string
-  vendor: string
-  device_type: string
-  category: string
-  name: string
-  description: string
-  schema: TemplateField[]
-  enabled: boolean
+interface Category {
+  code: string; name: string; icon: string; desc: string; fields: Field[]
 }
-interface CategoryNode {
-  vendor: string
-  types: Array<{ device_type: string; categories: string[] }>
+interface Group {
+  type: string; label: string; items: Category[]
 }
 
-const vendors = ref<Record<string, string>>({ huawei: '华为', h3c: '华三' })
-const deviceTypes = ref<Record<string, string>>({ router: '路由器', switch: '交换机', ac: 'AC控制器' })
-const categories = ref<CategoryNode[]>([])
-const templates = ref<ScriptTemplate[]>([])
-const selectedVendor = ref('huawei')
-
-const visibleCategories = computed(() => categories.value.filter((c) => c.vendor === selectedVendor.value))
-
-const currentTemplate = ref<ScriptTemplate | null>(null)
-const fields = computed<TemplateField[]>(() => {
-  if (!currentTemplate.value) return []
-  return currentTemplate.value.schema || []
-})
-
+const groups = ref<Group[]>([])
+const vendor = ref('huawei')
+const selected = ref<Category | null>(null)
 const params = ref<Record<string, string>>({})
 const output = ref('')
-const history = ref<Array<{ id: number; template_name: string; script: string; created_at: string }>>([])
-const generating = ref(false)
+const loading = ref(false)
+
+const visibleFields = computed(() => {
+  if (!selected.value) return []
+  return selected.value.fields.filter(f => {
+    if (!f.showIf) return true
+    const v = params.value[f.showIf.key]
+    if (f.showIf.notEq) return v !== f.showIf.notEq
+    if (f.showIf.eqAny && f.showIf.eqAny.length) return f.showIf.eqAny.includes(v)
+    return v === f.showIf.eq
+  })
+})
 
 async function load() {
-  const [c, tmp, h] = await Promise.all([
-    getEnc<CategoryNode[]>('/scriptgen/categories'),
-    getEnc<ScriptTemplate[]>('/scriptgen/templates'),
-    getEnc<Array<{ id: number; template_name: string; script: string; created_at: string }>>('/scriptgen/history')
-  ])
-  categories.value = c
-  templates.value = tmp
-  history.value = h
+  groups.value = await getEnc<Group[]>('/scriptgen/categories')
 }
 
-function selectTemplate(id: number) {
-  const tmpl = templates.value.find((x) => x.id === id)
-  if (!tmpl) return
-  currentTemplate.value = tmpl
+function pick(c: Category) {
+  selected.value = c
   params.value = {}
-  fields.value.forEach((f) => {
-    params.value[f.key] = f.default || ''
-  })
+  c.fields.forEach(f => { params.value[f.key] = '' })
   output.value = ''
 }
 
-async function generate() {
-  if (!currentTemplate.value) return
-  // 必填校验
-  for (const f of fields.value) {
+async function gen() {
+  if (!selected.value) return
+  for (const f of visibleFields.value) {
     if (f.required && !params.value[f.key]) {
-      ElMessage.warning(`请填写：${f.label}`)
-      return
+      ElMessage.warning(`请填写：${f.label}`); return
     }
   }
-  generating.value = true
+  loading.value = true
   try {
-    const r = await postEnc<{ script: string; id: number }>('/scriptgen/generate', {
-      template_id: currentTemplate.value.id,
-      params: params.value
+    const r = await postEnc<{ script: string }>('/scriptgen/generate', {
+      code: selected.value.code, vendor: vendor.value, params: params.value
     })
     output.value = r.script
-    await load()
-  } finally {
-    generating.value = false
-  }
+  } finally { loading.value = false }
 }
 
-function copyScript() {
-  navigator.clipboard?.writeText(output.value)
-  ElMessage.success(t('common.success'))
-}
-
-function downloadScript() {
+function copy() {
   if (!output.value) return
-  downloadText(`${currentTemplate.value?.code || 'script'}.txt`, output.value)
-}
-
-function selectTemplateById(vendor: string, dtype: string, category: string) {
-  const tmpl = templates.value.find(
-    (x) => x.vendor === vendor && x.device_type === dtype && x.category === category
-  )
-  if (tmpl) selectTemplate(tmpl.id)
-}
-
-function vendorLabel(v: string) {
-  return vendors.value[v] || v
-}
-function deviceLabel(d: string) {
-  return deviceTypes.value[d] || d
+  navigator.clipboard?.writeText(output.value)
+  ElMessage.success('已复制')
 }
 
 onMounted(load)
 </script>
 
 <template>
-  <div class="np-page">
-    <div class="np-script-layout">
-      <!-- 左侧模板树 -->
-      <div class="np-card np-script-tree">
-        <div class="np-card-title">
-          <el-icon><MagicStick /></el-icon>
-          <span>{{ t('script.template') }}</span>
-        </div>
-        <el-select v-model="selectedVendor" style="width: 100%; margin-bottom: 12px">
-          <el-option v-for="(label, key) in vendors" :key="key" :label="label" :value="key" />
-        </el-select>
-        <div v-for="cat in visibleCategories" :key="cat.vendor" class="np-tree-vendor">
-          <div v-for="tp in cat.types" :key="tp.device_type" class="np-tree-type">
-            <div class="np-tree-type-header">{{ deviceLabel(tp.device_type) }}</div>
-            <div class="np-tree-cats">
-              <div
-                v-for="c in tp.categories" :key="c"
-                class="np-cat-chip"
-                :class="{ active: currentTemplate?.vendor === cat.vendor && currentTemplate?.device_type === tp.device_type && currentTemplate?.category === c }"
-                @click="selectTemplateById(cat.vendor, tp.device_type, c)"
-              >
-                {{ c }}
-              </div>
+  <div class="sg-page">
+    <div class="sg-toolbar">
+      <span class="sg-title">⚡ 脚本生成器</span>
+      <el-radio-group v-model="vendor" size="default" style="margin-left:16px">
+        <el-radio-button value="huawei">华为</el-radio-button>
+        <el-radio-button value="h3c">华三</el-radio-button>
+        <el-radio-button value="cisco">思科</el-radio-button>
+      </el-radio-group>
+      <div class="spacer"></div>
+      <el-button size="small" @click="output=''">清空</el-button>
+    </div>
+
+    <div class="sg-body">
+      <!-- 左：功能选择 -->
+      <div class="np-card sg-left">
+        <div v-for="g in groups" :key="g.type" class="sg-group">
+          <div class="sg-group-title">{{ g.label }}</div>
+          <div class="sg-grid">
+            <div v-for="c in g.items" :key="c.code"
+              class="sg-item" :class="{ on: selected?.code === c.code }"
+              @click="pick(c)">
+              <span class="sg-ic">{{ c.icon }}</span>
+              <span class="sg-lb">{{ c.name }}</span>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- 中间参数表单 -->
-      <div class="np-card np-script-form">
-        <div class="np-card-title">
-          <el-icon><EditPen /></el-icon>
-          <span>{{ t('script.params') }}</span>
+      <!-- 中：参数 -->
+      <div class="np-card sg-center">
+        <div v-if="!selected" class="sg-empty">
+          <div class="sg-empty-ic">👈</div>
+          <div>从左侧选择要配置的功能</div>
         </div>
-        <div v-if="currentTemplate" class="np-tmpl-info">
-          <span class="np-tmpl-name">{{ currentTemplate.name }}</span>
-          <el-tag size="small" effect="plain">{{ vendorLabel(currentTemplate.vendor) }}</el-tag>
-          <el-tag size="small" effect="plain">{{ deviceLabel(currentTemplate.device_type) }}</el-tag>
-          <span class="np-tmpl-desc">{{ currentTemplate.description }}</span>
-        </div>
-        <div v-else class="np-empty">请选择左侧模板</div>
-
-        <el-form v-if="currentTemplate" :model="params" label-position="top" class="np-param-form">
-          <el-form-item v-for="f in fields" :key="f.key" :label="`${f.label}${f.required ? ' *' : ''}`">
-            <el-select v-if="f.type === 'select'" v-model="params[f.key]" filterable allow-create style="width: 100%">
-              <el-option v-for="o in f.options" :key="o" :label="o" :value="o" />
-            </el-select>
-            <el-input
-              v-else-if="f.type === 'list'" v-model="params[f.key]" type="textarea" :rows="4"
-              :placeholder="f.placeholder || '每行一条'" />
-            <el-input v-else-if="f.type === 'password'" v-model="params[f.key]" type="password" show-password :placeholder="f.placeholder" />
-            <el-input v-else v-model="params[f.key]" :placeholder="f.placeholder" />
-          </el-form-item>
-          <el-button type="primary" :loading="generating" @click="generate">
-            <el-icon><MagicStick /></el-icon>{{ t('script.generate') }}
+        <template v-else>
+          <div class="sg-head">
+            <span class="sg-head-icon">{{ selected.icon }}</span>
+            <span class="sg-head-name">{{ selected.name }}</span>
+          </div>
+          <div class="sg-desc">{{ selected.desc }}</div>
+          <el-form :model="params" label-position="top" size="default">
+            <el-form-item v-for="f in visibleFields" :key="f.key"
+              :label="`${f.label}${f.required ? ' *' : ''}`">
+              <el-select v-if="f.type === 'select'" v-model="params[f.key]" style="width:100%">
+                <el-option v-for="o in f.options" :key="o" :label="o" :value="o" />
+              </el-select>
+              <el-input v-else-if="f.type === 'password'" v-model="params[f.key]" type="password" show-password :placeholder="f.placeholder" />
+              <el-input v-else v-model="params[f.key]" :placeholder="f.placeholder" />
+            </el-form-item>
+          </el-form>
+          <el-button type="success" size="large" class="sg-btn" :loading="loading" @click="gen">
+            ⚡ 生成脚本
           </el-button>
-        </el-form>
+        </template>
       </div>
 
-      <!-- 右侧生成结果 -->
-      <div class="np-card np-script-out">
-        <div class="np-card-title">
-          <el-icon><DocumentCopy /></el-icon>
-          <span>{{ t('script.generated') }}</span>
+      <!-- 右：输出 -->
+      <div class="np-card sg-right">
+        <div class="sg-out-head">
+          <span>生成结果</span>
           <div class="spacer"></div>
-          <el-button size="small" text type="primary" :disabled="!output" @click="copyScript">{{ t('common.copy') }}</el-button>
-          <el-button size="small" text type="primary" :disabled="!output" @click="downloadScript">{{ t('common.export') }}</el-button>
+          <el-button type="primary" plain size="small" :disabled="!output" @click="copy">📋 复制</el-button>
         </div>
-        <pre class="np-script-pre">{{ output || '// 请选择模板并填写参数后生成' }}</pre>
+        <pre class="sg-out">{{ output || '// 填写参数后点击"生成脚本"' }}</pre>
       </div>
-    </div>
-
-    <!-- 生成历史 -->
-    <div class="np-card">
-      <div class="np-card-title">
-        <el-icon><Clock /></el-icon>
-        <span>{{ t('script.history') }}</span>
-      </div>
-      <el-table :data="history" size="small" stripe class="np-table">
-        <el-table-column prop="template_name" :label="t('script.template')" min-width="180" />
-        <el-table-column prop="created_at" :label="t('common.created')" width="180">
-          <template #default="{ row }">{{ fmtTime(row.created_at) }}</template>
-        </el-table-column>
-        <el-table-column :label="t('common.actions')" width="120">
-          <template #default="{ row }">
-            <el-button size="small" text type="primary" @click="output = row.script">查看</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
     </div>
   </div>
 </template>
 
-<style lang="scss">
-.np-script-layout {
-  display: grid;
-  grid-template-columns: 280px 1fr 1fr;
-  gap: 14px;
-  align-items: start;
+<style scoped>
+.sg-page { display: flex; flex-direction: column; gap: 12px; }
+.sg-toolbar { display: flex; align-items: center; }
+.sg-title { font-size: 16px; font-weight: 700; }
+.spacer { flex: 1; }
+.sg-body { display: grid; grid-template-columns: 220px 1fr 1fr; gap: 12px; align-items: start; }
+.sg-left { max-height: 620px; overflow-y: auto; }
+.sg-group { margin-bottom: 14px; }
+.sg-group-title { font-size: 12px; color: #909399; font-weight: 600; margin-bottom: 8px; padding-left: 8px; border-left: 3px solid #67c23a; }
+.sg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.sg-item {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 10px 4px; border-radius: 8px; cursor: pointer;
+  border: 1px solid #e4e7ed; background: #fafafa; transition: all .2s;
 }
-
-.np-script-tree {
-  .np-tree-vendor {
-    margin-bottom: 16px;
-    .np-tree-vendor-header {
-      font-weight: 700;
-      font-size: 14px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      margin-bottom: 10px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid var(--np-border);
-    }
-    .np-tree-type {
-      padding-left: 4px;
-      margin-bottom: 12px;
-      .np-tree-type-header {
-        font-size: 12px;
-        color: var(--np-text-2);
-        font-weight: 600;
-        margin-bottom: 8px;
-        padding-left: 8px;
-        border-left: 3px solid var(--np-primary);
-      }
-      .np-tree-cats {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        .np-cat-chip {
-          padding: 4px 10px;
-          font-size: 12px;
-          border-radius: 6px;
-          cursor: pointer;
-          border: 1px solid var(--np-border);
-          background: var(--np-bg-2);
-          color: var(--np-text-1);
-          transition: all 0.2s;
-          &:hover {
-            border-color: var(--np-primary);
-            color: var(--np-primary);
-          }
-          &.active {
-            background: var(--np-primary);
-            color: #fff;
-            border-color: var(--np-primary);
-            font-weight: 600;
-          }
-        }
-      }
-    }
-  }
-}
-
-.np-tmpl-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 14px;
-  .np-tmpl-name {
-    font-size: 15px;
-    font-weight: 600;
-  }
-  .np-tmpl-desc {
-    margin-left: auto;
-    color: var(--np-text-2);
-    font-size: 12px;
-  }
-}
-
-.np-param-form {
-  .el-form-item {
-    margin-bottom: 14px;
-  }
-}
-
-.np-script-out {
-  .np-script-pre {
-    background: #0b1220;
-    color: #7dd3fc;
-    border-radius: $radius-sm;
-    padding: 12px;
-    font-size: 12px;
-    line-height: 1.6;
-    max-height: 560px;
-    overflow: auto;
-    white-space: pre-wrap;
-    word-break: break-all;
-  }
-}
-
-.spacer {
-  flex: 1;
+.sg-item:hover { border-color: #67c23a; }
+.sg-item.on { background: #67c23a; border-color: #67c23a; }
+.sg-item.on .sg-lb { color: #fff; }
+.sg-ic { font-size: 22px; }
+.sg-lb { font-size: 11px; text-align: center; line-height: 1.3; }
+.sg-empty { text-align: center; padding: 80px 0; color: #909399; }
+.sg-empty-ic { font-size: 40px; margin-bottom: 10px; }
+.sg-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.sg-head-icon { font-size: 22px; }
+.sg-head-name { font-size: 15px; font-weight: 600; }
+.sg-desc { font-size: 12px; color: #909399; margin-bottom: 14px; }
+.sg-btn { width: 100%; margin-top: 8px; }
+.sg-out-head { display: flex; align-items: center; margin-bottom: 8px; font-weight: 600; }
+.sg-out {
+  background: #0b1220; color: #7dd3fc; border-radius: 8px;
+  padding: 14px; font-size: 12px; line-height: 1.7;
+  max-height: 560px; overflow: auto; white-space: pre-wrap;
 }
 </style>
+
+
+

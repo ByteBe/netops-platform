@@ -70,7 +70,12 @@ router.beforeEach(async (to) => {
   // 检查系统是否已初始化（只查一次，用原生 fetch 避免拦截器干扰）
   if (!_setupChecked) {
     try {
-      const r = await fetch('/api/v1/setup/status')
+      const r = await fetch('/api/v1/setup/status', {
+        headers: {
+          'X-Timestamp': String(Math.floor(Date.now() / 1000)),
+          'X-Nonce': Math.random().toString(36).substring(2, 15) + Date.now().toString(36)
+        }
+      })
       const j = await r.json()
       _initialized = !!(j.data && j.data.initialized)
     } catch { _initialized = true }

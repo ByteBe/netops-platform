@@ -58,8 +58,10 @@ func Register(a *core.App, g *gin.RouterGroup) {
 		}
 
 		// 3. 校验用户
+		ip := c.ClientIP()
 		var user model.User
 		if err := a.DB.Where("username = ?", lp.Username).First(&user).Error; err != nil {
+			middleware.RecordLoginFailure(ip)
 			response.Fail(c, http.StatusUnauthorized, response.CodeUnauthorized, "用户名或密码错误")
 			return
 		}
@@ -68,12 +70,25 @@ func Register(a *core.App, g *gin.RouterGroup) {
 			return
 		}
 		if crypto.PasswordHash(lp.Password, user.Salt) != user.PasswordHash {
+			middleware.RecordLoginFailure(ip)
 			response.Fail(c, http.StatusUnauthorized, response.CodeUnauthorized, "用户名或密码错误")
 			return
 		}
+		middleware.RecordLoginSuccess(ip)
+
+		// 密码90天过期检查
+		mustChange := user.MustChangePwd
+		if user.LastPwdChangeAt != nil {
+			days := time.Since(*user.LastPwdChangeAt).Hours() / 24
+			if days > 90 {
+				mustChange = true
+			}
+		}
+		// 并发登录互踢
+		a.Sessions.KickUser(user.Username)
 
 		// 4. 签发令牌并绑定会话密钥
-		token, err := middleware.GenerateToken(user.ID, user.Username, user.Role, user.MustChangePwd, a.Cfg.App.JWTKey, 12*time.Hour)
+		token, err := middleware.GenerateToken(user.ID, user.Username, user.Role, mustChange, a.Cfg.App.JWTKey, 12*time.Hour)
 		if err != nil {
 			response.Err(c, err)
 			return
@@ -89,7 +104,7 @@ func Register(a *core.App, g *gin.RouterGroup) {
 			"role":            user.Role,
 			"email":           user.Email,
 			"employee_no":     user.EmployeeNo,
-			"must_change_pwd": user.MustChangePwd,
+			"must_change_pwd": mustChange,
 			"expires_in":      43200,
 		}
 		payload, _ := json.Marshal(response.Body{Code: response.CodeOK, Message: "登录成功", Data: data})
@@ -149,9 +164,10 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		}
 		salt, _ := crypto.GenerateSalt()
 		a.DB.Model(&user).Updates(map[string]any{
-			"password_hash":   crypto.PasswordHash(req.NewPassword, salt),
-			"salt":            salt,
+			"password_hash":    crypto.PasswordHash(req.NewPassword, salt),
+			"salt":             salt,
 			"must_change_pwd": false,
+			"last_pwd_change_at": time.Now(),
 		})
 		// 使该用户旧会话失效
 		response.OK(c, gin.H{"ok": true, "message": "密码修改成功，请重新登录"})

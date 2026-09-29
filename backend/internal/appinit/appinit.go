@@ -1,4 +1,4 @@
-// Package appinit 运行时初始化逻辑（数据库/时序库/种子数据/MCP能力）
+﻿// Package appinit 运行时初始化逻辑（数据库/时序库/种子数据/MCP能力）
 // 独立于 module 包，避免 bootstrap ↔ module 的 import 循环
 package appinit
 
@@ -18,7 +18,6 @@ import (
 	"netops/internal/config"
 	"netops/internal/core"
 	"netops/internal/model"
-	"netops/internal/module/scriptgen"
 	"netops/internal/service/mcp"
 	"netops/internal/storage"
 	"netops/internal/tsdb"
@@ -106,7 +105,6 @@ func OpenTSDB(cfg *config.TSDB) (tsdb.Engine, error) {
 
 // SeedData 种子数据（脚本模板/默认分组/系统设置/默认管理员）
 func SeedData(db *gorm.DB) {
-	scriptgen.SeedTemplates(db)
 	var userCnt int64
 	db.Model(&model.User{}).Count(&userCnt)
 	if userCnt == 0 {
@@ -284,3 +282,4 @@ func SettingInt(db *gorm.DB, key string, def int) int {
 	}
 	return n
 }
+

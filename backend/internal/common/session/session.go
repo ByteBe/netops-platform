@@ -55,6 +55,17 @@ func (m *Manager) Delete(token string) {
 	delete(m.entries, token)
 }
 
+// KickUser 踢掉指定用户的所有旧会话（并发登录互踢）
+func (m *Manager) KickUser(username string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for k, e := range m.entries {
+		if e.username == username {
+			delete(m.entries, k)
+		}
+	}
+}
+
 // Count 会话数量
 func (m *Manager) Count() int {
 	m.mu.RLock()

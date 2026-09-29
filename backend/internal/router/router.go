@@ -25,14 +25,17 @@ var upgrader = websocket.Upgrader{
 func Register(engine *gin.Engine, app *core.App) {
 	// 全局中间件
 	engine.Use(middleware.CORS())
+	engine.Use(middleware.RateLimit())
 
-	// 基础路由
+	// 基础路由（所有API统一防重放 + 登录锁定）
 	api := engine.Group("/api/v1")
+	api.Use(middleware.ReplayProtection())
+	api.Use(middleware.LoginLockout())
 	{
 		api.GET("/health", func(c *gin.Context) {
 			response.OK(c, gin.H{
 				"name": app.Cfg.App.Name, "ready": app.Ready,
-				"version": "1.0.0", "time": app.Started.UnixMilli(),
+				"version": "1.3.0", "time": app.Started.UnixMilli(),
 				"web_port": app.Cfg.Server.Port, "internal_port": app.Cfg.Server.InternalPort,
 			})
 		})

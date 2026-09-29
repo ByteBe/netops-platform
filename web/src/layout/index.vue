@@ -14,11 +14,21 @@ const { t } = useI18n()
 const appStore = useAppStore()
 const authStore = useAuthStore()
 
-// 功能路由（左侧导航，不含登录/初始化/大屏）
+// 功能路由分组（左侧导航）
+const groups: { title: string; items: string[] }[] = [
+  { title: '网络监控', items: ['linkdetect', 'monitor', 'topology', 'traffic'] },
+  { title: '资源与资产', items: ['resource', 'ipam', 'subnet'] },
+  { title: '基础设施', items: ['container', 'k8s', 'dbmonitor'] },
+  { title: '工具与报告', items: ['report', 'scriptgen'] },
+  { title: '系统', items: ['system'] }
+]
 const menus = computed(() => {
-  return Object.entries(navMeta)
-    .filter(([, m]) => !m.hidden)
-    .map(([name, m]) => ({ name, title: t(m.title), icon: m.icon, active: route.path === '/' + name }))
+  return groups.map(g => ({
+    title: g.title,
+    items: g.items
+      .filter(n => navMeta[n] && !navMeta[n].hidden)
+      .map(n => ({ name: n, title: t(navMeta[n].title), icon: navMeta[n].icon }))
+  })).filter(g => g.items.length > 0)
 })
 
 function logout() {
@@ -49,10 +59,15 @@ const userTitle = computed(() => authStore.user?.username || '')
         :collapse-transition="false"
         router
       >
-        <el-menu-item v-for="m in menus" :key="m.name" :index="'/' + m.name">
-          <el-icon><component :is="m.icon" /></el-icon>
-          <template #title>{{ m.title }}</template>
-        </el-menu-item>
+        <el-sub-menu v-for="g in menus" :key="g.title" :index="g.title">
+          <template #title>
+            <span>{{ g.title }}</span>
+          </template>
+          <el-menu-item v-for="m in g.items" :key="m.name" :index="'/' + m.name">
+            <el-icon><component :is="m.icon" /></el-icon>
+            <template #title>{{ m.title }}</template>
+          </el-menu-item>
+        </el-sub-menu>
       </el-menu>
     </aside>
 

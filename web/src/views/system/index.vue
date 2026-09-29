@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 // 系统管理：用户管理 / AI 接入（云端+本地Ollama，多AI调度）/ MCP 配置 / 邮箱 / 审计日志
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -299,7 +299,35 @@ function moduleFromPath(p?: string): string {
   return map[parts[0]] || parts[0] || '-'
 }
 
+// ===== 安全配置 =====
+const secForm = reactive({
+  tls_cert: '', tls_key: '',
+  pwd_max_days: 90,
+  login_max_fail: 5,
+  login_lock_min: 15,
+  audit_retention_days: 180,
+  max_session_per_user: 1
+})
+async function loadSec() {
+  try {
+    const r = await getEnc<any>('/system/security')
+    Object.assign(secForm, r)
+  } catch {}
+}
+async function saveSec() {
+  await putEnc('/system/security', secForm)
+  ElMessage.success('保存成功，部分配置需重启生效')
+}
+
 // ===== 系统更新 =====
+async function downloadBackup() {
+  const r = await fetch('/api/v1/system/backup', { headers: { Authorization: 'Bearer ' + localStorage.getItem('np-token') } })
+  const blob = await r.blob()
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = 'netops-backup-' + new Date().toISOString().slice(0,10) + '.zip'
+  a.click()
+}
 const ver = ref<any>({})
 const uploadResult = ref<any>(null)
 const applying = ref(false)
@@ -347,6 +375,7 @@ onMounted(() => {
   loadMCP()
   loadEmails()
   loadAudits()
+  loadSec()
 })
 </script>
 
@@ -474,6 +503,54 @@ onMounted(() => {
               </template>
             </el-table-column>
           </el-table>
+        </div>
+      </el-tab-pane>
+
+      <!-- 安全配置 -->
+      <el-tab-pane label="安全配置" name="security">
+        <div class="np-card" style="max-width:720px">
+          <h3 style="margin:0 0 16px">HTTPS / TLS</h3>
+          <el-form :model="secForm" label-width="140px">
+            <el-form-item label="证书文件路径">
+              <el-input v-model="secForm.tls_cert" placeholder="如 /opt/netops/cert/server.crt（留空=HTTP）" />
+            </el-form-item>
+            <el-form-item label="私钥文件路径">
+              <el-input v-model="secForm.tls_key" placeholder="如 /opt/netops/cert/server.key" />
+            </el-form-item>
+          </el-form>
+          <el-divider />
+          <h3 style="margin:0 0 16px">密码策略</h3>
+          <el-form :model="secForm" label-width="140px">
+            <el-form-item label="密码有效期(天)">
+              <el-input-number v-model="secForm.pwd_max_days" :min="30" :max="365" />
+            </el-form-item>
+          </el-form>
+          <el-divider />
+          <h3 style="margin:0 0 16px">登录防护</h3>
+          <el-form :model="secForm" label-width="140px">
+            <el-form-item label="最大失败次数">
+              <el-input-number v-model="secForm.login_max_fail" :min="3" :max="10" />
+            </el-form-item>
+            <el-form-item label="锁定时长(分钟)">
+              <el-input-number v-model="secForm.login_lock_min" :min="5" :max="60" />
+            </el-form-item>
+            <el-form-item label="单用户并发会话">
+              <el-input-number v-model="secForm.max_session_per_user" :min="1" :max="5" />
+              <span class="np-hint">1=新登录踢掉旧会话</span>
+            </el-form-item>
+          </el-form>
+          <el-divider />
+          <h3 style="margin:0 0 16px">日志留存</h3>
+          <el-form :model="secForm" label-width="140px">
+            <el-form-item label="审计日志保留(天)">
+              <el-input-number v-model="secForm.audit_retention_days" :min="90" :max="365" />
+            </el-form-item>
+          </el-form>
+          <div style="margin-top:20px;padding-top:16px;border-top:1px solid #eee">
+            <h3 style="margin:0 0 10px">数据备份</h3>
+            <el-button type="warning" @click="downloadBackup">下载备份包（数据库+配置）</el-button>
+          </div>
+          <el-button type="primary" @click="saveSec" style="margin-top:16px">保存配置</el-button>
         </div>
       </el-tab-pane>
 
@@ -687,3 +764,6 @@ onMounted(() => {
   overflow: auto;
 }
 </style>
+
+
+

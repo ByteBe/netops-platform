@@ -61,7 +61,13 @@ export async function gmLogin(username: string, password: string): Promise<{ res
   const key = sm2EncryptSessionKey(sm2PublicKey, sessionKey)
   const data = sm4Encrypt(sessionKey, JSON.stringify({ username, password }))
   // 3. 提交登录（返回 SM4 加密信封）
-  const raw = await axios.post('/api/v1/auth/login', { key, data }, { timeout: 30000 })
+  const raw = await axios.post('/api/v1/auth/login', { key, data }, {
+    timeout: 30000,
+    headers: {
+      'X-Timestamp': String(Math.floor(Date.now() / 1000)),
+      'X-Nonce': Math.random().toString(36).substring(2, 15) + Date.now().toString(36)
+    }
+  })
   const result = parseEnvelope<ApiResult<LoginResult>>(raw.data, sessionKey)
   if (result.code !== OK) {
     throw new Error(result.message || '登录失败')
@@ -78,12 +84,15 @@ export function parseEnvelope<T>(body: unknown, sessionKey: SessionKey): T {
   return body as T
 }
 
-// ---- 请求拦截：SM4 加密请求体 ----
+// ---- 请求拦截：SM4 加密请求体 + 防重放头 ----
 http.interceptors.request.use((config) => {
   const auth = useAuthStore()
   if (auth.token) {
     config.headers.Authorization = `Bearer ${auth.token}`
   }
+  // 防重放：时间戳 + 随机Nonce
+  config.headers['X-Timestamp'] = String(Math.floor(Date.now() / 1000))
+  config.headers['X-Nonce'] = Math.random().toString(36).substring(2, 15) + Date.now().toString(36)
   const hasBody = !!config.data && typeof config.data !== 'string'
   if (auth.sessionKey && hasBody) {
     const plain = typeof config.data === 'string' ? config.data : JSON.stringify(config.data)

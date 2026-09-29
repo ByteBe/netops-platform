@@ -1,4 +1,4 @@
-// NetOps 网络运维监控平台入口
+﻿// NetOps 网络运维监控平台入口
 // 架构：单体二进制，内嵌前端静态资源（web/dist）
 //   - 外部 Web 服务端口：30821（用户访问：API + 静态页面）
 //   - 内部服务端口：30001（模块间通讯 / 数据库探活 / 健康检查）
@@ -19,6 +19,7 @@ import (
 
 	"netops/internal/bootstrap"
 	"netops/internal/config"
+	"netops/internal/model"
 	"netops/internal/router"
 
 	"github.com/gin-gonic/gin"
@@ -87,13 +88,36 @@ func main() {
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 	srv := &http.Server{Addr: addr, Handler: engine}
 	go func() {
-		log.Printf("[web] NetOps 平台启动: http://%s  (前端静态资源已内嵌)", addr)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		useTLS := cfg.Server.TLSCert != "" && cfg.Server.TLSKey != ""
+		scheme := "http"
+		if useTLS {
+			scheme = "https"
+		}
+		log.Printf("[web] NetOps 平台启动: %s://%s  (前端静态资源已内嵌)", scheme, addr)
+		var err error
+		if useTLS {
+			err = srv.ListenAndServeTLS(cfg.Server.TLSCert, cfg.Server.TLSKey)
+		} else {
+			err = srv.ListenAndServe()
+		}
+		if err != nil && err != http.ErrServerClosed {
 			log.Fatalf("[web] 服务异常退出: %v", err)
 		}
 	}()
 
-	// 6. 优雅退出
+	// 6. 审计日志自动清理（保留180天）
+	go func() {
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			if app.DB != nil {
+				cutoff := time.Now().Add(-180 * 24 * time.Hour)
+				app.DB.Where("created_at < ?", cutoff).Delete(&model.AuditLog{})
+			}
+		}
+	}()
+
+	// 7. 优雅退出
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
@@ -104,3 +128,4 @@ func main() {
 	app.Shutdown()
 	log.Println("[web] 服务已安全退出")
 }
+

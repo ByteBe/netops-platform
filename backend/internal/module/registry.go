@@ -1,4 +1,4 @@
-// Package module 业务模块集合（空白导入全部功能模块触发 init 自注册；路由自动注册）
+﻿// Package module 业务模块集合（空白导入全部功能模块触发 init 自注册；路由自动注册）
 // 新增功能模块的接入方式：
 //  1. 在本目录下新建功能文件夹，实现 Register/RegisterProtected 并在 init() 中调用 modreg.Register / modreg.RegisterProtected
 //  2. 在本文件的 import 块中加入对应包的空白导入
@@ -39,3 +39,4 @@ func InstallProtected(a *core.App, root *gin.RouterGroup) { modreg.InstallProtec
 
 // RegisteredModules 已注册模块列表
 func RegisteredModules() []string { return modreg.RegisteredModules() }
+

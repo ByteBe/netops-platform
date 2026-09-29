@@ -1,9 +1,15 @@
-// Package system 系统管理：AI接入 / MCP配置 / 邮箱 / 系统参数
+﻿// Package system 系统管理：AI接入 / MCP配置 / 邮箱 / 系统参数 / 数据备份
 package system
 
 import (
+	"archive/zip"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -312,6 +318,57 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		response.OK(c, gin.H{"ok": true})
 	})
 
+	// 安全配置
+	g.GET("/security", func(c *gin.Context) {
+		get := func(key, def string) string {
+			var s model.SystemSetting
+			if err := a.DB.Where("`key`=?", key).First(&s).Error; err != nil { return def }
+			return s.Value
+		}
+		getInt := func(key string, def int) int {
+			v := get(key, "")
+			if v == "" { return def }
+			n, _ := strconv.Atoi(v)
+			return n
+		}
+		response.OK(c, gin.H{
+			"tls_cert": get("tls_cert", ""), "tls_key": get("tls_key", ""),
+			"pwd_max_days": getInt("pwd_max_days", 90),
+			"login_max_fail": getInt("login_max_fail", 5),
+			"login_lock_min": getInt("login_lock_min", 15),
+			"audit_retention_days": getInt("audit_retention_days", 180),
+			"max_session_per_user": getInt("max_session_per_user", 1),
+		})
+	})
+	g.PUT("/security", middleware.RequireRole("admin"), func(c *gin.Context) {
+		var req struct {
+			TLSCert string `json:"tls_cert"`
+			TLSKey string `json:"tls_key"`
+			PwdMaxDays int `json:"pwd_max_days"`
+			LoginMaxFail int `json:"login_max_fail"`
+			LoginLockMin int `json:"login_lock_min"`
+			AuditRetentionDays int `json:"audit_retention_days"`
+			MaxSessionPerUser int `json:"max_session_per_user"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil { response.Bad(c, "参数错误"); return }
+		upd := func(key, val string) {
+			var s model.SystemSetting
+			if err := a.DB.Where("`key`=?", key).First(&s).Error; err != nil {
+				a.DB.Create(&model.SystemSetting{Key: key, Value: val})
+			} else {
+				a.DB.Model(&s).Update("value", val)
+			}
+		}
+		upd("tls_cert", req.TLSCert)
+		upd("tls_key", req.TLSKey)
+		upd("pwd_max_days", strconv.Itoa(req.PwdMaxDays))
+		upd("login_max_fail", strconv.Itoa(req.LoginMaxFail))
+		upd("login_lock_min", strconv.Itoa(req.LoginLockMin))
+		upd("audit_retention_days", strconv.Itoa(req.AuditRetentionDays))
+		upd("max_session_per_user", strconv.Itoa(req.MaxSessionPerUser))
+		response.OK(c, gin.H{"ok": true})
+	})
+
 	// 审计日志
 	g.GET("/audit", middleware.RequireRole("admin"), func(c *gin.Context) {
 		page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
@@ -321,6 +378,45 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		var list []model.AuditLog
 		a.DB.Order("id desc").Offset((page - 1) * size).Limit(size).Find(&list)
 		response.OK(c, gin.H{"total": total, "list": list})
+	})
+
+	// 数据备份（下载zip）
+	g.GET("/backup", middleware.RequireRole("admin"), func(c *gin.Context) {
+		tmp, err := os.CreateTemp("", "netops-backup-*.zip")
+		if err != nil {
+			response.Err(c, err)
+			return
+		}
+		defer os.Remove(tmp.Name())
+		defer tmp.Close()
+		zw := zip.NewWriter(tmp)
+		filepath.Walk("data", func(path string, info os.FileInfo, err error) error {
+			if err != nil || info.IsDir() {
+				return nil
+			}
+			f, err := os.Open(path)
+			if err != nil {
+				return nil
+			}
+			defer f.Close()
+			w, err := zw.Create(path)
+			if err != nil {
+				return nil
+			}
+			io.Copy(w, f)
+			return nil
+		})
+		if _, err := os.Stat("config.yaml"); err == nil {
+			f, _ := os.Open("config.yaml")
+			defer f.Close()
+			w, _ := zw.Create("config.yaml")
+			io.Copy(w, f)
+		}
+		zw.Close()
+		filename := fmt.Sprintf("netops-backup-%s.zip", time.Now().Format("20060102-150405"))
+		c.Header("Content-Disposition", "attachment; filename="+filename)
+		c.Header("Content-Type", "application/zip")
+		c.File(tmp.Name())
 	})
 }
 
@@ -369,3 +465,4 @@ func containsAt(s string) bool {
 func init() {
 	modreg.RegisterProtected("system", RegisterProtected)
 }
+
