@@ -46,7 +46,7 @@ func main() {
 	engine.Static("/uploads", "./data/uploads")
 
 	// 3.2 前端资源：从外部目录 ./web/dist 读取（不再 go:embed）
-	webDir := "./web/dist"
+	webDir := "./web"
 	if st, err := os.Stat(webDir); err == nil && st.IsDir() {
 		sub := os.DirFS(webDir)
 		if entries, err := fs.ReadDir(sub, "assets"); err == nil {
