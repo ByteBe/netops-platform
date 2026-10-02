@@ -35,7 +35,7 @@ func Register(engine *gin.Engine, app *core.App) {
 		api.GET("/health", func(c *gin.Context) {
 			response.OK(c, gin.H{
 				"name": app.Cfg.App.Name, "ready": app.Ready,
-				"version": "1.3.0", "time": app.Started.UnixMilli(),
+				"version": "1.4.1", "time": app.Started.UnixMilli(),
 				"web_port": app.Cfg.Server.Port, "internal_port": app.Cfg.Server.InternalPort,
 			})
 		})

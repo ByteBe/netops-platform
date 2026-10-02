@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"netops/internal/common/logger"
 	"netops/internal/tsdb"
 )
 
@@ -121,7 +122,8 @@ func (e *Engine) Write(rows []tsdb.Row) error {
 	for _, table := range order {
 		rs := byTable[table]
 		// 建表
-		if err := e.exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (ts TIMESTAMP, fname VARCHAR(64), value DOUBLE)", table)); err != nil {
+		if err := e.exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (ts TIMESTAMP, fname VARCHAR(64), val DOUBLE)", table)); err != nil {
+			logger.Warnf("[tdengine] create table %s error: %v", table, err)
 			return err
 		}
 		var sb strings.Builder
@@ -141,6 +143,7 @@ func (e *Engine) Write(rows []tsdb.Row) error {
 			sb.WriteString(")")
 		}
 		if err := e.exec(sb.String()); err != nil {
+			logger.Warnf("[tdengine] insert %s error: %v sql=%s", table, err, sb.String())
 			return err
 		}
 	}
@@ -167,7 +170,7 @@ func (e *Engine) Query(q tsdb.Query) ([]tsdb.Series, error) {
 	if q.Field != "" {
 		where = fmt.Sprintf(" AND fname = '%s'", tsdb.Sanitize(q.Field))
 	}
-	sql := fmt.Sprintf("SELECT ts, fname, value FROM %s WHERE ts >= %d AND ts <= %d%s",
+	sql := fmt.Sprintf("SELECT ts, fname, val FROM %s WHERE ts >= %d AND ts <= %d%s",
 		table, q.Start.UnixMilli(), q.End.UnixMilli(), where)
 	if q.Limit > 0 {
 		sql += fmt.Sprintf(" LIMIT %d", q.Limit)
@@ -186,7 +189,7 @@ func (e *Engine) Query(q tsdb.Query) ([]tsdb.Series, error) {
 		if len(row) < 3 {
 			continue
 		}
-		tsMs, _ := strconv.ParseInt(fmt.Sprint(row[0]), 10, 64)
+		tsMs := parseTsMs(row[0])
 		field := fmt.Sprint(row[1])
 		val, _ := strconv.ParseFloat(fmt.Sprint(row[2]), 64)
 		key := field
@@ -212,6 +215,47 @@ func (e *Engine) Query(q tsdb.Query) ([]tsdb.Series, error) {
 func (e *Engine) Close() error {
 	e.client.CloseIdleConnections()
 	return nil
+}
+
+// parseTsMs 把 TDengine REST 返回的 ts 列解析成 UnixMilli
+// 可能是: int64 毫秒、float64 毫秒、"2026-10-02 16:05:34.000"、"2026-10-02T16:05:34.000+0800"
+func parseTsMs(v any) int64 {
+	switch n := v.(type) {
+	case int64:
+		return n
+	case int:
+		return int64(n)
+	case float64:
+		return int64(n)
+	case json.Number:
+		if i, err := n.Int64(); err == nil {
+			return i
+		}
+	case string:
+		s := strings.TrimSpace(n)
+		// 纯数字
+		if i, err := strconv.ParseInt(s, 10, 64); err == nil {
+			// 超过 1e12 视为毫秒，否则秒
+			if i > 1e12 {
+				return i
+			}
+			return i * 1000
+		}
+		// 时间字符串
+		layouts := []string{
+			"2006-01-02 15:04:05.000",
+			"2006-01-02 15:04:05",
+			"2006-01-02T15:04:05.000Z0700",
+			"2006-01-02T15:04:05Z0700",
+			"2006-01-02T15:04:05",
+		}
+		for _, layout := range layouts {
+			if t, err := time.ParseInLocation(layout, s, time.Local); err == nil {
+				return t.UnixMilli()
+			}
+		}
+	}
+	return 0
 }
 
 func min(a, b int) int {

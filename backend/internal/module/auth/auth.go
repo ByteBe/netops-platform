@@ -96,6 +96,7 @@ func Register(a *core.App, g *gin.RouterGroup) {
 		now := time.Now()
 		a.DB.Model(&user).Updates(map[string]any{"last_login_at": now, "last_login_ip": c.ClientIP()})
 		a.Sessions.Set(token, sm4Key, user.ID, user.Username)
+		a.DB.Create(&model.AuditLog{UserID: user.ID, Username: user.Username, Action: "POST /auth/login", Method: "POST", Path: "/auth/login", IP: c.ClientIP(), Detail: "登录成功"})
 
 		// 5. 响应以 SM4 加密（会话密钥仅本次有效）
 		data := gin.H{

@@ -34,9 +34,16 @@ const (
 	oidHrStorageUsed    = "1.3.6.1.2.1.25.2.3.1.6"
 	oidHrStorageDescr   = "1.3.6.1.2.1.25.2.3.1.3"
 	hrStorageRam        = "1.3.6.1.2.1.25.2.1.2"
-	oidUcdCpuRawIdle    = "1.3.6.1.4.1.2021.11.11.0"
-	oidUcdCpuRawSystem  = "1.3.6.1.4.1.2021.11.10.0"
-	oidUcdCpuRawUser    = "1.3.6.1.4.1.2021.11.9.0"
+	// UCD-SNMP-MIB 即时百分比（Linux snmpd 默认暴露）
+	oidUcdCpuUser    = "1.3.6.1.4.1.2021.11.0"
+	oidUcdCpuSystem  = "1.3.6.1.4.1.2021.11.1"
+	oidUcdCpuIdle    = "1.3.6.1.4.1.2021.11.2"
+	oidUcdCpuRawIdle = "1.3.6.1.4.1.2021.11.11.0"
+	oidUcdCpuRawSys  = "1.3.6.1.4.1.2021.11.10.0"
+	oidUcdCpuRawUser = "1.3.6.1.4.1.2021.11.9.0"
+	// HOST-RESOURCES 内存总量/可用（KB），直接 .0 取值
+	oidHrMemSize  = "1.3.6.1.2.1.25.2.2.1.5.0"
+	oidHrMemAvail = "1.3.6.1.2.1.25.2.2.1.6.0"
 
 	// Cisco: CPU (cpmCPUTotal5minRev), Memory pool
 	oidCiscoCpu5min   = "1.3.6.1.4.1.9.9.109.1.1.1.1.8"
@@ -228,14 +235,14 @@ func (m *Manager) collect(d Device) {
 		up = 1
 	}
 	rows := []tsdb.Row{
-		{Metric: "dev_up", Field: "value", Tags: map[string]string{"device_id": fmt.Sprint(d.ID), "name": d.Name}, Value: up, TS: now},
-		{Metric: "dev_cpu", Field: "value", Tags: map[string]string{"device_id": fmt.Sprint(d.ID), "name": d.Name}, Value: snap.CPU, TS: now},
-		{Metric: "dev_mem", Field: "value", Tags: map[string]string{"device_id": fmt.Sprint(d.ID), "name": d.Name}, Value: snap.MemUsed, TS: now},
+		{Metric: "dev_up", Field: "value", Tags: map[string]string{"device_id": fmt.Sprint(d.ID)}, Value: up, TS: now},
+		{Metric: "dev_cpu", Field: "value", Tags: map[string]string{"device_id": fmt.Sprint(d.ID)}, Value: snap.CPU, TS: now},
+		{Metric: "dev_mem", Field: "value", Tags: map[string]string{"device_id": fmt.Sprint(d.ID)}, Value: snap.MemUsed, TS: now},
 	}
 	for _, ifs := range snap.Interfaces {
 		rows = append(rows,
-			tsdb.Row{Metric: "if_in", Field: "value", Tags: map[string]string{"device_id": fmt.Sprint(d.ID), "name": d.Name, "if_index": ifs.Index, "if_name": ifs.Name}, Value: ifs.InBps, TS: now},
-			tsdb.Row{Metric: "if_out", Field: "value", Tags: map[string]string{"device_id": fmt.Sprint(d.ID), "name": d.Name, "if_index": ifs.Index, "if_name": ifs.Name}, Value: ifs.OutBps, TS: now},
+			tsdb.Row{Metric: "if_in", Field: "value", Tags: map[string]string{"device_id": fmt.Sprint(d.ID), "if_index": ifs.Index, "if_name": ifs.Name}, Value: ifs.InBps, TS: now},
+			tsdb.Row{Metric: "if_out", Field: "value", Tags: map[string]string{"device_id": fmt.Sprint(d.ID), "if_index": ifs.Index, "if_name": ifs.Name}, Value: ifs.OutBps, TS: now},
 		)
 	}
 	if m.ts != nil {
@@ -252,6 +259,14 @@ func (m *Manager) collect(d Device) {
 }
 
 func (m *Manager) collectOnce(d Device) (*DeviceSnapshot, error) {
+	// 去掉前端表单可能带入的首尾空格
+	d.Username = strings.TrimSpace(d.Username)
+	d.Community = strings.TrimSpace(d.Community)
+	d.AuthPass = strings.TrimSpace(d.AuthPass)
+	d.PrivPass = strings.TrimSpace(d.PrivPass)
+	d.AuthProto = strings.ToLower(strings.TrimSpace(d.AuthProto))
+	d.PrivProto = strings.ToLower(strings.TrimSpace(d.PrivProto))
+
 	params := &gosnmp.GoSNMP{
 		Target:        d.IP,
 		Port:          uint16(d.Port),
@@ -289,13 +304,20 @@ func (m *Manager) collectOnce(d Device) (*DeviceSnapshot, error) {
 	}
 	defer params.Conn.Close()
 
+	log.Printf("[snmp] device=%s(%s) v=%s user=%q community=%q authProto=%q privProto=%q authPassLen=%d privPassLen=%d port=%d",
+		d.Name, d.IP, d.SNMPVersion, d.Username, d.Community, d.AuthProto, d.PrivProto, len(d.AuthPass), len(d.PrivPass), d.Port)
+
 	snap := &DeviceSnapshot{DeviceID: d.ID, Name: d.Name, IP: d.IP, Up: true, TS: time.Now()}
 
 	// Uptime: hrSystemUptime 优先，sysUpTime 回退
 	if uptime, err := params.Get([]string{"1.3.6.1.2.1.25.1.1.0"}); err == nil && len(uptime.Variables) > 0 {
 		snap.Uptime = float64(toUint32(uptime.Variables[0].Value)) / 100
+		log.Printf("[snmp] device=%s uptime via hrSystemUptime: raw=%v -> %.0fs", d.Name, uptime.Variables[0].Value, snap.Uptime)
 	} else if uptime2, err2 := params.Get([]string{oidSysUpTime}); err2 == nil && len(uptime2.Variables) > 0 {
 		snap.Uptime = float64(toUint32(uptime2.Variables[0].Value)) / 100
+		log.Printf("[snmp] device=%s uptime via sysUpTime: raw=%v -> %.0fs (hrErr=%v)", d.Name, uptime2.Variables[0].Value, snap.Uptime, err)
+	} else {
+		log.Printf("[snmp] device=%s uptime GET failed: hrErr=%v sysErr=%v", d.Name, err, err2)
 	}
 
 	// 采集 CPU
@@ -373,11 +395,40 @@ func (m *Manager) collectCPU(params *gosnmp.GoSNMP, d Device, snap *DeviceSnapsh
 		}
 	}
 
-	// 4. HR-Storage hrProcessorLoad (Linux/Windows)
+	// 4. UCD-SNMP-MIB 即时百分比 (Linux net-snmp 默认暴露，优先于 hrProcessorLoad)
+	if r, err := params.Get([]string{oidUcdCpuUser, oidUcdCpuSystem, oidUcdCpuIdle}); err == nil && len(r.Variables) >= 3 {
+		userPct := float64(toInt32(r.Variables[0].Value))
+		sysPct := float64(toInt32(r.Variables[1].Value))
+		idlePct := float64(toInt32(r.Variables[2].Value))
+		if userPct >= 0 && sysPct >= 0 && idlePct >= 0 && idlePct <= 100 {
+			cpu := userPct + sysPct
+			if cpu < 0 {
+				cpu = 100 - idlePct
+			}
+			if cpu < 0 {
+				cpu = 0
+			}
+			if cpu > 100 {
+				cpu = 100
+			}
+			snap.CPU = math.Round(cpu*10) / 10
+			log.Printf("[snmp] device=%s CPU via UCD pct: user=%.1f sys=%.1f idle=%.1f -> %.1f", d.Name, userPct, sysPct, idlePct, snap.CPU)
+			return
+		}
+		log.Printf("[snmp] device=%s UCD pct invalid: user=%v sys=%v idle=%v (types=%T %T %T)", d.Name, userPct, sysPct, idlePct, r.Variables[0].Value, r.Variables[1].Value, r.Variables[2].Value)
+	} else {
+		log.Printf("[snmp] device=%s UCD pct GET failed: %v", d.Name, err)
+	}
+
+	// 5. HR-Storage hrProcessorLoad (Linux/Windows) — 跳过 -1/负数（snmpd 未暴露时返回 -1）
 	loads := map[string]uint32{}
 	if rows, err := params.BulkWalkAll(oidHrProcessorLoad); err == nil {
 		for _, v := range rows {
-			loads[oidLast(v.Name)] = toUint32(v.Value)
+			iv := toInt32(v.Value)
+			if iv < 0 || iv > 100 { // -1 = not available
+				continue
+			}
+			loads[oidLast(v.Name)] = uint32(iv)
 		}
 	}
 	if len(loads) > 0 {
@@ -389,8 +440,8 @@ func (m *Manager) collectCPU(params *gosnmp.GoSNMP, d Device, snap *DeviceSnapsh
 		return
 	}
 
-	// 5. UCD-SNMP raw counters (Linux net-snmp)
-	if raw, err := params.Get([]string{oidUcdCpuRawIdle, oidUcdCpuRawUser, oidUcdCpuRawSystem}); err == nil && len(raw.Variables) == 3 {
+	// 6. UCD-SNMP raw counters (Linux net-snmp) — 需要两次采样差分
+	if raw, err := params.Get([]string{oidUcdCpuRawIdle, oidUcdCpuRawSys, oidUcdCpuRawUser}); err == nil && len(raw.Variables) == 3 {
 		now := time.Now()
 		key := fmt.Sprintf("%d", d.ID)
 		m.mu.Lock()
@@ -529,6 +580,24 @@ func (m *Manager) collectMemory(params *gosnmp.GoSNMP, d Device, snap *DeviceSna
 				usedKB = totalKB - availKB
 			}
 			snap.MemUsed = math.Round(float64(usedKB)/float64(totalKB)*1000) / 10
+			log.Printf("[snmp] device=%s MEM via UCD: total=%d avail=%d cached=%d buf=%d -> %.1f%%", d.Name, totalKB, availKB, cachedKB, bufKB, snap.MemUsed)
+			return
+		}
+	}
+
+	// 6. HOST-RESOURCES hrMemorySize/hrStorageAvail 直读 (KB) — Linux snmpd 常见
+	if totalR, err := params.Get([]string{oidHrMemSize}); err == nil && len(totalR.Variables) > 0 {
+		totalKB := toUint64(totalR.Variables[0].Value)
+		if totalKB > 0 {
+			availKB := uint64(0)
+			if availR, err := params.Get([]string{oidHrMemAvail}); err == nil && len(availR.Variables) > 0 {
+				availKB = toUint64(availR.Variables[0].Value)
+			}
+			if availKB > 0 && availKB <= totalKB {
+				usedKB := totalKB - availKB
+				snap.MemUsed = math.Round(float64(usedKB)/float64(totalKB)*1000) / 10
+				log.Printf("[snmp] device=%s MEM via hrMemory: total=%d avail=%d -> %.1f%%", d.Name, totalKB, availKB, snap.MemUsed)
+			}
 		}
 	}
 }
@@ -762,6 +831,25 @@ func toUint32(v any) uint32 {
 		return uint32(n)
 	default:
 		return 0
+	}
+}
+
+func toInt32(v any) int32 {
+	switch n := v.(type) {
+	case int:
+		return int32(n)
+	case int32:
+		return n
+	case int64:
+		return int32(n)
+	case uint32:
+		return int32(n)
+	case uint64:
+		return int32(n)
+	case float64:
+		return int32(n)
+	default:
+		return -1
 	}
 }
 

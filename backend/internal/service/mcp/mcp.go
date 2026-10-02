@@ -47,9 +47,36 @@ func (s *Server) ToolNames() []string {
 	return names
 }
 
-// HandleHTTP 处理 /mcp 端点请求（POST JSON-RPC 风格）
+// HandleHTTP 处理 /mcp 端点请求（Streamable HTTP + SSE + 兼容旧协议）
 func (s *Server) HandleHTTP(w http.ResponseWriter, r *http.Request) {
+	// Streamable HTTP: GET /mcp 或 /mcp/sse -> SSE
+	if (r.URL.Path == "/mcp" || r.URL.Path == "/mcp/sse") && r.Method == http.MethodGet {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		flusher, ok := w.(http.Flusher)
+		if !ok { http.Error(w, "SSE not supported", 500); return }
+		fmt.Fprintf(w, "event: endpoint\ndata: /mcp?session=%d\n\n", time.Now().UnixNano())
+		flusher.Flush()
+		<-r.Context().Done()
+		return
+	}
+	// Streamable HTTP: POST /mcp 或 /mcp/message -> JSON-RPC
+	if (r.URL.Path == "/mcp" || r.URL.Path == "/mcp/message") && r.Method == http.MethodPost {
+		s.handleRPC(w, r)
+		return
+	}
+	// CORS preflight
+	if r.Method == http.MethodOptions {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Mcp-Session-Id, Authorization")
+		w.WriteHeader(204)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	switch {
 	case r.URL.Path == "/mcp/tools":
 		list := make([]Tool, 0, len(s.tools))
@@ -85,6 +112,51 @@ func (s *Server) HandleHTTP(w http.ResponseWriter, r *http.Request) {
 			"server": r.Host, "tools_endpoint": "/mcp/tools", "call_endpoint": "/mcp/call",
 			"description": "NetOps 网络运维平台能力接口（链路状态/设备监控/巡检报告/IPAM）",
 		})
+	}
+}
+
+// handleRPC MCP JSON-RPC over HTTP
+func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	var req struct {
+		JSONRPC string `json:"jsonrpc"`
+		ID      any    `json:"id"`
+		Method  string `json:"method"`
+		Params  struct {
+			Name      string         `json:"name"`
+			Arguments map[string]any `json:"arguments"`
+		} `json:"params"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "error": map[string]any{"code": -32700, "message": "parse error"}})
+		return
+	}
+	switch req.Method {
+	case "initialize":
+		json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": req.ID, "result": map[string]any{
+			"protocolVersion": "2024-11-05",
+			"capabilities":     map[string]any{"tools": map[string]any{}},
+			"serverInfo":       map[string]any{"name": "NetOps-MCP", "version": "1.0.0"},
+		}})
+	case "tools/list":
+		list := make([]Tool, 0, len(s.tools))
+		for _, t := range s.tools { list = append(list, t) }
+		json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": req.ID, "result": map[string]any{"tools": list}})
+	case "tools/call":
+		h, ok := s.handlers[req.Params.Name]
+		if !ok {
+			json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": req.ID, "error": map[string]any{"code": -32601, "message": "tool not found"}})
+			return
+		}
+		res, err := h(req.Params.Arguments)
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": req.ID, "result": map[string]any{"content": []map[string]any{{"type": "text", "text": err.Error()}}, "isError": true}})
+			return
+		}
+		b, _ := json.Marshal(res)
+		json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": req.ID, "result": map[string]any{"content": []map[string]any{{"type": "text", "text": string(b)}}}})
+	default:
+		json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": req.ID, "result": map[string]any{}})
 	}
 }
 

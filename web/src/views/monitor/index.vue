@@ -85,6 +85,15 @@ async function loadDevices() {
         interfaces: [], disks: [], ts: new Date().toISOString()
       }
     }
+    // 拉一次实时快照，把 CPU/MEM/磁盘/接口/uptime 补全（否则刷新后只剩数据库里的静态字段）
+    try {
+      const snapList = await getEnc<any[]>('/monitor/snapshots')
+      for (const s of snapList) {
+        if (snaps.value[s.device_id]) {
+          snaps.value[s.device_id] = s
+        }
+      }
+    } catch {}
   } finally {
     loading.value = false
   }
@@ -217,7 +226,7 @@ onBeforeUnmount(() => {
             <span class="np-disk-size">{{ (disk.used/1024/1024/1024).toFixed(1) }}G / {{ (disk.total/1024/1024/1024).toFixed(1) }}G</span>
           </div>
         </div>
-        <div class="np-dev-ifs">
+        <div v-if="d.type !== 'server' && (snaps[d.id]?.interfaces || []).length" class="np-dev-ifs">
           <div v-for="ifs in (snaps[d.id]?.interfaces || []).slice(0, 5)" :key="ifs.index" class="np-if-row">
             <span class="np-if-name">{{ ifs.name }}</span>
             <span class="np-if-val">↓ {{ fmtBps(ifs.in_bps) }}</span>

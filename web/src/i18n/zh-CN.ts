@@ -98,6 +98,7 @@ export default {
     color: '显示颜色',
     port: '端口',
     realtime: '实时监控',
+    realtimeDesc: '实时延迟与丢包率',
     history: '历史数据',
     current: '实时状态',
     rtt: '往返时延(ms)',

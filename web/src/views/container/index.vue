@@ -59,7 +59,7 @@ function hostName(addr: string): string {
   return h ? h.name : addr
 }
 let _timer: any = null
-onMounted(() => { load(); _timer = setInterval(load, 10000) })
+onMounted(() => { load(); _timer = setInterval(load, 5000) })
 onBeforeUnmount(() => { if (_timer) clearInterval(_timer) })
 </script>
 

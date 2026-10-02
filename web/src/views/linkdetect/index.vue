@@ -52,6 +52,9 @@ async function loadTasks() {
       }
     }
     statuses.value = st
+    for (const tt of list) {
+      if (tt.last_ts) pushPoint(tt.id, tt.status ? (tt.rt || 0) : null)
+    }
   } finally { loading.value = false }
 }
 
@@ -225,8 +228,8 @@ onMounted(async () => {
 
   window.addEventListener('resize', onResize)
 
-  // 每5秒轮询状态（WebSocket断连兜底，新任务状态自动更新）
-  pollTimer = setInterval(async () => { await loadTasks(); renderRealtime() }, 5000)
+  // 每3秒轮询状态
+  pollTimer = setInterval(async () => { await loadTasks(); renderRealtime() }, 3000)
 })
 
 onBeforeUnmount(() => {

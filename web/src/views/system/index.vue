@@ -1,6 +1,6 @@
 ﻿<script setup lang="ts">
 // 系统管理：用户管理 / AI 接入（云端+本地Ollama，多AI调度）/ MCP 配置 / 邮箱 / 审计日志
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { getEnc, postEnc, putEnc, delEnc } from '@/utils/request'
@@ -147,6 +147,9 @@ async function testAI(a: AIConfig) {
 interface MCPAgent {
   id: number
   name: string
+  transport: string
+  command: string
+  args: string
   server_url: string
   endpoint: string
   auth_type: string
@@ -158,9 +161,29 @@ const mcpAgents = ref<MCPAgent[]>([])
 const mcpInfo = ref<{ server: string; tools_endpoint: string; call_endpoint: string; tools: string[] } | null>(null)
 const mcpDialog = ref(false)
 const mcpForm = reactive<MCPAgent>({
-  id: 0, name: '', server_url: '', endpoint: '/api', auth_type: 'none', auth_token: '', enable: true, remark: ''
+  id: 0, name: '', transport: 'stdio', command: 'npx', args: '-y @modelcontextprotocol/server-everything', server_url: '', endpoint: '/api', auth_type: 'none', auth_token: '', enable: true, remark: ''
 })
 const mcpOut = ref('')
+const yamlPreview = computed(() => {
+  const id = mcpForm.remark || 'mcp-' + (mcpForm.name || 'server')
+  if (mcpForm.transport === 'stdio') {
+    return `- insert:
+    - id: ${id}
+      name: '${mcpForm.name || 'mcp-server'}'
+      config:
+        serverName: ${id}
+        transport: stdio
+        command: "${mcpForm.command || 'npx'}"
+        args: "${mcpForm.args || ''}"`
+  }
+  return `- insert:
+    - id: ${id}
+      name: '${mcpForm.name || 'mcp-server'}'
+      config:
+        serverName: ${id}
+        transport: sse
+        url: "${mcpForm.server_url || 'http://127.0.0.1:30821/mcp/sse'}"`
+})
 
 async function loadMCP() {
   mcpAgents.value = await getEnc<MCPAgent[]>('/system/mcp/agents')
@@ -334,6 +357,21 @@ const applying = ref(false)
 
 async function loadVersion() {
   try { ver.value = await getEnc('/update/version') } catch {}
+}
+const checking = ref(false), upgrading = ref(false), latest = ref<any>(null)
+async function checkUpdate() {
+  checking.value = true
+  try { latest.value = await getEnc('/update/check') } catch(e:any){ ElMessage.error(e.message||'检查失败') }
+  finally { checking.value = false }
+}
+async function doOnline() {
+  upgrading.value = true
+  try {
+    await postEnc('/update/online', { url: latest.value.download_url })
+    ElMessage.success('正在升级，请稍候刷新')
+    setTimeout(()=>location.reload(), 8000)
+  } catch(e:any){ ElMessage.error(e.message||'升级失败') }
+  finally { upgrading.value = false }
 }
 
 async function doUpload(opt: any) {
@@ -583,6 +621,15 @@ onMounted(() => {
             </el-descriptions>
           </div>
           <el-divider></el-divider>
+          <h3 style="margin:0 0 12px">在线升级（GitHub / Gitee）</h3>
+          <el-button :loading="checking" @click="checkUpdate">检查更新</el-button>
+          <div v-if="latest" style="margin-top:12px;padding:12px;background:#f0f9ff;border-radius:6px">
+            <div>最新版本: <b>{{ latest.latest }}</b>（当前 {{ latest.current }}）</div>
+            <div style="white-space:pre-wrap;color:#555;margin-top:6px">{{ latest.notes }}</div>
+            <el-button v-if="latest.has_update" type="primary" style="margin-top:10px" :loading="upgrading" @click="doOnline">立即升级</el-button>
+            <el-alert v-else type="success" :closable="false" title="已是最新版本" style="margin-top:10px" />
+          </div>
+          <el-divider></el-divider>
           <h3 style="margin:0 0 12px">上传更新包</h3>
           <el-upload
             :http-request="doUpload"
@@ -676,26 +723,44 @@ onMounted(() => {
     </el-dialog>
 
     <!-- MCP 对话框 -->
-    <el-dialog v-model="mcpDialog" :title="mcpForm.id ? t('common.edit') : t('system.addMCP')" width="520px">
+    <el-dialog v-model="mcpDialog" :title="mcpForm.id ? t('common.edit') : t('system.addMCP')" width="560px">
       <el-form :model="mcpForm" label-width="110px">
-        <el-form-item label="名称" required>
-          <el-input v-model="mcpForm.name" />
+        <el-form-item label="ID">
+          <el-input v-model="mcpForm.remark" placeholder="自动生成" />
         </el-form-item>
-        <el-form-item label="服务器地址" required>
-          <el-input v-model="mcpForm.server_url" placeholder="https://agent.example.com" />
+        <el-form-item label="名称">
+          <el-input v-model="mcpForm.name" placeholder="自动生成" />
         </el-form-item>
-        <el-form-item label="接口">
-          <el-input v-model="mcpForm.endpoint" />
-        </el-form-item>
-        <el-form-item label="认证方式">
-          <el-select v-model="mcpForm.auth_type">
-            <el-option label="无" value="none" />
-            <el-option label="Bearer" value="bearer" />
-            <el-option label="Basic" value="basic" />
+        <el-form-item label="传输方式">
+          <el-select v-model="mcpForm.transport">
+            <el-option label="stdio" value="stdio" />
+            <el-option label="SSE / HTTP" value="sse" />
           </el-select>
         </el-form-item>
-        <el-form-item label="认证令牌">
-          <el-input v-model="mcpForm.auth_token" type="password" show-password />
+        <template v-if="mcpForm.transport === 'stdio'">
+          <el-form-item label="启动命令">
+            <el-input v-model="mcpForm.command" placeholder="npx" />
+          </el-form-item>
+          <el-form-item label="参数">
+            <el-input v-model="mcpForm.args" placeholder="-y @modelcontextprotocol/server-everything" />
+          </el-form-item>
+        </template>
+        <template v-else>
+          <el-form-item label="服务器地址" required>
+            <el-input v-model="mcpForm.server_url" placeholder="http://127.0.0.1:30821/mcp/sse" />
+          </el-form-item>
+          <el-form-item label="认证方式">
+            <el-select v-model="mcpForm.auth_type">
+              <el-option label="无" value="none" />
+              <el-option label="Bearer" value="bearer" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="认证令牌">
+            <el-input v-model="mcpForm.auth_token" type="password" show-password />
+          </el-form-item>
+        </template>
+        <el-form-item label="配置预览">
+          <pre style="background:#f5f7fa;padding:8px;border-radius:4px;font-size:12px;white-space:pre-wrap;word-break:break-all">{{ yamlPreview }}</pre>
         </el-form-item>
         <el-form-item :label="t('common.enabled')">
           <el-switch v-model="mcpForm.enable" />

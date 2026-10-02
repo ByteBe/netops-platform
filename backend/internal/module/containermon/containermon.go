@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"netops/internal/collector/docker"
+	"netops/internal/common/logger"
 	"netops/internal/common/response"
 	"netops/internal/core"
 	"netops/internal/model"
@@ -173,7 +174,7 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 	})
 	g.GET("/config", func(c *gin.Context) {
 		response.OK(c, gin.H{
-			"docker_enable": get(a, "docker_enable") == "true",
+			"docker_enable": get(a, "docker_enable") != "false",
 			"docker_interval": atoi(get(a, "docker_interval"), 30),
 			"k8s_enable": get(a, "k8s_enable") == "true",
 			"k8s_api_server": get(a, "k8s_api_server"),
@@ -211,7 +212,17 @@ func k8sClustersJSON(a *core.App) string {
 }
 
 func applyHosts(a *core.App) {
-	enable := get(a, "docker_enable") == "true"
+	enable := get(a, "docker_enable") != "false"
+	// 如果已经配置了 Docker 主机，但开关没显式关闭，就自动启用
+	if !enable {
+		var cnt int64
+		a.DB.Model(&model.DockerHost{}).Where("enabled = ?", true).Count(&cnt)
+		if cnt > 0 {
+			enable = true
+			set(a, "docker_enable", "true")
+			logger.Infof("[containermon] auto-enable docker monitor because %d host(s) configured", cnt)
+		}
+	}
 	interval := atoi(get(a, "docker_interval"), 30)
 	a.DockerM.SetConfig(enable, interval, hostsJSON(a))
 	kenable := get(a, "k8s_enable") == "true"
@@ -221,15 +232,16 @@ func applyHosts(a *core.App) {
 
 func set(a *core.App, k, v string) {
 	var s model.SystemSetting
-	if err := a.DB.Where("key = ?", k).First(&s).Error; err != nil {
+	if err := a.DB.Where("`key` = ?", k).First(&s).Error; err != nil {
 		a.DB.Create(&model.SystemSetting{Key: k, Value: v})
 	} else {
-		a.DB.Model(&s).Update("value", v)
+		a.DB.Model(&s).Update("`value`", v)
 	}
+	logger.Infof("[containermon] set %s=%s", k, v)
 }
 func get(a *core.App, k string) string {
 	var s model.SystemSetting
-	if err := a.DB.Where("key = ?", k).First(&s).Error; err != nil { return "" }
+	if err := a.DB.Where("`key` = ?", k).First(&s).Error; err != nil { return "" }
 	return s.Value
 }
 func boolStr(b bool) string { if b { return "true" }; return "false" }

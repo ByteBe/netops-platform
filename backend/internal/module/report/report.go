@@ -47,7 +47,7 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		}
 		title := req.Title
 		if title == "" {
-			title = fmt.Sprintf("网络巡检报告 %s 至 %s", start.Format("2006-01-02 15:04"), end.Format("2006-01-02 15:04"))
+			title = fmt.Sprintf("运维巡检报告 %s 至 %s", start.Format("2006-01-02 15:04"), end.Format("2006-01-02 15:04"))
 		}
 		include := map[string]bool{}
 		for _, s := range req.Include {
@@ -57,7 +57,7 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			include = map[string]bool{"link": true, "monitor": true, "db": true}
 		}
 
-		var linkSection, devSection, dbSection string
+		var linkSection, devSection, dbSection, containerSection string
 		stats := map[string]int{"total": 0, "up": 0, "down": 0, "warn": 0}
 		if include["link"] {
 			linkSection = renderLinkSection(a, start, end, stats)
@@ -68,8 +68,11 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		if include["db"] {
 			dbSection = renderDBSection(a, stats)
 		}
+		if include["container"] {
+			containerSection = renderContainerSection(a, stats)
+		}
 
-		content := renderHTML(title, start, end, linkSection, devSection, dbSection, stats)
+		content := renderHTML(title, start, end, linkSection, devSection, dbSection, containerSection, stats)
 
 		username, _ := c.Get(middleware.KeyUsername)
 		rec := model.ReportRecord{
@@ -281,6 +284,67 @@ func renderDBSection(a *core.App, stats map[string]int) string {
 	return sb.String()
 }
 
+func renderContainerSection(a *core.App, stats map[string]int) string {
+	var hosts []model.DockerHost
+	a.DB.Order("id asc").Find(&hosts)
+	var clusters []model.K8sCluster
+	a.DB.Order("id asc").Find(&clusters)
+
+	var sb strings.Builder
+	sb.WriteString(`<div class="section"><h3>🐳 容器与 Kubernetes 汇总</h3><table><thead><tr><th>节点</th><th>IP/地址</th><th>类型</th><th>状态</th><th>容器/Pod 数</th><th>异常数</th></tr></thead><tbody>`)
+
+	if len(hosts) == 0 && len(clusters) == 0 {
+		sb.WriteString("<tr><td colspan='6' style='text-align:center;color:#999'>暂无 Docker/K8s 节点监控</td></tr>")
+	}
+
+	dockerStatus := a.DockerM.HostStatus()
+	containers := a.DockerM.Snapshot()
+	// 统计每个 host 上的容器数和异常数
+	containerCount := map[string]int{}
+	abnormalCount := map[string]int{}
+	for _, c := range containers {
+		containerCount[c.Host]++
+		if c.State != "running" {
+			abnormalCount[c.Host]++
+		}
+	}
+
+	for _, h := range hosts {
+		stats["total"]++
+		online := false
+		if v, ok := dockerStatus[h.Address]; ok { online = v }
+		status, color := "离线", "#f5222d"
+		if online {
+			status, color = "在线", "#52c41a"
+			stats["up"]++
+		} else {
+			stats["down"]++
+		}
+		addr := strings.TrimPrefix(h.Address, "tcp://")
+		sb.WriteString(fmt.Sprintf("<tr><td><b>%s</b></td><td>%s</td><td>docker</td><td>%s</td><td>%d</td><td>%d</td></tr>",
+			h.Name, addr, badge(status, color), containerCount[h.Address], abnormalCount[h.Address]))
+	}
+
+	k8sStatus := a.K8sM.ClusterStatus()
+	for _, k := range clusters {
+		stats["total"]++
+		online := false
+		if v, ok := k8sStatus[k.Name]; ok { online = v }
+		status, color := "离线", "#f5222d"
+		if online {
+			status, color = "在线", "#52c41a"
+			stats["up"]++
+		} else {
+			stats["down"]++
+		}
+		sb.WriteString(fmt.Sprintf("<tr><td><b>%s</b></td><td>%s</td><td>k8s</td><td>%s</td><td>-</td><td>0</td></tr>",
+			k.Name, k.APIServer, badge(status, color)))
+	}
+
+	sb.WriteString("</tbody></table></div>")
+	return sb.String()
+}
+
 func avgOf(series []tsdb.Series) float64 {
 	if len(series) == 0 {
 		return 0
@@ -326,16 +390,16 @@ tbody tr:hover{background:#f8faff}
 <div class="card"><div class="num" style="color:#f5222d">{{.Down}}</div><div class="lbl">异常/离线</div></div>
 <div class="card"><div class="num" style="color:#faad14">{{.Warn}}</div><div class="lbl">告警</div></div>
 </div>
-{{.LinkSection}}{{.DevSection}}{{.DBSection}}
+{{.LinkSection}}{{.DevSection}}{{.DBSection}}{{.ContainerSection}}
 <div class="footer">本报告由 NetOps 网络运维监控平台自动生成</div>
 </div></body></html>`))
 
-func renderHTML(title string, start, end time.Time, linkS, devS, dbS string, stats map[string]int) string {
+func renderHTML(title string, start, end time.Time, linkS, devS, dbS, containerS string, stats map[string]int) string {
 	var sb strings.Builder
 	reportTpl.Execute(&sb, map[string]any{
 		"Title": title, "Start": start.Format("2006-01-02 15:04"), "End": end.Format("2006-01-02 15:04"),
-		"Now":         time.Now().Format("2006-01-02 15:04:05"),
-		"LinkSection": template.HTML(linkS), "DevSection": template.HTML(devS), "DBSection": template.HTML(dbS),
+		"Now":           time.Now().Format("2006-01-02 15:04:05"),
+		"LinkSection":   template.HTML(linkS), "DevSection": template.HTML(devS), "DBSection": template.HTML(dbS), "ContainerSection": template.HTML(containerS),
 		"Total": stats["total"], "Up": stats["up"], "Down": stats["down"], "Warn": stats["warn"],
 	})
 	return sb.String()

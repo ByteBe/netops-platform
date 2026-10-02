@@ -5,6 +5,8 @@ package dbprobe
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
 	"netops/internal/common/logger"
 	"database/sql"
 	"fmt"
@@ -174,9 +176,47 @@ func (m *Manager) collect(d Instance) {
 	m.hub.Publish("dbmonitor", "db_snapshot", snap)
 }
 
+func (m *Manager) probeTDengine(d Instance, snap Snapshot) Snapshot {
+	dbn := d.DBName
+	if dbn == "" {
+		dbn = "data"
+	}
+	url := fmt.Sprintf("http://%s:%d/rest/sql/%s", d.Host, d.Port, dbn)
+	req, _ := http.NewRequest("POST", url, strings.NewReader("SELECT SERVER_STATUS()"))
+	req.SetBasicAuth(d.User, d.Password)
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		snap.Message = "连接失败: " + err.Error()
+		return snap
+	}
+	defer resp.Body.Close()
+	var body struct {
+		Code int             `json:"code"`
+		Desc string          `json:"desc"`
+		Data [][]interface{} `json:"data"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&body)
+	if body.Code != 0 {
+		snap.Message = fmt.Sprintf("连接失败: %s", body.Desc)
+		return snap
+	}
+	snap.Up = true
+	snap.Status = "up"
+	if len(body.Data) > 0 && len(body.Data[0]) > 0 {
+		snap.Version = fmt.Sprint(body.Data[0][0])
+	}
+	snap.Conns = 1
+	snap.TableCount = 1
+	return snap
+}
+
 // probe 单实例采集
 func (m *Manager) probe(d Instance) Snapshot {
 	snap := Snapshot{InstanceID: d.ID, Name: d.Name, Type: d.Type, TS: time.Now()}
+	if strings.ToLower(d.Type) == "tdengine" {
+		return m.probeTDengine(d, snap)
+	}
 	dsn := buildDSN(d)
 	logger.Infof("[dbprobe] id=%d type=%s host=%s dbname=%q dsn=%s", d.ID, d.Type, d.Host, d.DBName, dsn)
 	if dsn == "" {
@@ -193,7 +233,7 @@ func (m *Manager) probe(d Instance) Snapshot {
 	db.SetMaxOpenConns(2)
 	db.SetConnMaxLifetime(30 * time.Second)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
 	if err := db.PingContext(ctx); err != nil {
@@ -291,15 +331,15 @@ func buildDSN(d Instance) string {
 	case "tdengine":
 		dbn := d.DBName
 		if dbn == "" {
-			dbn = "log"
+			dbn = "data"
 		}
-		return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?timeout=5s", d.User, d.Password, d.Host, d.Port, dbn)
+		return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?timeout=20s&readTimeout=20s&writeTimeout=20s", d.User, d.Password, d.Host, d.Port, dbn)
 	default: // mysql
 		dbn := d.DBName
 		if dbn == "" {
 			dbn = "mysql"
 		}
-		return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?timeout=5s", d.User, d.Password, d.Host, d.Port, dbn)
+		return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?timeout=20s&readTimeout=20s&writeTimeout=20s", d.User, d.Password, d.Host, d.Port, dbn)
 	}
 }
 

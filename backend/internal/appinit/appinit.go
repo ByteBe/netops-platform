@@ -194,8 +194,15 @@ func SyncManagers(a *core.App) {
 		if h.Address != "" { dockerAddrs = append(dockerAddrs, h.Address) }
 	}
 	dockerHostsJSON, _ := json.Marshal(dockerAddrs)
-	fmt.Printf("[docker] enable=%v interval=%d hosts=%s\n", SettingBool(a.DB, "docker_enable"), SettingInt(a.DB, "docker_interval", 30), string(dockerHostsJSON))
-	a.DockerM.SetConfig(SettingBool(a.DB, "docker_enable"), SettingInt(a.DB, "docker_interval", 30), string(dockerHostsJSON))
+	dockerEnable := SettingBool(a.DB, "docker_enable")
+	// 如果已经配置了 Docker 主机，自动启用（避免用户每次重启都要去点保存）
+	if !dockerEnable && len(dockerAddrs) > 0 {
+		dockerEnable = true
+		a.DB.Where("`key` = ?", "docker_enable").Assign(model.SystemSetting{Value: "true"}).FirstOrCreate(&model.SystemSetting{Key: "docker_enable"})
+		fmt.Printf("[docker] auto-enable because %d host(s) configured\n", len(dockerAddrs))
+	}
+	fmt.Printf("[docker] enable=%v interval=%d hosts=%s\n", dockerEnable, SettingInt(a.DB, "docker_interval", 30), string(dockerHostsJSON))
+	a.DockerM.SetConfig(dockerEnable, SettingInt(a.DB, "docker_interval", 30), string(dockerHostsJSON))
 	// K8s多集群配置
 	var k8sClusters []model.K8sCluster
 	a.DB.Where("enabled = ?", true).Find(&k8sClusters)

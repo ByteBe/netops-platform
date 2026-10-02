@@ -20,7 +20,7 @@ const groups: { title: string; items: string[] }[] = [
   { title: '资源与资产', items: ['resource', 'ipam', 'subnet'] },
   { title: '基础设施', items: ['container', 'k8s', 'dbmonitor'] },
   { title: '工具与报告', items: ['report', 'scriptgen'] },
-  { title: '系统', items: ['system'] }
+  { title: '系统', items: ['system', 'dbmigrate'] }
 ]
 const menus = computed(() => {
   return groups.map(g => ({

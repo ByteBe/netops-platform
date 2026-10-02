@@ -22,7 +22,8 @@ const overrides: Record<string, NavMeta> = {
   scriptgen: { title: '脚本生成', icon: 'MagicStick' },
   ipam: { title: 'IP地址管理', icon: 'MapLocation' },
   subnet: { title: '子网计算', icon: 'Grid' },
-  system: { title: '系统管理', icon: 'Setting' }
+  system: { title: '系统管理', icon: 'Setting' },
+  dbmigrate: { title: '数据库迁移', icon: 'Coin' }
 }
 
 // 自动扫描 views 目录，收集所有模块名

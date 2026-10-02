@@ -22,7 +22,7 @@ const loading = ref(false)
 const genDialog = ref(false)
 const genLoading = ref(false)
 const genForm = reactive({
-  title: '网络巡检报告',
+  title: '运维巡检报告',
   send_email: false,
   email_to: '',
   include: ['link', 'monitor', 'db'] as string[]
@@ -132,6 +132,7 @@ onMounted(load)
             <el-checkbox value="link">{{ t('report.linkStatus') }}</el-checkbox>
             <el-checkbox value="monitor">{{ t('report.serverUsage') }}</el-checkbox>
             <el-checkbox value="db">数据库状态</el-checkbox>
+            <el-checkbox value="container">容器/K8s</el-checkbox>
           </el-checkbox-group>
         </el-form-item>
         <el-form-item :label="t('report.sendMail')">

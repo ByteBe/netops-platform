@@ -19,6 +19,7 @@ import (
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 
+	"netops/internal/common/logger"
 	"netops/internal/notify"
 	"netops/internal/tsdb"
 )
@@ -323,12 +324,14 @@ func (m *Manager) doProbe(t *Task, probe Probe, timeout time.Duration) {
 
 	// 写入时序库
 	rows := []tsdb.Row{
-		{Metric: "link_rt", Field: "value", Tags: map[string]string{"task_id": fmt.Sprint(t.ID), "name": t.Name}, Value: rt, TS: now},
-		{Metric: "link_loss", Field: "value", Tags: map[string]string{"task_id": fmt.Sprint(t.ID), "name": t.Name}, Value: loss, TS: now},
-		{Metric: "link_status", Field: "value", Tags: map[string]string{"task_id": fmt.Sprint(t.ID), "name": t.Name}, Value: boolToF(newStatus == "up"), TS: now},
+		{Metric: "link_rt", Field: "value", Tags: map[string]string{"task_id": fmt.Sprint(t.ID)}, Value: rt, TS: now},
+		{Metric: "link_loss", Field: "value", Tags: map[string]string{"task_id": fmt.Sprint(t.ID)}, Value: loss, TS: now},
+		{Metric: "link_status", Field: "value", Tags: map[string]string{"task_id": fmt.Sprint(t.ID)}, Value: boolToF(newStatus == "up"), TS: now},
 	}
 	if m.ts != nil {
-		_ = m.ts.Write(rows)
+		if err := m.ts.Write(rows); err != nil {
+			logger.Warnf("[ping] tsdb write error: %v", err)
+		}
 	}
 
 	// 实时推送（含状态变化事件）

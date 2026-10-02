@@ -4,12 +4,14 @@ package docker
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"os/exec"
 	"strings"
 	"sync"
 	"time"
 
+	"netops/internal/common/logger"
 	"netops/internal/notify"
 	"netops/internal/tsdb"
 )
@@ -32,6 +34,7 @@ type Monitor struct {
 	hosts      []string
 	containers map[string]Container
 	hostStatus map[string]bool
+	lastStats  map[string]cpuStats
 	ts         tsdb.Engine
 	hub        *notify.Hub
 	stop       chan struct{}
@@ -39,7 +42,7 @@ type Monitor struct {
 }
 
 func NewMonitor(ts tsdb.Engine, hub *notify.Hub) *Monitor {
-	return &Monitor{containers: map[string]Container{}, hostStatus: map[string]bool{}, ts: ts, hub: hub, interval: 30, stop: make(chan struct{})}
+	return &Monitor{containers: map[string]Container{}, hostStatus: map[string]bool{}, lastStats: map[string]cpuStats{}, ts: ts, hub: hub, interval: 30, stop: make(chan struct{})}
 }
 
 func (m *Monitor) SetConfig(enable bool, interval int, hosts string) {
@@ -63,7 +66,9 @@ func (m *Monitor) SetConfig(enable bool, interval int, hosts string) {
 			}
 		}
 	}
+	hostsSnap := append([]string{}, m.hosts...)
 	m.mu.Unlock()
+	logger.Infof("[docker] SetConfig enable=%v interval=%d hosts=%v start=%v stop=%v", enable, interval, hostsSnap, start, stop)
 	if start { m.wg.Add(1); go m.loop() }
 	if stop { close(m.stop); m.stop = make(chan struct{}) }
 }
@@ -100,8 +105,14 @@ func hostName(host string) string {
 func (m *Monitor) Collect() {
 	m.mu.RLock()
 	hosts := m.hosts
+	enable := m.enable
 	m.mu.RUnlock()
+	if !enable {
+		logger.Warnf("[docker] Collect called but monitor disabled")
+		return
+	}
 	if len(hosts) == 0 { hosts = []string{""} }
+	logger.Infof("[docker] Collect hosts=%v", hosts)
 
 	allContainers := []Container{}
 	for _, host := range hosts {
@@ -110,11 +121,13 @@ func (m *Monitor) Collect() {
 		if err != nil {
 			m.hostStatus[hostName(host)] = false
 			m.mu.Unlock()
+			logger.Warnf("[docker] host=%s listContainers error: %v", host, err)
 			m.hub.Publish("containermon", "docker_error", map[string]any{"error": err.Error(), "host": host})
 			continue
 		}
 		m.hostStatus[hostName(host)] = true
 		m.mu.Unlock()
+		logger.Infof("[docker] host=%s online, containers=%d", host, len(list))
 		for i := range list {
 			list[i].Host = hostName(host)
 			allContainers = append(allContainers, list[i])
@@ -171,10 +184,84 @@ func (m *Monitor) listContainers(host string) ([]Container, error) {
 		name := ""
 		if len(r.Names) > 0 { name = strings.TrimPrefix(r.Names[0], "/") }
 		cid := r.ID
-		if len(cid) > 12 { cid = cid[:12] }
-		list = append(list, Container{ID: cid, Names: name, Image: r.Image, State: r.State, Status: r.Status, Host: hostName(host)})
+		short := cid
+		if len(short) > 12 { short = short[:12] }
+		c := Container{ID: short, Names: name, Image: r.Image, State: r.State, Status: r.Status, Host: hostName(host)}
+		if r.State == "running" {
+			if cpu, mem, err := m.containerStats(client, host, cid); err == nil {
+				c.CPU = cpu
+				c.MemPct = mem
+			}
+		}
+		list = append(list, c)
 	}
 	return list, nil
+}
+
+// containerStats 拉取单次（非流式）容器统计
+func (m *Monitor) containerStats(client *http.Client, host, cid string) (cpuPct, memPct float64, err error) {
+	u := dockerURL(host, "/containers/"+cid+"/stats?stream=false")
+	resp, err := client.Get(u)
+	if err != nil { return 0, 0, err }
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 { return 0, 0, fmt.Errorf("HTTP %d", resp.StatusCode) }
+	var st struct {
+		CPUStats struct {
+			CPUUsage struct {
+				TotalUsage uint64 `json:"total_usage"`
+			} `json:"cpu_usage"`
+			SystemCPUUsage uint64 `json:"system_cpu_usage"`
+			OnlineCpus     uint   `json:"online_cpus"`
+		} `json:"cpu_stats"`
+		PrecpuStats struct {
+			CPUUsage struct {
+				TotalUsage uint64 `json:"total_usage"`
+			} `json:"cpu_usage"`
+			SystemCPUUsage uint64 `json:"system_cpu_usage"`
+		} `json:"precpu_stats"`
+		MemoryStats struct {
+			Usage uint64 `json:"usage"`
+			Limit uint64 `json:"limit"`
+		} `json:"memory_stats"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&st); err != nil { return 0, 0, err }
+	// CPU%: 单次 stats 接口返回的 precpu 与 cpu 是同一瞬间，差值为 0；
+	// 这里直接按 (total/system)*online_cpus*100 的近似（Docker 官方推荐公式需要两次采样）。
+	// 因为每次 Collect 间隔固定，我们用差值缓存算。
+	key := host + "/" + cid
+	m.mu.Lock()
+	prev, hasPrev := m.lastStats[key]
+	m.lastStats[key] = cpuStats{
+		cpuTotal:  st.CPUStats.CPUUsage.TotalUsage,
+		sysCPU:    st.CPUStats.SystemCPUUsage,
+		online:    st.CPUStats.OnlineCpus,
+		timestamp: time.Now(),
+	}
+	m.mu.Unlock()
+	if hasPrev {
+		dCPU := float64(st.CPUStats.CPUUsage.TotalUsage - prev.cpuTotal)
+		dSys := float64(st.CPUStats.SystemCPUUsage - prev.sysCPU)
+		n := float64(st.CPUStats.OnlineCpus)
+		if n <= 0 { n = float64(prev.online) }
+		if n <= 0 { n = 1 }
+		if dSys > 0 {
+			cpuPct = dCPU / dSys * n * 100.0
+		}
+	}
+	if st.MemoryStats.Limit > 0 {
+		memPct = float64(st.MemoryStats.Usage) / float64(st.MemoryStats.Limit) * 100.0
+	}
+	if cpuPct < 0 { cpuPct = 0 }
+	if cpuPct > 100 { cpuPct = math.Round(cpuPct*10) / 10 } else { cpuPct = math.Round(cpuPct*10) / 10 }
+	memPct = math.Round(memPct*10) / 10
+	return cpuPct, memPct, nil
+}
+
+type cpuStats struct {
+	cpuTotal uint64
+	sysCPU   uint64
+	online   uint
+	timestamp time.Time
 }
 
 func TestHost(host string) (string, error) {
