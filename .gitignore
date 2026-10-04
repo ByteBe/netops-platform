@@ -37,3 +37,11 @@ backend/netops-server-linux-amd64
 
 backend/netops-platform.exe
 backend/netops-platform-linux
+
+# build artifacts
+release/
+web/netops-server.exe
+backend/netops-server-linux
+backend/netops-server.exe
+backend/data/
+backend/logs/
