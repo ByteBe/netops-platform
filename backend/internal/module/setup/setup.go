@@ -124,9 +124,10 @@ func Register(a *core.App, g *gin.RouterGroup) {
 		}
 		doEnc(a, c, func(plain []byte) (any, error) {
 			var req struct {
-				Database config.Database `json:"database"`
-				TSDB     config.TSDB     `json:"tsdb"`
-				Admin    struct {
+				Database   config.Database `json:"database"`
+				TSDB       config.TSDB     `json:"tsdb"`
+				DeployMode string         `json:"deploy_mode"`
+				Admin      struct {
 					Username   string `json:"username"`
 					Password   string `json:"password"`
 					Email      string `json:"email"`
@@ -191,6 +192,12 @@ func Register(a *core.App, g *gin.RouterGroup) {
 				return nil, fmt.Errorf("创建管理员失败: %w", err)
 			}
 			a.DB.Model(&admin).Update("must_change_pwd", false)
+			// 保存部署模式：standalone / distributed
+			mode := req.DeployMode
+			if mode == "" {
+				mode = "standalone"
+			}
+			a.DB.Exec("INSERT INTO system_settings (key, value) VALUES ('deploy_mode', ?) ON DUPLICATE KEY UPDATE value = ?", mode, mode)
 			a.Ready = true
 			appinit.SyncManagers(a)
 			return gin.H{"ok": true, "message": "初始化完成，请使用管理员账号登录"}, nil

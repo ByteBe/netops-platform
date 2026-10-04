@@ -17,6 +17,7 @@ api.interceptors.request.use((config) => {
 })
 
 const step = ref(0)
+const deployMode = ref<'standalone' | 'distributed'>('standalone')
 const testing = ref(false)
 const submitting = ref(false)
 let sessionKey: SessionKey | null = null
@@ -90,7 +91,7 @@ async function submit() {
       sessionKey = generateSessionKey()
     }
     const key = sm2EncryptSessionKey(sm2PubKey, sessionKey)
-    const data = sm4Encrypt(sessionKey, JSON.stringify({ database: dbForm, tsdb: tsdbForm, admin: adminForm }))
+    const data = sm4Encrypt(sessionKey, JSON.stringify({ deploy_mode: deployMode.value, database: dbForm, tsdb: tsdbForm, admin: adminForm }))
     await api.post('/setup/init', { key, data })
     ElMessage.success('初始化完成，正在跳转到登录页...')
     setTimeout(() => { window.location.href = '/login' }, 1000)
@@ -130,11 +131,27 @@ onMounted(async () => {
         <p>系统初始化向导 - 选择存储数据库与时序数据库，创建管理员账号</p>
       </div>
       <el-steps :active="step" align-center>
+        <el-step title="部署模式" />
         <el-step title="存储数据库" />
         <el-step title="时序数据库" />
         <el-step title="管理员账号" />
       </el-steps>
       <div v-show="step === 0" class="np-step-panel">
+        <el-form label-width="120px" label-position="left">
+          <el-form-item label="部署模式" required>
+            <el-radio-group v-model="deployMode">
+              <el-radio value="standalone">单机部署</el-radio>
+              <el-radio value="distributed">分布式级联部署</el-radio>
+            </el-radio-group>
+          </el-form-item>
+          <el-alert v-if="deployMode==='standalone'" type="info" :closable="false" title="单机部署：所有数据在本机采集与存储，不与其他节点级联。" />
+          <el-alert v-else type="warning" :closable="false" title="分布式部署：本节点可作为总部或下级，通过 HTTP/MQTT 与上下级节点同步设备/容器数据。后续可在系统中切换。" />
+        </el-form>
+        <div class="np-step-actions">
+          <el-button type="primary" plain @click="step = 1">下一步</el-button>
+        </div>
+      </div>
+      <div v-show="step === 1" class="np-step-panel">
         <el-form label-width="120px" label-position="left">
           <el-form-item label="存储数据库" required>
             <el-select v-model="dbForm.type" style="width:100%">
@@ -152,10 +169,10 @@ onMounted(async () => {
         </el-form>
         <div class="np-step-actions">
           <el-button type="primary" :loading="testing" @click="testDb">测试连接</el-button>
-          <el-button type="primary" plain @click="step = 1">下一步</el-button>
+          <el-button type="primary" plain @click="step = 2">下一步</el-button>
         </div>
       </div>
-      <div v-show="step === 1" class="np-step-panel">
+      <div v-show="step === 2" class="np-step-panel">
         <el-form label-width="120px" label-position="left">
           <el-form-item label="时序数据库" required>
             <el-select v-model="tsdbForm.type" style="width:100%">
@@ -172,12 +189,12 @@ onMounted(async () => {
           </template>
         </el-form>
         <div class="np-step-actions">
-          <el-button @click="step = 0">上一步</el-button>
+          <el-button @click="step = 1">上一步</el-button>
           <el-button type="primary" :loading="testing" @click="testTsdb">测试连接</el-button>
-          <el-button type="primary" plain @click="step = 2">下一步</el-button>
+          <el-button type="primary" plain @click="step = 3">下一步</el-button>
         </div>
       </div>
-      <div v-show="step === 2" class="np-step-panel">
+      <div v-show="step === 3" class="np-step-panel">
         <el-form label-width="120px" label-position="left">
           <el-form-item label="管理员用户名" required><el-input v-model="adminForm.username" /></el-form-item>
           <el-form-item label="初始密码" required><el-input v-model="adminForm.password" type="password" show-password /></el-form-item>
@@ -185,7 +202,7 @@ onMounted(async () => {
           <el-form-item label="邮箱"><el-input v-model="adminForm.email" /></el-form-item>
         </el-form>
         <div class="np-step-actions">
-          <el-button @click="step = 1">上一步</el-button>
+          <el-button @click="step = 2">上一步</el-button>
           <el-button type="primary" :loading="submitting" @click="submit">完成初始化</el-button>
         </div>
       </div>

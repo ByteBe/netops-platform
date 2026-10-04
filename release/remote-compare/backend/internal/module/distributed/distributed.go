@@ -98,10 +98,6 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 	activeApp = a
 	// 本节点信息
 	g.GET("/self", func(c *gin.Context) {
-		mode := getSetting(a, "deploy_mode")
-		if mode == "" {
-			mode = "standalone"
-		}
 		response.OK(c, gin.H{
 			"node_uuid": SelfUUID(a),
 			"name":      getSetting(a, "self_node_name"),
@@ -110,7 +106,6 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			"mqtt_broker":   getSetting(a, "mqtt_broker"),
 			"mqtt_username": getSetting(a, "mqtt_username"),
 			"mqtt_password": getSetting(a, "mqtt_password"),
-			"deploy_mode":   mode,
 		})
 	})
 	// 下级节点列表
@@ -151,18 +146,6 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 	g.POST("/push-now", func(c *gin.Context) {
 		go PushOnce(a)
 		response.OK(c, gin.H{"ok": true})
-	})
-	// 切换部署模式
-	g.POST("/deploy-mode", func(c *gin.Context) {
-		var req struct {
-			Mode string `json:"mode"`
-		}
-		if err := c.ShouldBindJSON(&req); err != nil { response.Bad(c, err.Error()); return }
-		if req.Mode != "standalone" && req.Mode != "distributed" {
-			response.Bad(c, "mode 必须为 standalone 或 distributed"); return
-		}
-		a.DB.Exec("INSERT INTO system_settings (key, value) VALUES ('deploy_mode', ?) ON DUPLICATE KEY UPDATE value = ?", req.Mode, req.Mode)
-		response.OK(c, gin.H{"ok": true, "mode": req.Mode})
 	})
 	// 检测 MQTT Broker 连通性
 	g.POST("/mqtt-check", func(c *gin.Context) {

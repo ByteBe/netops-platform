@@ -8,6 +8,30 @@ const dist = reactive({
   cfg: { self_node_name: '', parent_url: '', cluster_token: '', mqtt_broker: '', mqtt_username: '', mqtt_password: '' },
   nodes: [] as any[],
 })
+const mqttStatus = ref('')
+const checkingMqtt = ref(false)
+const tokenVisible = ref(false)
+const deployMode = ref<'standalone' | 'distributed'>('standalone')
+async function switchMode(m: string) {
+  await postEnc('/distributed/deploy-mode', { mode: m })
+  deployMode.value = m as any
+  ElMessage.success('已切换为' + (m === 'distributed' ? '分布式级联模式' : '单机模式'))
+  await loadDist()
+}
+async function checkMqtt() {
+  checkingMqtt.value = true
+  mqttStatus.value = ''
+  try {
+    const r: any = await postEnc('/distributed/mqtt-check', { broker: dist.cfg.mqtt_broker })
+    mqttStatus.value = r.ok ? `MQTT 连接正常 (${r.broker})` : `MQTT 连接失败: ${r.error}`
+    if (r.ok) ElMessage.success('MQTT 连接正常')
+    else ElMessage.error('MQTT 连接失败: ' + r.error)
+  } catch (e: any) {
+    mqttStatus.value = 'MQTT 连接失败: ' + (e?.message || e)
+  } finally {
+    checkingMqtt.value = false
+  }
+}
 async function loadDist() {
   try {
     dist.self = await getEnc('/distributed/self')
@@ -18,6 +42,7 @@ async function loadDist() {
     dist.cfg.mqtt_broker = dist.self.mqtt_broker || ''
     dist.cfg.mqtt_username = dist.self.mqtt_username || ''
     dist.cfg.mqtt_password = dist.self.mqtt_password || ''
+    deployMode.value = (dist.self as any).deploy_mode || 'standalone'
   } catch {}
 }
 async function distSave() {
@@ -44,12 +69,27 @@ onMounted(loadDist)
 <template>
   <div class="p-4">
     <el-card shadow="never" class="mb-4">
+      <template #header><b>部署模式</b></template>
+      <el-radio-group v-model="deployMode" @change="switchMode">
+        <el-radio value="standalone">单机模式</el-radio>
+        <el-radio value="distributed">分布式级联模式</el-radio>
+      </el-radio-group>
+      <div style="margin-top:8px;color:#909399;font-size:13px">
+        {{ deployMode === 'distributed' ? '当前为分布式模式，本节点可与上下级节点同步数据。' : '当前为单机模式，仅本机采集与存储，不与其他节点通信。' }}
+      </div>
+    </el-card>
+
+    <template v-if="deployMode === 'distributed'">
+    <el-card shadow="never" class="mb-4">
       <template #header><b>本节点信息</b></template>
       <el-descriptions :column="2" border>
         <el-descriptions-item label="节点 UUID"><code>{{ dist.self.node_uuid || '-' }}</code></el-descriptions-item>
         <el-descriptions-item label="本节点名称">{{ dist.self.name || '(未设置)' }}</el-descriptions-item>
         <el-descriptions-item label="上级地址">{{ dist.self.parent || '(未配置，为总部)' }}</el-descriptions-item>
-        <el-descriptions-item label="通信 Token"><code>{{ dist.self.token || '(未设置)' }}</code></el-descriptions-item>
+        <el-descriptions-item label="通信 Token">
+          <code>{{ tokenVisible ? dist.self.token : '••••••••' }}</code>
+          <el-button link type="primary" size="small" @click="tokenVisible=!tokenVisible" style="margin-left:6px">{{ tokenVisible ? '隐藏' : '查看' }}</el-button>
+        </el-descriptions-item>
       </el-descriptions>
     </el-card>
 
@@ -58,7 +98,7 @@ onMounted(loadDist)
       <el-form :model="dist.cfg" inline>
         <el-form-item label="本节点名称"><el-input v-model="dist.cfg.self_node_name" placeholder="如：新疆省运维中心" /></el-form-item>
         <el-form-item label="上级地址"><el-input v-model="dist.cfg.parent_url" placeholder="https://域名 或 http://IPv4:端口" /></el-form-item>
-        <el-form-item label="Token"><el-input v-model="dist.cfg.cluster_token" placeholder="上下级共享密钥" /></el-form-item>
+        <el-form-item label="Token"><el-input v-model="dist.cfg.cluster_token" type="password" show-password /></el-form-item>
         <el-form-item>
           <el-button type="primary" @click="distSave">保存</el-button>
           <el-button @click="distPushNow">立即上报</el-button>
@@ -70,8 +110,11 @@ onMounted(loadDist)
         <el-form-item label="MQTT Broker"><el-input v-model="dist.cfg.mqtt_broker" placeholder="tcp://域名:1883 或 tcp://IPv4:1883" style="width:280px" /></el-form-item>
         <el-form-item label="用户名"><el-input v-model="dist.cfg.mqtt_username" /></el-form-item>
         <el-form-item label="密码"><el-input v-model="dist.cfg.mqtt_password" type="password" show-password /></el-form-item>
-        <el-form-item><el-button @click="distSave">保存 MQTT</el-button></el-form-item>
+        <el-form-item><el-button @click="distSave">保存 MQTT</el-button>
+          <el-button type="success" :loading="checkingMqtt" @click="checkMqtt">检测连接</el-button>
+        </el-form-item>
       </el-form>
+      <div v-if="mqttStatus" :style="{marginTop:'8px', fontSize:'13px', color: mqttStatus.startsWith('MQTT 连接正常') ? '#67C23A' : '#F56C6C'}">{{ mqttStatus }}</div>
     </el-card>
 
     <el-card shadow="never">
@@ -91,5 +134,6 @@ onMounted(loadDist)
         <el-table-column prop="last_seen_at" label="最后上报" min-width="160" />
       </el-table>
     </el-card>
+    </template>
   </div>
 </template>

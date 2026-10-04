@@ -1,0 +1,34 @@
+app:
+    name: NetOps
+    jwt_secret: db170e3690aeb8ec55e4c72552ebe21494ce2468869fcb22ab3fc9f78840fe47
+server:
+    host: 0.0.0.0
+    port: 30821
+    internal_host: 127.0.0.1
+    internal_port: 30001
+    tls_cert: ""
+    tls_key: ""
+database:
+    type: sqlite
+    host: 127.0.0.1
+    port: 3306
+    user: ""
+    password: ""
+    database: netops
+    path: data/netops.db
+    params: ""
+    max_idle_conns: 0
+    max_open_conns: 0
+    log_level: 0
+tsdb:
+    type: builtin
+    host: 127.0.0.1
+    port: 6041
+    user: root
+    pass: taosdata
+    db: data
+    params: ""
+crypto:
+    sm2_private_key: f441ee61fe9990c6b75f53d0b80108838c6bd5e254e300c29fbef5ecb05a188c
+    sm2_public_key: 04d8e320c5bc607a0af576ef5ef6509bd3b4aa22c0108e744181a8992c80c697c169cd05cb1ef5e615ecd8c1792b7506cc2bc9a47b49378c60c37b92bbbea376ce
+initialized: true

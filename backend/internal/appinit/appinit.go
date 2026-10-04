@@ -38,6 +38,7 @@ func AllModels() []any {
 		&model.IPRecord{}, &model.BindDevice{}, &model.TrafficRule{},
 		&model.AIConfig{}, &model.MCPAgent{}, &model.EmailConfig{},
 		&model.ReportRecord{}, &model.SystemSetting{}, &model.DockerHost{}, &model.K8sCluster{},
+		&model.Node{},
 	}
 }
 
