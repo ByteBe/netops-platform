@@ -6,6 +6,10 @@ package distributed
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
+	"os"
+	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -53,20 +57,25 @@ func RegisterPublic(a *core.App, g *gin.RouterGroup) {
 		if err := c.ShouldBindJSON(&req); err != nil || req.NodeUUID == "" {
 			response.Bad(c, "参数缺失"); return
 		}
-		// token 校验：上级在配置里预设一个共享 token
+		// token 校验：上级在配置里预设一个共享 token（首次注册用）
 		expected := getSetting(a, "cluster_token")
 		if expected != "" && req.Token != expected {
 			response.Unauthorized(c, "token 无效"); return
 		}
 		var n model.Node
 		if err := a.DB.Where("node_uuid = ?", req.NodeUUID).First(&n).Error; err != nil {
-			n = model.Node{NodeUUID: req.NodeUUID, Name: req.Name, Level: req.Level, Status: "online"}
+			// 新节点：生成独立 token
+			b := make([]byte, 16)
+			rand.Read(b)
+			nodeToken := hex.EncodeToString(b)
+			n = model.Node{NodeUUID: req.NodeUUID, Name: req.Name, Level: req.Level, Status: "online", Token: nodeToken}
 			a.DB.Create(&n)
+			response.OK(c, gin.H{"ok": true, "node_id": n.ID, "node_token": nodeToken})
 		} else {
 			a.DB.Model(&n).Updates(map[string]interface{}{"name": req.Name, "level": req.Level, "status": "online", "last_seen_at": time.Now()})
+			response.OK(c, gin.H{"ok": true, "node_id": n.ID, "node_token": n.Token})
 		}
 		logger.Infof("[distributed] node registered: %s (%s)", req.Name, req.NodeUUID)
-		response.OK(c, gin.H{"ok": true, "node_id": n.ID})
 	})
 
 	// 下级上报快照（设备/容器/链路）
@@ -82,14 +91,48 @@ func RegisterPublic(a *core.App, g *gin.RouterGroup) {
 		if err := c.ShouldBindJSON(&req); err != nil || req.NodeUUID == "" {
 			response.Bad(c, "参数缺失"); return
 		}
-		expected := getSetting(a, "cluster_token")
-		if expected != "" && req.Token != expected {
-			response.Unauthorized(c, "token 无效"); return
+		// 校验：先查节点独立 token，没有则回退全局 cluster_token
+		var node model.Node
+		if err := a.DB.Where("node_uuid = ?", req.NodeUUID).First(&node).Error; err == nil && node.Token != "" {
+			if req.Token != node.Token {
+				response.Unauthorized(c, "节点 token 无效"); return
+			}
+		} else {
+			expected := getSetting(a, "cluster_token")
+			if expected != "" && req.Token != expected {
+				response.Unauthorized(c, "token 无效"); return
+			}
 		}
 		// 更新节点心跳
 		a.DB.Model(&model.Node{}).Where("node_uuid = ?", req.NodeUUID).
 			Updates(map[string]interface{}{"status": "online", "last_seen_at": time.Now(), "container_cnt": len(req.Containers), "device_cnt": len(req.Devices)})
-		// TODO: 持久化下级设备/容器镜像数据到本库（按 node_uuid 隔离）
+		// 持久化下级设备到本库（按 node_uuid+IP upsert）
+		for _, d := range req.Devices {
+			ip, _ := d["ip"].(string)
+			if ip == "" { continue }
+			var dev model.MonitorDevice
+			if err := a.DB.Where("node_uuid = ? AND ip = ?", req.NodeUUID, ip).First(&dev).Error; err != nil {
+				dev = model.MonitorDevice{
+					Name: fmt.Sprint(d["name"]),
+					IP:   ip,
+					Type: fmt.Sprint(d["type"]),
+					NodeUUID: req.NodeUUID,
+				}
+				a.DB.Create(&dev)
+			} else {
+				a.DB.Model(&dev).Updates(map[string]interface{}{"name": d["name"], "type": d["type"]})
+			}
+		}
+		// 删除本节点已不存在的旧设备
+		a.DB.Where("node_uuid = ?", req.NodeUUID).Where("ip NOT IN ?", func() []string {
+			ips := []string{}
+			for _, d := range req.Devices { if ip, ok := d["ip"].(string); ok { ips = append(ips, ip) } }
+			return ips
+		}()).Delete(&model.MonitorDevice{})
+		// 多级转发：本节点如果也有上级，把收到的下级数据再转发给上级
+		if parent := getSetting(a, "parent_url"); parent != "" {
+			go ForwardToParent(a, req)
+		}
 		response.OK(c, gin.H{"ok": true, "devices": len(req.Devices), "containers": len(req.Containers), "links": len(req.Links)})
 	})
 }
@@ -152,7 +195,95 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		go PushOnce(a)
 		response.OK(c, gin.H{"ok": true})
 	})
-	// 切换部署模式
+	// 节点分组列表
+	g.GET("/groups", func(c *gin.Context) {
+		var groups []string
+		a.DB.Model(&model.Node{}).Where("`group` != ''").Distinct("`group`").Pluck("`group`", &groups)
+		// 合并 system_settings 里预建的分组
+		var ss model.SystemSetting
+		extra := ""
+		if a.DB.Where("`key` = ?", "node_groups").First(&ss).Error == nil {
+			extra = ss.Value
+		}
+		merged := map[string]bool{}
+		for _, g := range groups { merged[g] = true }
+		for _, g := range strings.Split(extra, ",") { if g = strings.TrimSpace(g); g != "" { merged[g] = true } }
+		out := []string{}
+		for g := range merged { out = append(out, g) }
+		response.OK(c, out)
+	})
+	// 预建分组
+	g.POST("/groups", func(c *gin.Context) {
+		var req struct{ Group string `json:"group"` }
+		c.ShouldBindJSON(&req)
+		var ss model.SystemSetting
+		cur := ""
+		if a.DB.Where("`key` = ?", "node_groups").First(&ss).Error == nil { cur = ss.Value }
+		existing := strings.Split(cur, ",")
+		for _, e := range existing { if strings.TrimSpace(e) == req.Group { response.OK(c, gin.H{"ok":true}); return } }
+		newVal := req.Group
+		if cur != "" { newVal = cur + "," + req.Group }
+		if a.DB.Where("`key` = ?", "node_groups").First(&ss).Error != nil {
+			a.DB.Create(&model.SystemSetting{Key: "node_groups", Value: newVal})
+		} else {
+			a.DB.Model(&ss).Update("value", newVal)
+		}
+		response.OK(c, gin.H{"ok": true})
+	})
+	// 删除预建分组
+	g.POST("/groups/delete", func(c *gin.Context) {
+		var req struct{ Group string `json:"group"` }
+		c.ShouldBindJSON(&req)
+		a.DB.Model(&model.Node{}).Where("`group` = ?", req.Group).Update("group", "")
+		var ss model.SystemSetting
+		if a.DB.Where("`key` = ?", "node_groups").First(&ss).Error == nil {
+			parts := []string{}
+			for _, p := range strings.Split(ss.Value, ",") { if strings.TrimSpace(p) != req.Group && strings.TrimSpace(p) != "" { parts = append(parts, strings.TrimSpace(p)) } }
+			a.DB.Model(&ss).Update("value", strings.Join(parts, ","))
+		}
+		response.OK(c, gin.H{"ok": true})
+	})
+	// 修改节点分组
+	g.POST("/nodes/:id/group", func(c *gin.Context) {
+		var req struct {
+			Group string `json:"group"`
+		}
+		c.ShouldBindJSON(&req)
+		a.DB.Model(&model.Node{}).Where("id = ?", c.Param("id")).Update("group", req.Group)
+		response.OK(c, gin.H{"ok": true})
+	})
+	// 节点健康度汇总
+	g.GET("/health", func(c *gin.Context) {
+		var nodes []model.Node
+		a.DB.Find(&nodes)
+		now := time.Now()
+		online, offline := 0, 0
+		devTotal, ctnTotal := 0, 0
+		for _, n := range nodes {
+			if n.LastSeenAt != nil && now.Sub(*n.LastSeenAt) < 60*time.Second {
+				online++
+			} else {
+				offline++
+			}
+			devTotal += n.DeviceCnt
+			ctnTotal += n.ContainerCnt
+		}
+		response.OK(c, gin.H{
+			"total": len(nodes), "online": online, "offline": offline,
+			"device_total": devTotal, "container_total": ctnTotal,
+		})
+	})
+	// 切换部署模式后重启进程
+	g.POST("/restart", func(c *gin.Context) {
+		response.OK(c, gin.H{"ok": true})
+		go func() {
+			time.Sleep(500 * time.Millisecond)
+			exe, _ := os.Executable()
+			cmd := exec.Command(exe)
+			cmd.Start()
+			os.Exit(0)
+		}()
+	})
 	g.POST("/deploy-mode", func(c *gin.Context) {
 		var req struct {
 			Mode string `json:"mode"`
@@ -161,7 +292,12 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		if req.Mode != "standalone" && req.Mode != "distributed" {
 			response.Bad(c, "mode 必须为 standalone 或 distributed"); return
 		}
-		a.DB.Exec("INSERT INTO system_settings (key, value) VALUES ('deploy_mode', ?) ON DUPLICATE KEY UPDATE value = ?", req.Mode, req.Mode)
+		var s model.SystemSetting
+		if err := a.DB.Where("`key` = ?", "deploy_mode").First(&s).Error; err != nil {
+			a.DB.Create(&model.SystemSetting{Key: "deploy_mode", Value: req.Mode})
+		} else {
+			a.DB.Model(&s).Update("value", req.Mode)
+		}
 		response.OK(c, gin.H{"ok": true, "mode": req.Mode})
 	})
 	// 检测 MQTT Broker 连通性

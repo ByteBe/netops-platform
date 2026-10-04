@@ -324,6 +324,7 @@ type Node struct {
 	ContainerCnt int       `gorm:"default:0" json:"container_cnt"`
 	DeviceCnt   int        `gorm:"default:0" json:"device_cnt"`
 	Remark      string     `gorm:"size:256" json:"remark"`
+	Group       string     `gorm:"size:128;index;default:''" json:"group"` // 下级分组名称
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
 }

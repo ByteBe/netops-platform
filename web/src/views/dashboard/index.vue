@@ -8,6 +8,7 @@ import { getEnc } from '@/utils/request'
 import { WSClient } from '@/utils/ws'
 import { useAuthStore } from '@/stores/auth'
 import { fmtBps, fmtTime } from '@/utils'
+import NodeHealth from './components/NodeHealth.vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -47,6 +48,7 @@ interface Overview {
 }
 
 const kpi = ref<Kpi | null>(null)
+const nodeHealth = ref<{total:number;online:number;offline:number;device_total:number;container_total:number}|null>(null)
 const links = ref<Snapshot[]>([])
 const devices = ref<Snapshot[]>([])
 const dbs = ref<Snapshot[]>([])
@@ -76,6 +78,7 @@ async function loadOverview() {
   links.value = o.links as unknown as Snapshot[]
   devices.value = o.devices
   dbs.value = o.dbs as unknown as Snapshot[]
+  try { nodeHealth.value = await getEnc('/distributed/health') } catch {}
   now.value = Date.now()
 }
 
@@ -365,6 +368,8 @@ function kpiCards() {
         <div class="np-kpi-sub">{{ c.sub }}</div>
       </div>
     </div>
+
+    <NodeHealth :data="nodeHealth" />
 
     <!-- 链路实时趋势 -->
     <div class="np-screen-card np-full">

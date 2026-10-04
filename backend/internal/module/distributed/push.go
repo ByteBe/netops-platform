@@ -75,6 +75,40 @@ func PushOnce(a *core.App) {
 	logger.Infof("[distributed] pushed: devices=%d containers=%d links=%d", len(devArr), len(ctnArr), len(linkArr))
 }
 
+// ForwardToParent 把下级上报的数据再转发给本节点的上级（多级级联）
+func ForwardToParent(a *core.App, req struct {
+	NodeUUID  string                   `json:"node_uuid"`
+	Token     string                   `json:"token"`
+	Name      string                   `json:"name"`
+	Devices   []map[string]interface{} `json:"devices"`
+	Containers []map[string]interface{} `json:"containers"`
+	Links     []map[string]interface{} `json:"links"`
+}) {
+	parent := getSetting(a, "parent_url")
+	if parent == "" {
+		return
+	}
+	token := getSetting(a, "cluster_token")
+	payload := map[string]interface{}{
+		"node_uuid":  req.NodeUUID,
+		"token":      token,
+		"name":       req.Name,
+		"devices":    req.Devices,
+		"containers": req.Containers,
+		"links":      req.Links,
+	}
+	body, _ := json.Marshal(payload)
+	url := fmt.Sprintf("%s/api/v1/distributed/ingest", parent)
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Post(url, "application/json", bytes.NewReader(body))
+	if err != nil {
+		logger.Warnf("[distributed] forward to parent failed: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+	logger.Infof("[distributed] forwarded %s -> parent: %d devices", req.Name, len(req.Devices))
+}
+
 // StartPusher 启动定时上报 goroutine
 func StartPusher(a *core.App) {
 	StartMQTT(a)

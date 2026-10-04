@@ -26,6 +26,9 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		if tp := c.Query("type"); tp != "" {
 			q = q.Where("type = ?", tp)
 		}
+		if nu := c.Query("node_uuid"); nu != "" {
+			q = q.Where("node_uuid = ?", nu)
+		}
 		var list []model.MonitorDevice
 		q.Order("id asc").Find(&list)
 		// 附加实时快照
