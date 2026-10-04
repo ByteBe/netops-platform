@@ -16,6 +16,7 @@ import (
 	_ "netops/internal/module/auth"
 	_ "netops/internal/module/containermon"
 	_ "netops/internal/module/dashboard"
+	_ "netops/internal/module/distributed"
 	_ "netops/internal/module/dbmonitor"
 	_ "netops/internal/module/dbmigrate"
 	_ "netops/internal/module/ipam"

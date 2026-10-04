@@ -15,9 +15,11 @@ import (
 	"netops/internal/collector/ping"
 	"netops/internal/collector/snmp"
 	"netops/internal/common/crypto"
+	"netops/internal/common/logger"
 	"netops/internal/config"
 	"netops/internal/core"
 	"netops/internal/model"
+	"netops/internal/module/distributed"
 	"netops/internal/service/mcp"
 	"netops/internal/storage"
 	"netops/internal/tsdb"
@@ -79,11 +81,15 @@ func InitStorage(a *core.App, cfg *config.Config) error {
 	return nil
 }
 
-// InitTSDB 打开时序数据库
+// InitTSDB 打开时序数据库；连不上时回退到 builtin，不阻塞启动
 func InitTSDB(a *core.App, cfg *config.Config) error {
 	t, err := OpenTSDB(&cfg.TSDB)
 	if err != nil {
-		return fmt.Errorf("时序数据库初始化失败: %w", err)
+		logger.Warnf("[tsdb] %s 不可用，回退到 builtin: %v", cfg.TSDB.Type, err)
+		t, err = builtin.NewBuiltin(cfg.TSDB.DB)
+		if err != nil {
+			return fmt.Errorf("时序数据库初始化失败: %w", err)
+		}
 	}
 	a.TSDB = t
 	return nil
@@ -211,6 +217,9 @@ func SyncManagers(a *core.App) {
 	for _, cl := range k8sClusters { k8sArr = append(k8sArr, kcInfo{Name: cl.Name, APIServer: cl.APIServer, Token: cl.Token}) }
 	k8sJSON, _ := json.Marshal(k8sArr)
 	a.K8sM.SetConfigJSON(SettingBool(a.DB, "k8s_enable"), SettingInt(a.DB, "k8s_interval", 60), string(k8sJSON))
+
+	// 分布式级联：启动定时上报（如果配置了 parent_url）
+	distributed.StartPusher(a)
 }
 
 // InitMCPServer 注册系统能力到 MCP 服务（外部 Agent 接入）

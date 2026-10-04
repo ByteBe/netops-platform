@@ -1,14 +1,16 @@
 ﻿<script setup lang="ts">
 // 系统管理：用户管理 / AI 接入（云端+本地Ollama，多AI调度）/ MCP 配置 / 邮箱 / 审计日志
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, computed, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { getEnc, postEnc, putEnc, delEnc } from '@/utils/request'
 import { fmtTime } from '@/utils'
 
+const route = useRoute()
 const { t } = useI18n()
 
-const activeTab = ref('users')
+const activeTab = ref((route.query.tab as string) || 'users')
 
 // ===== 用户管理 =====
 interface SysUser {
