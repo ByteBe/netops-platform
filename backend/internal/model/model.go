@@ -64,6 +64,7 @@ type MonitorDevice struct {
 	Interval    int       `gorm:"default:60" json:"interval"` // 采集周期秒
 	Enable      bool      `gorm:"default:false" json:"enable"`
 	Status      string    `gorm:"size:16;default:unknown" json:"status"` // up/down/unknown
+	NodeUUID    string    `gorm:"size:64;index;default:''" json:"node_uuid"` // 归属节点（下级上报的设备填下级UUID，本机空=本地）
 	Remark      string    `gorm:"size:256" json:"remark"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
@@ -307,4 +308,22 @@ type K8sCluster struct {
 	Token     string `gorm:"size:512" json:"token"`
 	Enabled   bool   `gorm:"default:false" json:"enabled"`
 	Remark    string `gorm:"size:256" json:"remark"`
+}
+
+// Node 分布式节点（总部-省-市-县级联）
+type Node struct {
+	ID          uint       `gorm:"primaryKey" json:"id"`
+	NodeUUID    string     `gorm:"size:64;uniqueIndex;not null" json:"node_uuid"` // 本节点唯一标识
+	Name        string     `gorm:"size:128;not null" json:"name"`                 // 节点名称（单位名）
+	ParentUUID  string     `gorm:"size:64;index;default:''" json:"parent_uuid"`   // 父节点 UUID
+	Level       int        `gorm:"default:1" json:"level"`                       // 1=总部 2=省 3=市 4=县
+	Address     string     `gorm:"size:256" json:"address"`                       // 上级访问地址（下级填）
+	Token       string     `gorm:"size:128" json:"-"`                             // 认证 token
+	Status      string     `gorm:"size:16;default:"offline"" json:"status"`        // online/offline
+	LastSeenAt  *time.Time `json:"last_seen_at"`
+	ContainerCnt int       `gorm:"default:0" json:"container_cnt"`
+	DeviceCnt   int        `gorm:"default:0" json:"device_cnt"`
+	Remark      string     `gorm:"size:256" json:"remark"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 }

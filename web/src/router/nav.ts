@@ -23,7 +23,8 @@ const overrides: Record<string, NavMeta> = {
   ipam: { title: 'IP地址管理', icon: 'MapLocation' },
   subnet: { title: '子网计算', icon: 'Grid' },
   system: { title: '系统管理', icon: 'Setting' },
-  dbmigrate: { title: '数据库迁移', icon: 'Coin' }
+  dbmigrate: { title: '数据库迁移', icon: 'Coin' },
+  distributed: { title: '节点管理', icon: 'Share' }
 }
 
 // 自动扫描 views 目录，收集所有模块名
@@ -48,3 +49,5 @@ for (const name of autoNames) {
     navMeta[name] = { title: name, icon: defaultIcons[iconIdx++ % defaultIcons.length] }
   }
 }
+
+// 自动扫描已覆盖 distributed 视图

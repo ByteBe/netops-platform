@@ -133,6 +133,7 @@ onMounted(load)
             <el-checkbox value="monitor">{{ t('report.serverUsage') }}</el-checkbox>
             <el-checkbox value="db">数据库状态</el-checkbox>
             <el-checkbox value="container">容器/K8s</el-checkbox>
+            <el-checkbox value="node">节点健康性</el-checkbox>
           </el-checkbox-group>
         </el-form-item>
         <el-form-item :label="t('report.sendMail')">

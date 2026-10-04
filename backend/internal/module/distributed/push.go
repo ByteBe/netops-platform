@@ -1,0 +1,90 @@
+package distributed
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"time"
+
+	"netops/internal/common/logger"
+	"netops/internal/core"
+	"netops/internal/model"
+)
+
+// PushOnce 把本机采集到的最新快照上报到上级
+func PushOnce(a *core.App) {
+	parent := getSetting(a, "parent_url")
+	if parent == "" {
+		return
+	}
+	token := getSetting(a, "cluster_token")
+	name := getSetting(a, "self_node_name")
+	uuid := SelfUUID(a)
+
+	// 收集本机设备快照
+	var devices []model.MonitorDevice
+	a.DB.Where("enable = ?", true).Find(&devices)
+	devArr := []map[string]interface{}{}
+	for _, d := range devices {
+		devArr = append(devArr, map[string]interface{}{
+			"name": d.Name, "ip": d.IP, "type": d.Type, "status": d.Status,
+		})
+	}
+	// 容器快照
+	var ctnArr []map[string]interface{}
+	if a.DockerM != nil {
+		for _, c := range a.DockerM.Snapshot() {
+			ctnArr = append(ctnArr, map[string]interface{}{
+				"name": c.Names, "image": c.Image, "state": c.State,
+				"cpu": c.CPU, "mem_pct": c.MemPct, "host": c.Host,
+			})
+		}
+	}
+	// 链路
+	var links []model.LinkTask
+	a.DB.Find(&links)
+	linkArr := []map[string]interface{}{}
+	for _, l := range links {
+		linkArr = append(linkArr, map[string]interface{}{"name": l.Name, "target": l.Target})
+	}
+
+	payload := map[string]interface{}{
+		"node_uuid":  uuid,
+		"token":      token,
+		"name":       name,
+		"devices":    devArr,
+		"containers": ctnArr,
+		"links":      linkArr,
+	}
+	body, _ := json.Marshal(payload)
+	// 优先 MQTT，失败回退 HTTP
+	PublishSnapshot(a, payload)
+	url := fmt.Sprintf("%s/api/v1/distributed/ingest", parent)
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Post(url, "application/json", bytes.NewReader(body))
+	if err != nil {
+		logger.Warnf("[distributed] push failed: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		logger.Warnf("[distributed] push http %d", resp.StatusCode)
+		return
+	}
+	logger.Infof("[distributed] pushed: devices=%d containers=%d links=%d", len(devArr), len(ctnArr), len(linkArr))
+}
+
+// StartPusher 启动定时上报 goroutine
+func StartPusher(a *core.App) {
+	StartMQTT(a)
+	interval := 30 * time.Second
+	go func() {
+		t := time.NewTicker(interval)
+		defer t.Stop()
+		PushOnce(a)
+		for range t.C {
+			PushOnce(a)
+		}
+	}()
+}

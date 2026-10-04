@@ -35,3 +35,5 @@ backend/logs/
 backend/netops-server-windows-amd64.exe
 backend/netops-server-linux-amd64
 
+backend/netops-platform.exe
+backend/netops-platform-linux

@@ -310,7 +310,7 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			return
 		}
 		var s model.SystemSetting
-		if err := a.DB.Where("key = ?", key).First(&s).Error; err != nil {
+		if err := a.DB.Where("`key` = ?", key).First(&s).Error; err != nil {
 			a.DB.Create(&model.SystemSetting{Key: key, Value: req.Value})
 		} else {
 			a.DB.Model(&s).Update("value", req.Value)

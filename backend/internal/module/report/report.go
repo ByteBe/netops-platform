@@ -57,7 +57,7 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			include = map[string]bool{"link": true, "monitor": true, "db": true}
 		}
 
-		var linkSection, devSection, dbSection, containerSection string
+		var linkSection, devSection, dbSection, containerSection, nodeSection string
 		stats := map[string]int{"total": 0, "up": 0, "down": 0, "warn": 0}
 		if include["link"] {
 			linkSection = renderLinkSection(a, start, end, stats)
@@ -71,8 +71,11 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		if include["container"] {
 			containerSection = renderContainerSection(a, stats)
 		}
+		if include["node"] {
+			nodeSection = renderNodeSection(a, stats)
+		}
 
-		content := renderHTML(title, start, end, linkSection, devSection, dbSection, containerSection, stats)
+		content := renderHTML(title, start, end, linkSection, devSection, dbSection, containerSection, nodeSection, stats)
 
 		username, _ := c.Get(middleware.KeyUsername)
 		rec := model.ReportRecord{
@@ -390,18 +393,45 @@ tbody tr:hover{background:#f8faff}
 <div class="card"><div class="num" style="color:#f5222d">{{.Down}}</div><div class="lbl">异常/离线</div></div>
 <div class="card"><div class="num" style="color:#faad14">{{.Warn}}</div><div class="lbl">告警</div></div>
 </div>
-{{.LinkSection}}{{.DevSection}}{{.DBSection}}{{.ContainerSection}}
+{{.LinkSection}}{{.DevSection}}{{.DBSection}}{{.ContainerSection}}{{.NodeSection}}
 <div class="footer">本报告由 NetOps 网络运维监控平台自动生成</div>
 </div></body></html>`))
 
-func renderHTML(title string, start, end time.Time, linkS, devS, dbS, containerS string, stats map[string]int) string {
+func renderHTML(title string, start, end time.Time, linkS, devS, dbS, containerS, nodeS string, stats map[string]int) string {
 	var sb strings.Builder
 	reportTpl.Execute(&sb, map[string]any{
 		"Title": title, "Start": start.Format("2006-01-02 15:04"), "End": end.Format("2006-01-02 15:04"),
 		"Now":           time.Now().Format("2006-01-02 15:04:05"),
-		"LinkSection":   template.HTML(linkS), "DevSection": template.HTML(devS), "DBSection": template.HTML(dbS), "ContainerSection": template.HTML(containerS),
+		"LinkSection":   template.HTML(linkS), "DevSection": template.HTML(devS), "DBSection": template.HTML(dbS), "ContainerSection": template.HTML(containerS), "NodeSection": template.HTML(nodeS),
 		"Total": stats["total"], "Up": stats["up"], "Down": stats["down"], "Warn": stats["warn"],
 	})
+	return sb.String()
+}
+
+func renderNodeSection(a *core.App, stats map[string]int) string {
+	var nodes []model.Node
+	a.DB.Order("level asc, id asc").Find(&nodes)
+	var sb strings.Builder
+	sb.WriteString(`<div class="section"><h3>节点健康性</h3><table><thead><tr><th>节点名称</th><th>UUID</th><th>层级</th><th>状态</th><th>设备数</th><th>容器数</th><th>最后上报</th></tr></thead><tbody>`)
+	for _, n := range nodes {
+		stats["total"]++
+		color := "#52c41a"
+		badge := "在线"
+		if n.Status != "online" {
+			color = "#f5222d"
+			badge = "离线"
+			stats["down"]++
+		} else {
+			stats["up"]++
+		}
+		level := []string{"总部", "省级", "市级", "县级"}[n.Level]
+		if n.Level >= len(level) {
+			level = fmt.Sprintf("L%d", n.Level)
+		}
+		sb.WriteString(fmt.Sprintf("<tr><td><b>%s</b></td><td><code>%s</code></td><td>%s</td><td><span style='color:%s'>%s</span></td><td>%d</td><td>%d</td><td>%s</td></tr>",
+			n.Name, n.NodeUUID, level, color, badge, n.DeviceCnt, n.ContainerCnt, n.LastSeenAt.Format("2006-01-02 15:04:05")))
+	}
+	sb.WriteString("</tbody></table></div>")
 	return sb.String()
 }
 
