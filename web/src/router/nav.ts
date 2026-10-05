@@ -24,7 +24,9 @@ const overrides: Record<string, NavMeta> = {
   subnet: { title: '子网计算', icon: 'Grid' },
   system: { title: '系统管理', icon: 'Setting' },
   dbmigrate: { title: '数据库迁移', icon: 'Coin' },
-  distributed: { title: '节点管理', icon: 'Share' }
+  distributed: { title: '节点管理', icon: 'Share' },
+  configbackup: { title: '配置备份', icon: 'FolderChecked' },
+  alert: { title: '告警中心', icon: 'Bell' }
 }
 
 // 自动扫描 views 目录，收集所有模块名

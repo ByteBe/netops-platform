@@ -88,7 +88,7 @@ func Register(a *core.App, g *gin.RouterGroup) {
 		a.Sessions.KickUser(user.Username)
 
 		// 4. 签发令牌并绑定会话密钥
-		token, err := middleware.GenerateToken(user.ID, user.Username, user.Role, mustChange, a.Cfg.App.JWTKey, 12*time.Hour)
+		token, err := middleware.GenerateToken(user.ID, user.Username, user.Role, user.NodeScope, mustChange, a.Cfg.App.JWTKey, 12*time.Hour)
 		if err != nil {
 			response.Err(c, err)
 			return
@@ -131,6 +131,7 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		response.OK(c, gin.H{
 			"id": user.ID, "username": user.Username, "email": user.Email,
 			"employee_no": user.EmployeeNo, "role": user.Role, "status": user.Status,
+			"node_scope": user.NodeScope,
 			"must_change_pwd": user.MustChangePwd, "last_login_at": user.LastLoginAt,
 		})
 	})

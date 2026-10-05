@@ -40,6 +40,7 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			EmployeeNo string `json:"employee_no"`
 			Email      string `json:"email"`
 			Role       string `json:"role"`
+			NodeScope  string `json:"node_scope"`
 			Password   string `json:"password"` // 可选，不填则系统生成
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -70,8 +71,11 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		salt, _ := crypto.GenerateSalt()
 		u := model.User{
 			Username: req.Username, EmployeeNo: req.EmployeeNo, Email: req.Email,
-			Role: role, Status: "active", MustChangePwd: true,
+			Role: role, NodeScope: req.NodeScope, Status: "active", MustChangePwd: true,
 			PasswordHash: crypto.PasswordHash(pwd, salt), Salt: salt,
+		}
+		if u.NodeScope == "" {
+			u.NodeScope = "all"
 		}
 		if err := a.DB.Create(&u).Error; err != nil {
 			response.Err(c, err)
@@ -92,6 +96,7 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			EmployeeNo string `json:"employee_no"`
 			Email      string `json:"email"`
 			Role       string `json:"role"`
+			NodeScope  string `json:"node_scope"`
 			Status     string `json:"status"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -107,6 +112,9 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		}
 		if req.Role != "" {
 			updates["role"] = req.Role
+		}
+		if req.NodeScope != "" {
+			updates["node_scope"] = req.NodeScope
 		}
 		if req.Status != "" {
 			updates["status"] = req.Status

@@ -21,6 +21,7 @@ const (
 	KeyUserID   = "uid"
 	KeyUsername = "username"
 	KeyRole     = "role"
+	KeyNodeScope = "node_scope"
 	KeyMustPwd  = "must_change"
 	KeySession  = "session_key"
 )
@@ -62,6 +63,7 @@ func Auth(app *core.App) gin.HandlerFunc {
 		c.Set(KeyUserID, claims.UserID)
 		c.Set(KeyUsername, claims.Username)
 		c.Set(KeyRole, claims.Role)
+		c.Set(KeyNodeScope, claims.NodeScope)
 		c.Set(KeyMustPwd, claims.MustChangePwd)
 
 		// 强制改密拦截：除白名单外一律拒绝
@@ -223,4 +225,16 @@ func RequireRole(roles ...string) gin.HandlerFunc {
 		response.Forbidden(c, "无权限执行此操作")
 		c.Abort()
 	}
+}
+
+// ScopeNodeID 返回当前用户可见的 node_id 过滤值
+// all = 总部管理员，看全部；其他 = 仅本节点（下级数据由 node_id 关联，前端按 node_scope 过滤）
+// 返回空字符串表示不过滤（看全部）；返回具体 node_id 表示只看该节点
+func ScopeNodeID(c *gin.Context) string {
+	v, _ := c.Get(KeyNodeScope)
+	s, _ := v.(string)
+	if s == "" || s == "all" {
+		return ""
+	}
+	return s
 }

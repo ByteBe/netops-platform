@@ -90,6 +90,21 @@ async function view(r: ReportRecord) {
 }
 
 onMounted(load)
+
+async function quickGen(kind: string) {
+  const now = new Date()
+  let start: Date, title: string
+  if (kind === 'weekly') {
+    start = new Date(now.getTime() - 7 * 86400000)
+    title = `运维周报 ${start.toISOString().slice(0,10)}~${now.toISOString().slice(0,10)}`
+  } else {
+    start = new Date(now.getTime() - 30 * 86400000)
+    title = `运维月报 ${start.toISOString().slice(0,7)}`
+  }
+  const fmt = (d: Date) => d.toISOString().slice(0,10) + ' 00:00:00'
+  await postEnc('/report/generate', { title, start: fmt(start), end: fmt(now), include: ['link','monitor','db','container','node'] })
+  ElMessage.success('已生成'); load()
+}
 </script>
 
 <template>
@@ -97,6 +112,8 @@ onMounted(load)
     <div class="np-toolbar">
       <span class="np-page-desc">包含链路通断、服务器使用情况、数据库状态等巡检内容</span>
       <div class="spacer"></div>
+      <el-button @click="quickGen('weekly')">周报</el-button>
+      <el-button @click="quickGen('monthly')">月报</el-button>
       <el-button type="primary" @click="genDialog = true">
         <el-icon><Document /></el-icon>{{ t('report.generate') }}
       </el-button>

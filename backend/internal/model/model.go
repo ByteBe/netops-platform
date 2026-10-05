@@ -12,6 +12,7 @@ type User struct {
 	PasswordHash   string     `gorm:"size:128" json:"-"`
 	Salt           string     `gorm:"size:32" json:"-"`
 	Role           string     `gorm:"size:16;default:operator" json:"role"` // admin/operator/viewer
+	NodeScope      string     `gorm:"size:32;default:all" json:"node_scope"` // all=全部(总部) / node_id=仅本节点及下级
 	Status         string     `gorm:"size:16;default:active" json:"status"` // active/disabled
 	MustChangePwd    bool       `gorm:"default:false" json:"must_change_pwd"`
 	LastPwdChangeAt *time.Time `json:"last_pwd_change_at"`
@@ -327,4 +328,56 @@ type Node struct {
 	Group       string     `gorm:"size:128;index;default:''" json:"group"` // 下级分组名称
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
+}
+
+// ConfigBackup 网络设备配置备份
+type ConfigBackup struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	NodeID    string    `gorm:"size:64;index" json:"node_id"`   // 所属节点
+	DeviceIP  string    `gorm:"size:64;index;not null" json:"device_ip"`
+	DeviceName string   `gorm:"size:128" json:"device_name"`
+	Vendor    string    `gorm:"size:64" json:"vendor"` // huawei/cisco/h3c...
+	Version   int       `gorm:"default:1" json:"version"`
+	Content   string    `gorm:"type:longtext" json:"content"`
+	Hash      string    `gorm:"size:64" json:"hash"` // 内容MD5，用于对比
+	Source    string    `gorm:"size:16;default:manual" json:"source"` // manual/auto
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// AlertRule 告警规则
+type AlertRule struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	Name      string    `gorm:"size:128;not null" json:"name"`
+	Metric    string    `gorm:"size:32;not null" json:"metric"` // cpu/mem/disk/link
+	Threshold float64   `gorm:"type:decimal(10,2)" json:"threshold"` // 阈值%
+	Duration  int       `gorm:"default:1" json:"duration"` // 持续时间(分钟)
+	Level     string    `gorm:"size:16;default:warning" json:"level"` // info/warning/critical
+	Channels  string    `gorm:"size:256;default:'webhook'" json:"channels"` // email/webhook/dingtalk 逗号分隔
+	Enabled   bool      `gorm:"default:true" json:"enabled"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// AlertEvent 告警事件
+type AlertEvent struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	RuleID    uint      `gorm:"index" json:"rule_id"`
+	Metric    string    `gorm:"size:32" json:"metric"`
+	Target    string    `gorm:"size:128" json:"target"` // 设备/节点名
+	Value     float64   `gorm:"type:decimal(10,2)" json:"value"`
+	Level     string    `gorm:"size:16" json:"level"`
+	Message   string    `gorm:"size:512" json:"message"`
+	Acked     bool      `gorm:"default:false" json:"acked"`
+	AckedAt   *time.Time `json:"acked_at"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// NotifyConfig 通知渠道配置
+type NotifyConfig struct {
+	ID       uint   `gorm:"primaryKey" json:"id"`
+	Name     string `gorm:"size:64" json:"name"`
+	Type     string `gorm:"size:32" json:"type"` // email/webhook/dingtalk
+	Addr     string `gorm:"size:255" json:"addr"`
+	Token    string `gorm:"size:255" json:"token"`
+	Config   string `gorm:"type:text" json:"config"` // JSON配置
+	Enabled  bool   `gorm:"default:true" json:"enabled"`
 }

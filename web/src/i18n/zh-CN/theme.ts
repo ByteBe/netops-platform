@@ -1,0 +1,1 @@
+export default { light: '亮色', dark: '暗色' }

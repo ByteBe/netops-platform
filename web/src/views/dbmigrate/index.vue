@@ -117,6 +117,7 @@ const tableNames: Record<string, string> = {
   ai_configs: 'AI配置', mcp_agents: 'MCP代理', email_configs: '邮件配置',
   report_records: '巡检报告记录', system_settings: '系统设置', docker_hosts: 'Docker主机',
   k8s_clusters: 'K8S集群', ts_kv: '时序数据',
+  nodes: '节点表', config_backups: '配置备份', alert_rules: '告警规则', alert_events: '告警事件', notify_configs: '通知渠道配置',
 }
 function tableLabel(n: string) { return tableNames[n] || '-' }
 const form = reactive<any>({

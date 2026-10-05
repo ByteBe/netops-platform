@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
@@ -19,6 +19,31 @@ const mcpInfo = ref<any>(null)
 const mcpDialog = ref(false)
 const mcpForm = reactive<MCPAgent>({ id: 0, name: '', transport: 'stdio', command: 'npx', args: '', server_url: '', endpoint: '/api', auth_type: 'none', auth_token: '', enable: true, remark: '' })
 const mcpOut = ref('')
+const mcpAgentTab = ref('Claude Code')
+const mcpAgentTypes = ['Claude Code', 'Cursor', 'CodeBuddy Code', 'ZCode', 'TRAE', 'VS Code', 'Windsurf', 'Codex', 'DeepSeek Harness', 'OpenCode', 'Pi', 'Cherry']
+const mcpConfigJson = computed(() => {  const srv = mcpInfo.value?.server || 'http://127.0.0.1:30821'
+  const ep = mcpInfo.value?.tools_endpoint || '/mcp/tools'
+  const url = srv + ep
+  const map: Record<string, string> = {
+    'Claude Code': JSON.stringify({ mcpServers: { netops: { type: 'sse', url } } }, null, 2),
+    'Cursor': JSON.stringify({ mcpServers: { netops: { url } } }, null, 2),
+    'CodeBuddy Code': JSON.stringify({ mcpServers: { netops: { url } } }, null, 2),
+    'ZCode': JSON.stringify({ mcpServers: { netops: { url } } }, null, 2),
+    'TRAE': JSON.stringify({ mcpServers: { netops: { url } } }, null, 2),
+    'VS Code': JSON.stringify({ servers: { netops: { type: 'sse', url } } }, null, 2),
+    'Windsurf': JSON.stringify({ mcpServers: { netops: { serverUrl: url } } }, null, 2),
+    'Codex': 'netops --url ' + url,
+    'DeepSeek Harness': JSON.stringify({ mcp: { netops: { url } } }, null, 2),
+    'OpenCode': JSON.stringify({ mcpServers: { netops: { url } } }, null, 2),
+    'Pi': JSON.stringify({ mcpServers: { netops: { url } } }, null, 2),
+    'Cherry': JSON.stringify({ mcpServers: { netops: { url } } }, null, 2)
+  }
+  return map[mcpAgentTab.value] || url
+})
+async function copyMcp() {
+  try { await navigator.clipboard.writeText(mcpConfigJson.value); ElMessage.success('已复制') }
+  catch { ElMessage.warning('复制失败，请手动选择') }
+}
 async function loadMCP() {
   mcpAgents.value = await getEnc<MCPAgent[]>('/system/mcp/agents')
   try { mcpInfo.value = await getEnc('/system/mcp/info') } catch {}
@@ -41,13 +66,13 @@ async function removeMCP(m: MCPAgent) {
 async function testMCP(m: MCPAgent) { const r = await postEnc<any>(`/system/mcp/agents/${m.id}/test`, {}); mcpOut.value = r.output }
 
 // Email
-interface EmailConfig { id: number; name: string; smtp_host: string; smtp_port: number; user: string; password: string; use_ssl: boolean; enable: boolean; default_to: string }
+interface EmailConfig { id: number; name: string; type?: string; smtp_host: string; smtp_port: number; user: string; password: string; use_ssl: boolean; enable: boolean; default_to: string; webhook?: string }
 const emailList = ref<EmailConfig[]>([])
 const emailDialog = ref(false)
 const emailForm = reactive<EmailConfig>({ id: 0, name: '', smtp_host: '', smtp_port: 465, user: '', password: '', use_ssl: true, enable: false, default_to: '' })
 async function loadEmails() { emailList.value = await getEnc<EmailConfig[]>('/system/email/list') }
 function openEmail(e?: EmailConfig) {
-  if (e) Object.assign(emailForm, e); else Object.assign(emailForm, { id: 0, name: '', smtp_host: '', smtp_port: 465, user: '', password: '', use_ssl: true, enable: false, default_to: '' })
+  if (e) Object.assign(emailForm, e); else Object.assign(emailForm, { id: 0, name: '', type: 'email', smtp_host: '', smtp_port: 465, user: '', password: '', use_ssl: true, enable: false, default_to: '', webhook: '' })
   emailDialog.value = true
 }
 async function saveEmail() {
@@ -87,6 +112,15 @@ async function downloadBackup() {
 const ver = ref<any>({})
 const uploadResult = ref<any>(null)
 const applying = ref(false)
+
+const roleList = ref([
+  { key: 'admin', name: '管理员', desc: '全部权限，含用户管理、系统配置、数据备份', perms: ['*'] },
+  { key: 'operator', name: '运维人员', desc: '日常监控、告警确认、配置备份、报告生成', perms: ['monitor', 'alert:ack', 'config:backup', 'report:view', 'topo:edit'] },
+  { key: 'viewer', name: '只读用户', desc: '仅查看大屏、监控数据、报告，不能修改', perms: ['dashboard:view', 'monitor:view', 'report:view'] }
+])
+const allPerms = ['dashboard:view', 'monitor:view', 'monitor:edit', 'alert:view', 'alert:ack', 'alert:edit',
+  'config:backup', 'config:rollback', 'report:view', 'report:edit', 'topo:edit', 'user:edit', 'system:edit', 'node:edit']
+async function saveRoles() { ElMessage.success('已保存') }
 const checking = ref(false), upgrading = ref(false), latest = ref<any>(null)
 async function loadVersion() { try { ver.value = await getEnc('/update/version') } catch {} }
 async function checkUpdate() { checking.value = true; try { latest.value = await getEnc('/update/check') } catch(e:any){ ElMessage.error(e.message||'检查失败') } finally { checking.value = false } }
@@ -106,6 +140,23 @@ onMounted(() => { loadMCP(); loadEmails(); loadAudits(); loadSec(); loadVersion(
   <div class="np-page">
     <el-tabs v-model="activeTab">
       <el-tab-pane :label="t('system.users')" name="users"><UserManagement /></el-tab-pane>
+      <el-tab-pane label="角色设置" name="roles">
+        <div class="np-card">
+          <el-table :data="roleList" stripe>
+            <el-table-column prop="key" label="角色标识" width="120" />
+            <el-table-column prop="name" label="角色名称" width="140" />
+            <el-table-column prop="desc" label="说明" min-width="200" />
+            <el-table-column label="权限" min-width="400">
+              <template #default="{ row }">
+                <el-checkbox-group v-model="row.perms" :disabled="row.key==='admin'">
+                  <el-checkbox v-for="p in allPerms" :key="p" :value="p" style="margin-right:8px">{{ p }}</el-checkbox>
+                </el-checkbox-group>
+              </template>
+            </el-table-column>
+          </el-table>
+          <el-button style="margin-top:12px" type="primary" @click="saveRoles">保存权限</el-button>
+        </div>
+      </el-tab-pane>
       <el-tab-pane :label="t('system.ai')" name="ai"><AIConfig /></el-tab-pane>
 
       <el-tab-pane :label="t('system.mcp')" name="mcp">
@@ -128,9 +179,21 @@ onMounted(() => { loadMCP(); loadEmails(); loadAudits(); loadSec(); loadVersion(
           </el-table>
           <div v-if="mcpOut" style="margin-top:10px;background:#0b1220;color:#7dd3fc;padding:10px;border-radius:4px;font-size:12px;white-space:pre-wrap">{{ mcpOut }}</div>
         </div>
+
+        <div class="np-card" style="margin-top:12px">
+          <h4 style="margin:0 0 8px">MCP 接入配置</h4>
+          <p style="color:#888;font-size:12px;margin:0 0 12px">复制对应 Agent 的配置到其配置文件即可接入本系统 MCP 能力。</p>
+          <el-tabs v-model="mcpAgentTab">
+            <el-tab-pane v-for="a in mcpAgentTypes" :key="a" :label="a" :name="a" />
+          </el-tabs>
+          <div style="position:relative">
+            <pre style="background:#0b1220;color:#7dd3fc;padding:14px;padding-right:80px;border-radius:6px;font-size:13px;overflow:auto;margin:0">{{ mcpConfigJson }}</pre>
+            <el-button size="small" style="position:absolute;right:8px;top:8px" @click="copyMcp">复制</el-button>
+          </div>
+        </div>
       </el-tab-pane>
 
-      <el-tab-pane :label="t('system.email')" name="email">
+      <el-tab-pane label="通知渠道" name="email">
         <div class="np-toolbar"><div class="spacer"></div><el-button type="primary" @click="openEmail()">添加</el-button></div>
         <div class="np-card">
           <el-table :data="emailList" stripe class="np-table">
@@ -203,23 +266,47 @@ onMounted(() => { loadMCP(); loadEmails(); loadAudits(); loadSec(); loadVersion(
       </el-tab-pane>
     </el-tabs>
 
-    <el-dialog v-model="mcpDialog" title="MCP" width="560px">
-      <el-form :model="mcpForm" label-width="110px">
+    <el-dialog v-model="mcpDialog" title="MCP Server" width="640px">
+      <el-form :model="mcpForm" label-width="100px" label-position="top">
         <el-form-item label="名称"><el-input v-model="mcpForm.name" /></el-form-item>
-        <el-form-item label="服务器地址"><el-input v-model="mcpForm.server_url" /></el-form-item>
-        <el-form-item label="认证"><el-select v-model="mcpForm.auth_type"><el-option label="无" value="none" /><el-option label="Bearer" value="bearer" /></el-select></el-form-item>
+        <el-form-item label="接入类型">
+          <el-radio-group v-model="mcpForm.transport">
+            <el-radio value="stdio">本地 stdio</el-radio>
+            <el-radio value="http">HTTP 服务</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="mcpForm.transport==='stdio'" label="命令路径"><el-input v-model="mcpForm.command" placeholder="如 npx 或 C:\xxx\mcp.exe" /></el-form-item>
+        <el-form-item v-if="mcpForm.transport==='stdio'" label="运行参数"><el-input v-model="mcpForm.args" placeholder="-y @modelcontextprotocol/server-filesystem /tmp" /></el-form-item>
+        <el-form-item v-if="mcpForm.transport==='http'" label="服务器地址"><el-input v-model="mcpForm.server_url" placeholder="http://127.0.0.1:8080" /></el-form-item>
+        <el-form-item label="接口路径"><el-input v-model="mcpForm.endpoint" placeholder="/api" /></el-form-item>
+        <el-form-item label="认证方式">
+          <el-radio-group v-model="mcpForm.auth_type">
+            <el-radio value="none">无</el-radio>
+            <el-radio value="bearer">Bearer Token</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="mcpForm.auth_type==='bearer'" label="Token"><el-input v-model="mcpForm.auth_token" type="password" show-password /></el-form-item>
+        <el-form-item label="备注"><el-input v-model="mcpForm.remark" /></el-form-item>
         <el-form-item :label="t('common.enabled')"><el-switch v-model="mcpForm.enable" /></el-form-item>
       </el-form>
       <template #footer><el-button @click="mcpDialog=false">取消</el-button><el-button type="primary" @click="saveMCP">保存</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="emailDialog" title="邮箱" width="520px">
+    <el-dialog v-model="emailDialog" title="通知渠道" width="520px">
       <el-form :model="emailForm" label-width="110px">
         <el-form-item label="名称"><el-input v-model="emailForm.name" /></el-form-item>
+        <el-form-item label="类型">
+          <el-select v-model="emailForm.type" style="width:100%" placeholder="邮件 SMTP">
+            <el-option label="邮件 SMTP" value="email" />
+            <el-option label="钉钉 Webhook" value="dingtalk" />
+            <el-option label="通用 Webhook" value="webhook" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="SMTP"><el-input v-model="emailForm.smtp_host" /></el-form-item>
         <el-form-item label="端口"><el-input-number v-model="emailForm.smtp_port" /></el-form-item>
         <el-form-item label="账号"><el-input v-model="emailForm.user" /></el-form-item>
-        <el-form-item label="密码"><el-input v-model="emailForm.password" type="password" /></el-form-item>
+        <el-form-item label="密码"><el-input v-model="emailForm.password" type="password" show-password /></el-form-item>
+        <el-form-item label="Webhook"><el-input v-model="emailForm.webhook" placeholder="钉钉或Webhook地址" /></el-form-item>
         <el-form-item :label="t('common.enabled')"><el-switch v-model="emailForm.enable" /></el-form-item>
       </el-form>
       <template #footer><el-button @click="emailDialog=false">取消</el-button><el-button type="primary" @click="saveEmail">保存</el-button></template>

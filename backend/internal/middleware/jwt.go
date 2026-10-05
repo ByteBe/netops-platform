@@ -12,16 +12,18 @@ type Claims struct {
 	UserID        uint   `json:"uid"`
 	Username      string `json:"username"`
 	Role          string `json:"role"`
+	NodeScope     string `json:"ns"`
 	MustChangePwd bool   `json:"mcp"`
 	jwt.RegisteredClaims
 }
 
 // GenerateToken 签发 JWT
-func GenerateToken(userID uint, username, role string, mustChange bool, secret string, ttl time.Duration) (string, error) {
+func GenerateToken(userID uint, username, role, nodeScope string, mustChange bool, secret string, ttl time.Duration) (string, error) {
 	claims := Claims{
 		UserID:        userID,
 		Username:      username,
 		Role:          role,
+		NodeScope:     nodeScope,
 		MustChangePwd: mustChange,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(ttl)),
