@@ -20,8 +20,8 @@ import (
 	"netops/internal/modreg"
 )
 
-var buildVersion = "v1.4.3"
-var buildTime = "2026-10-02"
+var buildVersion = "v1.5.0"
+var buildTime = "2026-10-05"
 
 func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 	g.GET("/version", func(c *gin.Context) {
