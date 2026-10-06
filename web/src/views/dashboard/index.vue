@@ -144,7 +144,6 @@ async function renderTrends() {
     backgroundColor: 'transparent',
     tooltip: { trigger: 'axis', valueFormatter: (v: number) => v == null ? '--' : v.toFixed(1) + ' ms' },
     legend: { textStyle: { color: '#94a3b8' }, top: 0 },
-    toolbox: { right: 8, top: 0, feature: { saveAsImage: { title: '导出', backgroundColor: '#0f172a' } } },
     grid: { left: 50, right: 16, top: 32, bottom: 24 },
     xAxis: { type: 'time', min: startMs, max: nowMs, axisLine: { lineStyle: { color: '#334155' } } },
     yAxis: { type: 'value', name: 'ms', min: 0, splitLine: { lineStyle: { color: '#1e293b' } } },
@@ -159,7 +158,6 @@ function renderHealth() {
     backgroundColor: 'transparent',
     tooltip: { trigger: 'axis', valueFormatter: (v: number) => v == null ? '--' : v.toFixed(1) + '%' },
     legend: { textStyle: { color: '#94a3b8' }, top: 0 },
-    toolbox: { right: 8, top: 0, feature: { saveAsImage: { title: '导出', backgroundColor: '#0f172a' } } },
     grid: { left: 50, right: 16, top: 32, bottom: 40 },
     xAxis: { type: 'category', data: devices.value.map((d) => d.name), axisLabel: { color: '#94a3b8', rotate: 30 } },
     yAxis: { type: 'value', max: 100, splitLine: { lineStyle: { color: '#1e293b' } } },
@@ -189,7 +187,6 @@ function renderTraffic() {
     backgroundColor: 'transparent',
     tooltip: { trigger: 'axis', valueFormatter: (v: number) => v == null ? '--' : (v/1e6).toFixed(2) + ' Mbps' },
     legend: { textStyle: { color: '#94a3b8' }, top: 0 },
-    toolbox: { right: 8, top: 0, feature: { saveAsImage: { title: '导出', backgroundColor: '#0f172a' } } },
     grid: { left: 70, right: 16, top: 32, bottom: 24 },
     xAxis: { type: 'category', data: trafficData.value.map((x) => x.name), axisLabel: { color: '#94a3b8' } },
     yAxis: {
@@ -232,7 +229,6 @@ function renderDb() {
     backgroundColor: 'transparent',
     tooltip: { trigger: 'item' },
     legend: { textStyle: { color: '#94a3b8' }, top: 0 },
-    toolbox: { right: 8, top: 0, feature: { saveAsImage: { title: '导出', backgroundColor: '#0f172a' } } },
     grid: { left: 50, right: 16, top: 32, bottom: 40 },
     xAxis: { type: 'category', data: dbs.value.map((d) => d.name), axisLabel: { color: '#94a3b8', rotate: 20 } },
     yAxis: { type: 'value', splitLine: { lineStyle: { color: '#1e293b' } } },
@@ -339,10 +335,10 @@ function kpiCards() {
   const k = kpi.value
   if (!k) return []
   return [
-    { label: t('dashboard.linkTotal'), value: k.link_total, sub: `${t('dashboard.linkUp')} ${k.link_up} · ${t('dashboard.linkDown')} ${k.link_down}`, color: '#2f6bff' },
-    { label: t('dashboard.deviceTotal'), value: k.device_total, sub: `${t('dashboard.deviceOnline')} ${k.device_online} · ${t('dashboard.deviceOffline')} ${k.device_offline}`, color: '#22c55e' },
-    { label: t('dashboard.dbTotal'), value: k.db_total, sub: `${t('dashboard.dbUp')} ${k.db_up} · ${t('dashboard.dbDown')} ${k.db_down}`, color: '#8b5cf6' },
-    { label: t('dashboard.userTotal'), value: k.user_total, sub: `${t('dashboard.ipUsed')} ${k.ip_used}`, color: '#f59e0b' }
+    { label: t('dashboard.linkTotal'), value: k.link_total, sub: `${t('dashboard.linkUp')} ${k.link_up} · ${t('dashboard.linkDown')} ${k.link_down}`, color: '#2f6bff', go: '/linkdetect' },
+    { label: t('dashboard.deviceTotal'), value: k.device_total, sub: `${t('dashboard.deviceOnline')} ${k.device_online} · ${t('dashboard.deviceOffline')} ${k.device_offline}`, color: '#22c55e', go: '/monitor' },
+    { label: t('dashboard.dbTotal'), value: k.db_total, sub: `${t('dashboard.dbUp')} ${k.db_up} · ${t('dashboard.dbDown')} ${k.db_down}`, color: '#8b5cf6', go: '/dbmon' },
+    { label: t('dashboard.userTotal'), value: k.user_total, sub: `${t('dashboard.ipUsed')} ${k.ip_used}`, color: '#f59e0b', go: '/ipam' }
   ]
 }
 </script>
@@ -362,7 +358,7 @@ function kpiCards() {
 
     <!-- KPI 卡片 -->
     <div class="np-kpi-grid">
-      <div v-for="c in kpiCards()" :key="c.label" class="np-kpi-card" :style="{ borderTop: `3px solid ${c.color}` }">
+      <div v-for="c in kpiCards()" :key="c.label" class="np-kpi-card" :style="{ borderTop: `3px solid ${c.color}`, cursor: 'pointer' }" @click="c.go && router.push(c.go)">
         <div class="np-kpi-label">{{ c.label }}</div>
         <div class="np-kpi-value" :style="{ color: c.color }">{{ c.value }}</div>
         <div class="np-kpi-sub">{{ c.sub }}</div>

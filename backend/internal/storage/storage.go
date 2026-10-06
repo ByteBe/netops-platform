@@ -48,7 +48,7 @@ func Open(cfg *config.Database) (*gorm.DB, error) {
 // TestConnection 测试连接（初始化向导使用）
 func TestConnection(t config.Database) error {
 	// MySQL: 先连接无数据库，自动创建数据库
-	if strings.ToLower(t.Type) == "mysql" && t.Database != "" {
+	if strings.ToLower(t.Type) == "mysql" || strings.ToLower(t.Type) == "oceanbase" {
 		adminDSN := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8mb4&parseTime=True&loc=Local",
 			t.User, t.Password, t.Host, t.Port)
 		adminDB, err := sql.Open("mysql", adminDSN)
@@ -98,7 +98,7 @@ func TestConnection(t config.Database) error {
 
 // SupportedTypes 支持的数据库类型
 func SupportedTypes() []string {
-	return []string{"sqlite", "mysql", "oracle", "dm", "kingbase"}
+	return []string{"sqlite", "mysql", "oceanbase", "oracle", "dm", "kingbase", "postgresql"}
 }
 
 func dialector(cfg *config.Database) (gorm.Dialector, error) {
@@ -109,7 +109,7 @@ func dialector(cfg *config.Database) (gorm.Dialector, error) {
 			path = "data/netops.db"
 		}
 		return sqlite.Open(path), nil
-	case "mysql":
+	case "mysql", "oceanbase":
 		dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local&%s",
 			cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Database, cfg.Params)
 		return mysql.Open(dsn), nil

@@ -76,15 +76,26 @@ function openEmail(e?: EmailConfig) {
   emailDialog.value = true
 }
 async function saveEmail() {
-  if (!emailForm.name || !emailForm.smtp_host) return ElMessage.warning(t('common.tip'))
+  if (!emailForm.name) return ElMessage.warning('请输入名称')
+  if (emailForm.type === 'email' && !emailForm.smtp_host) return ElMessage.warning('请输入SMTP服务器')
+  if (emailForm.type !== 'email' && !emailForm.webhook) return ElMessage.warning('请输入Webhook地址')
   if (emailForm.id) await putEnc(`/system/email/${emailForm.id}`, emailForm); else await postEnc('/system/email', emailForm)
-  ElMessage.success(t('common.success')); emailDialog.value = false; await loadEmails()
+  ElMessage.success('保存成功'); emailDialog.value = false; await loadEmails()
 }
 async function removeEmail(e: EmailConfig) {
   await ElMessageBox.confirm(t('common.confirmDelete'), t('common.tip'), { type: 'warning' })
   await delEnc(`/system/email/${e.id}`); ElMessage.success(t('common.success')); await loadEmails()
 }
 async function testEmail(e: EmailConfig) { await postEnc(`/system/email/${e.id}/test`, {}); ElMessage.success('测试邮件已发送') }
+function webhookPlaceholder() {
+  switch (emailForm.type) {
+    case 'dingtalk': return 'https://oapi.dingtalk.com/robot/send?access_token=xxx'
+    case 'wecom': return 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx'
+    case 'feishu': return 'https://open.feishu.cn/open-apis/bot/v2/hook/xxx'
+    case 'sms': return '短信网关 API 地址'
+    default: return 'https://example.com/webhook'
+  }
+}
 
 // Audit
 const audits = ref<any[]>([])
@@ -299,14 +310,17 @@ onMounted(() => { loadMCP(); loadEmails(); loadAudits(); loadSec(); loadVersion(
           <el-select v-model="emailForm.type" style="width:100%" placeholder="邮件 SMTP">
             <el-option label="邮件 SMTP" value="email" />
             <el-option label="钉钉 Webhook" value="dingtalk" />
+            <el-option label="企业微信 Webhook" value="wecom" />
+            <el-option label="飞书 Webhook" value="feishu" />
+            <el-option label="短信网关" value="sms" />
             <el-option label="通用 Webhook" value="webhook" />
           </el-select>
         </el-form-item>
-        <el-form-item label="SMTP"><el-input v-model="emailForm.smtp_host" /></el-form-item>
-        <el-form-item label="端口"><el-input-number v-model="emailForm.smtp_port" /></el-form-item>
-        <el-form-item label="账号"><el-input v-model="emailForm.user" /></el-form-item>
-        <el-form-item label="密码"><el-input v-model="emailForm.password" type="password" show-password /></el-form-item>
-        <el-form-item label="Webhook"><el-input v-model="emailForm.webhook" placeholder="钉钉或Webhook地址" /></el-form-item>
+        <el-form-item label="SMTP" v-if="emailForm.type==='email'"><el-input v-model="emailForm.smtp_host" placeholder="smtp.qq.com / smtp.163.com" /></el-form-item>
+        <el-form-item label="端口" v-if="emailForm.type==='email'"><el-input-number v-model="emailForm.smtp_port" /></el-form-item>
+        <el-form-item label="账号" v-if="emailForm.type==='email'"><el-input v-model="emailForm.user" placeholder="发件邮箱" /></el-form-item>
+        <el-form-item label="密码" v-if="emailForm.type==='email'"><el-input v-model="emailForm.password" type="password" show-password placeholder="授权码" /></el-form-item>
+        <el-form-item label="Webhook" v-else><el-input v-model="emailForm.webhook" :placeholder="webhookPlaceholder()" /></el-form-item>
         <el-form-item :label="t('common.enabled')"><el-switch v-model="emailForm.enable" /></el-form-item>
       </el-form>
       <template #footer><el-button @click="emailDialog=false">取消</el-button><el-button type="primary" @click="saveEmail">保存</el-button></template>

@@ -144,6 +144,16 @@ func Notify(app *core.App, level, target, msg string) {
 		case "dingtalk":
 			payload, _ := json.Marshal(map[string]any{"msgtype": "text", "text": map[string]string{"content": "["+level+"] "+target+"\n"+msg}})
 			http.Post(nc.Config, "application/json", bytes.NewReader(payload))
+		case "wecom":
+			payload, _ := json.Marshal(map[string]any{"msgtype": "text", "text": map[string]string{"content": "["+level+"] "+target+"\n"+msg}})
+			http.Post(nc.Config, "application/json", bytes.NewReader(payload))
+		case "feishu":
+			payload, _ := json.Marshal(map[string]any{"msg_type": "text", "content": map[string]string{"text": "["+level+"] "+target+"\n"+msg}})
+			http.Post(nc.Config, "application/json", bytes.NewReader(payload))
+		case "sms":
+			// 短信网关（阿里云/腾讯云）占位，Config 存 API 地址
+			payload, _ := json.Marshal(map[string]string{"level": level, "target": target, "message": msg})
+			http.Post(nc.Config, "application/json", bytes.NewReader(payload))
 		}
 	}
 }

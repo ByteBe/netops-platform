@@ -4,5 +4,6 @@ export default {
   high: 'Critical', medium: 'Warning', low: 'Info', enabled: 'Enabled', confirm: 'Confirm',
   time: 'Time', nodeOffline: 'Node Offline', cpuHigh: 'CPU High',
   memHigh: 'Memory High', diskHigh: 'Disk High', channel: 'Channel',
-  email: 'Email', webhook: 'Webhook', dingtalk: 'DingTalk'
+  email: 'Email', webhook: 'Webhook', dingtalk: 'DingTalk',
+  wecom: 'WeCom', feishu: 'Feishu', sms: 'SMS'
 }

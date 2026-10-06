@@ -96,6 +96,12 @@ async function loadGraph() {
   if (mode.value === '2d') await nextTick()
 }
 
+async function autoDiscover() {
+  const r = await postEnc('/topology/discover', {})
+  ElMessage.success(`自动发现：新增设备 ${(r as any).devices || 0} 台，连线 ${(r as any).links || 0} 条`)
+  await loadGraph()
+}
+
 function nodeColor(type: string): string {
   const m: Record<string, string> = {
     router: '#2f6bff',
@@ -406,6 +412,9 @@ function svgViewBox() {
         <el-radio-button value="3d">{{ t('topo.mode3d') }}</el-radio-button>
       </el-radio-group>
       <div class="spacer"></div>
+      <el-button type="warning" @click="autoDiscover">
+        <el-icon><Search /></el-icon>自动发现
+      </el-button>
       <el-button type="primary" @click="openDevAdd">
         <el-icon><Plus /></el-icon>{{ t('topo.addDevice') }}
       </el-button>

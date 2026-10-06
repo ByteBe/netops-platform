@@ -170,6 +170,70 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		response.OK(c, gin.H{"ok": true})
 	})
 
+	// 自动发现（基于监控设备清单，按 IP/LLDP 推断）
+	g.POST("/discover", func(c *gin.Context) {
+		var req struct {
+			CIDR string `json:"cidr"` // 可选，如 192.168.1.0/24，留空自动按 /24
+		}
+		c.ShouldBindJSON(&req)
+		// 取监控设备表
+		type MonDev struct {
+			ID   uint
+			Name string
+			IP   string
+		}
+		var devs []MonDev
+		a.DB.Table("devices").Select("id,name,ip").Find(&devs)
+		created := 0
+		linked := 0
+		for _, d := range devs {
+			var exist model.TopoDevice
+			if a.DB.Where("ip = ?", d.IP).First(&exist).Error == nil {
+				continue
+			}
+			td := model.TopoDevice{Name: d.Name, IP: d.IP, Type: "switch"}
+			a.DB.Create(&td)
+			created++
+		}
+		// 按网段互联
+		var tds []model.TopoDevice
+		a.DB.Find(&tds)
+		// 自定义 CIDR：解析前缀长度
+		maskLen := 24
+		if req.CIDR != "" {
+			parts := strings.Split(req.CIDR, "/")
+			if len(parts) == 2 {
+				if n, err := strconv.Atoi(parts[1]); err == nil && n > 0 && n <= 32 {
+					maskLen = n
+				}
+			}
+		}
+		prefixOctets := maskLen / 8
+		for i := 0; i < len(tds); i++ {
+			for j := i + 1; j < len(tds); j++ {
+				ip1, ip2 := tds[i].IP, tds[j].IP
+				if ip1 == "" || ip2 == "" {
+					continue
+				}
+				p1 := strings.Split(ip1, ".")
+				p2 := strings.Split(ip2, ".")
+				if len(p1) != 4 || len(p2) != 4 {
+					continue
+				}
+				if strings.Join(p1[:prefixOctets], ".") == strings.Join(p2[:prefixOctets], ".") {
+					var cnt int64
+					a.DB.Model(&model.TopoLink{}).Where("(source_id=? AND target_id=?) OR (source_id=? AND target_id=?)",
+						tds[i].ID, tds[j].ID, tds[j].ID, tds[i].ID).Count(&cnt)
+					if cnt == 0 {
+						a.DB.Create(&model.TopoLink{SourceID: tds[i].ID, TargetID: tds[j].ID, Status: "unknown"})
+						linked++
+					}
+				}
+			}
+		}
+		response.OK(c, gin.H{"devices": created, "links": linked, "mask": maskLen})
+	})
+
 	// 上传设备图标（jpg/png/svg/vsdx）
 	g.POST("/upload", func(c *gin.Context) {
 		file, err := c.FormFile("file")

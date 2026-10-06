@@ -352,8 +352,10 @@ type AlertRule struct {
 	Threshold float64   `gorm:"type:decimal(10,2)" json:"threshold"` // 阈值%
 	Duration  int       `gorm:"default:1" json:"duration"` // 持续时间(分钟)
 	Level     string    `gorm:"size:16;default:warning" json:"level"` // info/warning/critical
-	Channels  string    `gorm:"size:256;default:'webhook'" json:"channels"` // email/webhook/dingtalk 逗号分隔
+	Channels  string    `gorm:"size:256;default:'webhook'" json:"channels"` // email/webhook/dingtalk/wecom/feishu/sms 逗号分隔
 	Enabled   bool      `gorm:"default:true" json:"enabled"`
+	Converge  int       `gorm:"default:5" json:"converge"`  // 收敛窗口(分钟)，同指标合并
+	Escalate  int       `gorm:"default:30" json:"escalate"` // 未确认升级时间(分钟)，0不升级
 	CreatedAt time.Time `json:"created_at"`
 }
 

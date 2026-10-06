@@ -110,3 +110,32 @@ html.dark {
   &.warn { background: $color-warning; }
   &.idle { background: $color-info; }
 }
+
+// 文字辅助
+.np-text-success { color: $color-success; }
+.np-text-warning { color: $color-warning; }
+.np-text-danger { color: $color-danger; }
+.np-text-muted { color: var(--np-text-2); }
+.np-text-primary { color: var(--np-primary); }
+
+// 间距工具
+.np-mt-8 { margin-top: 8px; }
+.np-mt-16 { margin-top: 16px; }
+.np-mb-8 { margin-bottom: 8px; }
+.np-mb-16 { margin-bottom: 16px; }
+.np-flex { display: flex; align-items: center; }
+.np-flex-between { display: flex; align-items: center; justify-content: space-between; }
+.np-gap-8 { gap: 8px; }
+.np-gap-16 { gap: 16px; }
+
+// 表单行
+.np-form-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+
+// 描述列表
+.np-desc { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.np-desc-item { display: flex; flex-direction: column; gap: 4px; }
+.np-desc-label { color: var(--np-text-2); font-size: 12px; }
+.np-desc-value { font-size: 14px; font-weight: 500; }
+
+// 空状态增强
+.np-empty-lg { text-align: center; color: var(--np-text-2); padding: 80px 0; font-size: 14px; }

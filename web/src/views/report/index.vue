@@ -24,6 +24,7 @@ const genLoading = ref(false)
 const genForm = reactive({
   title: '运维巡检报告',
   send_email: false,
+  channels: [] as string[],
   email_to: '',
   include: ['link', 'monitor', 'db'] as string[]
 })
@@ -153,10 +154,17 @@ async function quickGen(kind: string) {
             <el-checkbox value="node">节点健康性</el-checkbox>
           </el-checkbox-group>
         </el-form-item>
-        <el-form-item :label="t('report.sendMail')">
-          <el-switch v-model="genForm.send_email" />
+        <el-form-item label="发送渠道">
+          <el-select v-model="genForm.channels" multiple placeholder="选择通知渠道（可多选）" style="width:100%">
+            <el-option label="邮件" value="email" />
+            <el-option label="钉钉" value="dingtalk" />
+            <el-option label="企业微信" value="wecom" />
+            <el-option label="飞书" value="feishu" />
+            <el-option label="短信" value="sms" />
+            <el-option label="Webhook" value="webhook" />
+          </el-select>
         </el-form-item>
-        <el-form-item :label="t('report.target')" v-if="genForm.send_email">
+        <el-form-item :label="t('report.target')" v-if="genForm.channels?.includes('email')">
           <el-input v-model="genForm.email_to" placeholder="多个邮箱用逗号分隔" />
         </el-form-item>
       </el-form>

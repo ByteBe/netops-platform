@@ -1,8 +1,10 @@
 package distributed
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -43,6 +45,10 @@ func StartMQTT(a *core.App) {
 		opts.SetAutoReconnect(true)
 		opts.SetConnectRetry(true)
 		opts.SetConnectTimeout(5 * time.Second)
+		// TLS（mqtts:// 自动启用，跳过校验；生产可指定证书）
+		if strings.HasPrefix(broker, "ssl://") || strings.HasPrefix(broker, "tls://") {
+			opts.SetTLSConfig(&tls.Config{InsecureSkipVerify: true})
+		}
 		opts.SetOnConnectHandler(func(c mqtt.Client) {
 			topic := fmt.Sprintf("netops/+/up")
 			if t := c.Subscribe(topic, 1, onIngest); t.Wait() && t.Error() != nil {

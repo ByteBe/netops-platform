@@ -24,8 +24,8 @@ let sessionKey: SessionKey | null = null
 let sm2PubKey = ''
 
 const dbTypes: Record<string, string> = {
-  sqlite: '内置数据库 (SQLite)', mysql: 'MySQL', oracle: 'Oracle',
-  dm: '达梦 (DM8)', kingbase: '人大金仓 (KingbaseES)'
+  sqlite: '内置数据库 (SQLite)', mysql: 'MySQL', oceanbase: 'OceanBase',
+  oracle: 'Oracle', dm: '达梦 (DM8)', kingbase: '人大金仓 (KingbaseES)', postgresql: 'PostgreSQL'
 }
 const tsdbTypes: Record<string, string> = {
   builtin: '内置时序库 (SQLite)', tdengine: 'TDengine', influxdb: 'InfluxDB'
