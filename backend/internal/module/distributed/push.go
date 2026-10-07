@@ -112,6 +112,7 @@ func ForwardToParent(a *core.App, req struct {
 // StartPusher 启动定时上报 goroutine
 func StartPusher(a *core.App) {
 	StartMQTT(a)
+	go startWeeklyReport(a)
 	interval := 30 * time.Second
 	go func() {
 		t := time.NewTicker(interval)
@@ -121,4 +122,20 @@ func StartPusher(a *core.App) {
 			PushOnce(a)
 		}
 	}()
+}
+
+// startWeeklyReport 每周一 09:00 自动生成巡检周报记录
+func startWeeklyReport(a *core.App) {
+	defer func() { recover() }()
+	for {
+		now := time.Now()
+		next := time.Date(now.Year(), now.Month(), now.Day(), 9, 0, 0, 0, now.Location())
+		days := (8 - int(now.Weekday())) % 7
+		if days == 0 { days = 7 }
+		next = next.AddDate(0, 0, days)
+		time.Sleep(next.Sub(now))
+		a.DB.Exec("INSERT INTO report_records (title, start_time, end_time, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+			"每周巡检周报（自动）", now.AddDate(0, 0, -7).Format("2006-01-02 15:04:05"),
+			now.Format("2006-01-02 15:04:05"), "done", now, now)
+	}
 }

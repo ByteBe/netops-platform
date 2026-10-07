@@ -316,7 +316,7 @@ onMounted(() => { loadMCP(); loadEmails(); loadAudits(); loadSec(); loadVersion(
             <el-option label="通用 Webhook" value="webhook" />
           </el-select>
         </el-form-item>
-        <el-form-item label="SMTP" v-if="emailForm.type==='email'"><el-input v-model="emailForm.smtp_host" placeholder="smtp.qq.com / smtp.163.com" /></el-form-item>
+        <el-form-item label="SMTP" v-if="emailForm.type==='email'"><el-input v-model="emailForm.smtp_host" placeholder="smtp.qq.com / smtp.163.com / 自建邮箱 mail.example.com" /></el-form-item>
         <el-form-item label="端口" v-if="emailForm.type==='email'"><el-input-number v-model="emailForm.smtp_port" /></el-form-item>
         <el-form-item label="账号" v-if="emailForm.type==='email'"><el-input v-model="emailForm.user" placeholder="发件邮箱" /></el-form-item>
         <el-form-item label="密码" v-if="emailForm.type==='email'"><el-input v-model="emailForm.password" type="password" show-password placeholder="授权码" /></el-form-item>

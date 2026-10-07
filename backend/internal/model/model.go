@@ -317,7 +317,7 @@ type Node struct {
 	NodeUUID    string     `gorm:"size:64;uniqueIndex;not null" json:"node_uuid"` // 本节点唯一标识
 	Name        string     `gorm:"size:128;not null" json:"name"`                 // 节点名称（单位名）
 	ParentUUID  string     `gorm:"size:64;index;default:''" json:"parent_uuid"`   // 父节点 UUID
-	Level       int        `gorm:"default:1" json:"level"`                       // 1=总部 2=省 3=市 4=县
+	Level       int        `gorm:"default:1" json:"level"`                       // 1=L1总部 2=L2省 3=L3市 4=L4县
 	Address     string     `gorm:"size:256" json:"address"`                       // 上级访问地址（下级填）
 	Token       string     `gorm:"size:128" json:"-"`                             // 认证 token
 	Status      string     `gorm:"size:16;default:"offline"" json:"status"`        // online/offline

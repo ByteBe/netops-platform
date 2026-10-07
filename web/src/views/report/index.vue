@@ -30,7 +30,12 @@ const genForm = reactive({
 })
 
 const viewVisible = ref(false)
+const viewFrame = ref<HTMLIFrameElement>()
 const viewContent = ref('')
+function exportPDF() {
+  const w = viewFrame.value?.contentWindow
+  if (w) w.print()
+}
 
 async function load() {
   loading.value = true
@@ -175,8 +180,12 @@ async function quickGen(kind: string) {
     </el-dialog>
 
     <el-dialog v-model="viewVisible" :title="t('report.view')" width="950px" top="3vh" :destroy-on-close="true">
-      <iframe v-if="viewContent" :srcdoc="viewContent" style="width:100%;height:75vh;border:none;background:#fff"></iframe>
+      <iframe ref="viewFrame" v-if="viewContent" :srcdoc="viewContent" style="width:100%;height:75vh;border:none;background:#fff"></iframe>
       <div v-else style="padding:40px;text-align:center;color:#999">加载中...</div>
+      <template #footer>
+        <el-button type="primary" @click="exportPDF">导出 PDF</el-button>
+        <el-button @click="viewVisible=false">关闭</el-button>
+      </template>
     </el-dialog>
   </div>
 </template>

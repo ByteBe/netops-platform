@@ -20,6 +20,13 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 	// 设备列表（支持按分组过滤）
 	g.GET("/devices", func(c *gin.Context) {
 		q := a.DB.Model(&model.MonitorDevice{})
+		// 多租户：本节点为分部/末端时（有父节点），admin 也只看本节点；总部 admin 看全部
+		role, _ := c.Get("role")
+		var selfNode model.Node
+		a.DB.Where("node_uuid != ''").First(&selfNode)
+		if role != "admin" || selfNode.ParentUUID != "" {
+			q = q.Where("node_uuid = ?", "")
+		}
 		if gid := c.Query("group_id"); gid != "" && gid != "0" {
 			q = q.Where("group_id = ?", gid)
 		}
