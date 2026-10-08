@@ -197,7 +197,8 @@ func Register(a *core.App, g *gin.RouterGroup) {
 			if mode == "" {
 				mode = "standalone"
 			}
-			a.DB.Exec("INSERT INTO system_settings (key, value) VALUES ('deploy_mode', ?) ON DUPLICATE KEY UPDATE value = ?", mode, mode)
+			a.DB.Exec("INSERT OR REPLACE INTO system_settings (key, value) VALUES ('deploy_mode', ?)", mode)
+			a.DB.Exec("INSERT INTO system_settings (key, value) VALUES ('deploy_mode', ?) ON CONFLICT(key) DO UPDATE SET value = ?", mode, mode)
 			a.Ready = true
 			appinit.SyncManagers(a)
 			return gin.H{"ok": true, "message": "初始化完成，请使用管理员账号登录"}, nil
