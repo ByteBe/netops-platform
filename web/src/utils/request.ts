@@ -150,6 +150,7 @@ http.interceptors.response.use(
           /* 忽略 */
         }
       }
+      return Promise.reject(new Error(msg))
     }
     return Promise.reject(error)
   }

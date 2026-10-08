@@ -25,7 +25,6 @@ const overrides: Record<string, NavMeta> = {
   system: { title: '系统管理', icon: 'Setting' },
   dbmigrate: { title: '数据库迁移', icon: 'Coin' },
   distributed: { title: '节点管理', icon: 'Share' },
-  configbackup: { title: '配置备份', icon: 'FolderChecked' },
   alert: { title: '告警中心', icon: 'Bell' }
 }
 

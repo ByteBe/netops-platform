@@ -145,7 +145,7 @@ func SeedData(db *gorm.DB) {
 	}
 	for k, v := range settings {
 		var s model.SystemSetting
-		if err := db.Where("key = ?", k).First(&s).Error; err != nil {
+		if err := db.Where("`key` = ?", k).First(&s).Error; err != nil {
 			db.Create(&model.SystemSetting{Key: k, Value: v})
 		}
 	}
@@ -203,10 +203,10 @@ func SyncManagers(a *core.App) {
 	dockerHostsJSON, _ := json.Marshal(dockerAddrs)
 	dockerEnable := SettingBool(a.DB, "docker_enable")
 	// 如果已经配置了 Docker 主机，自动启用（避免用户每次重启都要去点保存）
-	if !dockerEnable && len(dockerAddrs) > 0 {
+	if !dockerEnable && len(dockerHosts) > 0 {
 		dockerEnable = true
 		a.DB.Where("`key` = ?", "docker_enable").Assign(model.SystemSetting{Value: "true"}).FirstOrCreate(&model.SystemSetting{Key: "docker_enable"})
-		fmt.Printf("[docker] auto-enable because %d host(s) configured\n", len(dockerAddrs))
+		fmt.Printf("[docker] auto-enable because %d host(s) configured\n", len(dockerHosts))
 	}
 	fmt.Printf("[docker] enable=%v interval=%d hosts=%s\n", dockerEnable, SettingInt(a.DB, "docker_interval", 30), string(dockerHostsJSON))
 	a.DockerM.SetConfig(dockerEnable, SettingInt(a.DB, "docker_interval", 30), string(dockerHostsJSON))
@@ -275,7 +275,7 @@ func InitMCPServer(a *core.App) {
 // Setting 读取系统设置
 func Setting(db *gorm.DB, key string) string {
 	var s model.SystemSetting
-	if err := db.Where("key = ?", key).First(&s).Error; err != nil {
+	if err := db.Where("`key` = ?", key).First(&s).Error; err != nil {
 		return ""
 	}
 	return s.Value

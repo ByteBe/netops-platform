@@ -317,8 +317,8 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			response.NotFound(c, "设备不存在")
 			return
 		}
-		out, err := sshsvc.Exec(sshsvc.Target{Host: d.IP, Port: d.SSHPort, User: d.SSHUser,
-			AuthType: d.AuthType, Credential: d.Credential}, []string{"display version | include version"})
+		out, err := sshsvc.Test(sshsvc.Target{Host: d.IP, Port: d.SSHPort, User: d.SSHUser,
+			AuthType: d.AuthType, Credential: d.Credential})
 		if err != nil {
 			response.Fail(c, 400, response.CodeBadRequest, "SSH测试失败: "+err.Error()+" | "+out)
 			return
@@ -350,8 +350,8 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		if d.Vendor == "h3c" {
 			cmd = "display arp all"
 		}
-		out, err := sshsvc.Exec(sshsvc.Target{Host: d.IP, Port: d.SSHPort, User: d.SSHUser,
-			AuthType: d.AuthType, Credential: d.Credential}, []string{cmd})
+		out, err := sshsvc.Run(sshsvc.Target{Host: d.IP, Port: d.SSHPort, User: d.SSHUser,
+			AuthType: d.AuthType, Credential: d.Credential}, cmd)
 		if err != nil {
 			response.Fail(c, 400, response.CodeBadRequest, "读取ARP失败: "+err.Error())
 			return
@@ -363,25 +363,31 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		for _, ip := range allIPs {
 			ipSet[ip] = true
 		}
+		// 批量取出已有记录，避免逐行查询
+		existing := map[string]string{}
+		var oldRecs []model.IPRecord
+		a.DB.Where("subnet_id = ?", id).Find(&oldRecs)
+		for _, r := range oldRecs {
+			existing[r.IP] = r.MAC
+		}
 		imported, skipped := 0, 0
+		var toCreate []model.IPRecord
 		for ip, mac := range arpMap {
 			if !ipSet[ip] {
 				continue
 			}
-			var cnt int64
-			a.DB.Model(&model.IPRecord{}).Where("subnet_id = ? AND ip = ?", id, ip).Count(&cnt)
-			if cnt > 0 {
-				// 已有记录则更新MAC
+			if _, ok := existing[ip]; ok {
 				a.DB.Model(&model.IPRecord{}).Where("subnet_id = ? AND ip = ?", id, ip).
 					Update("mac", mac)
 				skipped++
 				continue
 			}
-			rec := model.IPRecord{SubnetID: uint(id), IP: ip, OwnerName: "ARP自动发现",
-				MAC: mac, Office: "", Remark: "从交换机" + d.Name + "ARP表自动读取"}
-			if err := a.DB.Create(&rec).Error; err == nil {
-				imported++
-			}
+			toCreate = append(toCreate, model.IPRecord{SubnetID: uint(id), IP: ip, OwnerName: "ARP自动发现",
+				MAC: mac, Office: "", Remark: "从交换机" + d.Name + "ARP表自动读取"})
+		}
+		if len(toCreate) > 0 {
+			a.DB.CreateInBatches(toCreate, 100)
+			imported = len(toCreate)
 		}
 		response.OK(c, gin.H{"ok": true, "imported": imported, "updated": skipped, "arp_count": len(arpMap), "raw": out})
 	})
@@ -549,7 +555,7 @@ func subnetStats(a *core.App, s model.Subnet) (used, total int) {
 
 func setting(a *core.App, k string) string {
 	var s model.SystemSetting
-	if err := a.DB.Where("key = ?", k).First(&s).Error; err != nil {
+	if err := a.DB.Where("`key` = ?", k).First(&s).Error; err != nil {
 		return ""
 	}
 	return s.Value
@@ -557,7 +563,7 @@ func setting(a *core.App, k string) string {
 
 func set(a *core.App, k, v string) {
 	var s model.SystemSetting
-	if err := a.DB.Where("key = ?", k).First(&s).Error; err != nil {
+	if err := a.DB.Where("`key` = ?", k).First(&s).Error; err != nil {
 		a.DB.Create(&model.SystemSetting{Key: k, Value: v})
 	} else {
 		a.DB.Model(&s).Update("value", v)

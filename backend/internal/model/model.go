@@ -331,6 +331,22 @@ type Node struct {
 	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
+// ConfigBackupDevice 配置备份设备（交换机/路由器/数据库）
+type ConfigBackupDevice struct {
+	ID         uint      `gorm:"primaryKey" json:"id"`
+	NodeID     string    `gorm:"size:64;index" json:"node_id"`
+	Name       string    `gorm:"size:128;not null" json:"name"`
+	IP         string    `gorm:"size:64;not null" json:"ip"`
+	Type       string    `gorm:"size:16;default:switch" json:"type"` // switch/router/database
+	Vendor     string    `gorm:"size:32;default:h3c" json:"vendor"`   // h3c/huawei/cisco/mysql/...
+	SSHUser    string    `gorm:"size:64" json:"ssh_user"`
+	SSHPort    int       `gorm:"default:22" json:"ssh_port"`
+	AuthType   string    `gorm:"size:16;default:password" json:"auth_type"`
+	Credential string    `gorm:"size:256" json:"credential"`
+	Enabled    bool      `gorm:"default:true" json:"enabled"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
 // ConfigBackup 网络设备配置备份
 type ConfigBackup struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`

@@ -8,6 +8,12 @@ import { getEnc, postEnc, putEnc, delEnc } from '@/utils/request'
 import { WSClient } from '@/utils/ws'
 import { fmtBps, pickColor } from '@/utils'
 
+const fmtPct = (v: number) => {
+  if (v < 0.01) return v.toFixed(3)
+  if (v < 1) return v.toFixed(2)
+  return v.toFixed(1)
+}
+
 const { t } = useI18n()
 
 interface TrafficRule {
@@ -181,21 +187,28 @@ onBeforeUnmount(() => {
     <div class="np-traffic-grid">
       <div v-for="r in rules" :key="r.id" class="np-card np-traffic-card" :style="{ borderLeft: `4px solid ${r.color}` }">
         <div class="np-tc-head">
-          <span class="np-tc-name">{{ r.display_name }}</span>
-          <span class="np-tc-dev">{{ r.device_name }} · {{ r.interface }}</span>
+          <div class="np-tc-head-left">
+            <div class="np-tc-devname">{{ r.device_name || '未知设备' }}</div>
+            <div class="np-tc-meta">
+              <el-tag size="small" effect="plain">{{ r.device_ip || '-' }}</el-tag>
+              <el-tag size="small" type="info" effect="dark">{{ r.interface }}</el-tag>
+              <span v-if="r.display_name && r.display_name !== r.interface" class="np-tc-alias">{{ r.display_name }}</span>
+            </div>
+          </div>
+          <span class="np-tc-status" :class="{up: currents[r.id]?.up}">{{ currents[r.id]?.up ? '在线' : '离线' }}</span>
         </div>
         <div class="np-tc-rates">
           <div class="np-tc-item">
             <div class="np-tc-label">↓ {{ t('traffic.in') }}</div>
             <div class="np-tc-value" style="color: #06b6d4">{{ fmtBps(currents[r.id]?.in_bps || 0) }}</div>
-            <el-progress :percentage="Math.min(currents[r.id]?.in_pct || 0, 100)" :stroke-width="6" color="#06b6d4" />
-            <div class="np-tc-pct">{{ (currents[r.id]?.in_pct || 0).toFixed(1) }}% / {{ r.down_rate }}M</div>
+            <el-progress :percentage="Math.min(currents[r.id]?.in_pct || 0, 100)" :stroke-width="6" color="#06b6d4" :show-text="false" />
+            <div class="np-tc-pct">{{ fmtPct(currents[r.id]?.in_pct || 0) }}% / {{ r.down_rate }}M</div>
           </div>
           <div class="np-tc-item">
             <div class="np-tc-label">↑ {{ t('traffic.out') }}</div>
             <div class="np-tc-value" style="color: #f59e0b">{{ fmtBps(currents[r.id]?.out_bps || 0) }}</div>
-            <el-progress :percentage="Math.min(currents[r.id]?.out_pct || 0, 100)" :stroke-width="6" color="#f59e0b" />
-            <div class="np-tc-pct">{{ (currents[r.id]?.out_pct || 0).toFixed(1) }}% / {{ r.up_rate }}M</div>
+            <el-progress :percentage="Math.min(currents[r.id]?.out_pct || 0, 100)" :stroke-width="6" color="#f59e0b" :show-text="false" />
+            <div class="np-tc-pct">{{ fmtPct(currents[r.id]?.out_pct || 0) }}% / {{ r.up_rate }}M</div>
           </div>
         </div>
         <div class="np-tc-actions">
@@ -260,16 +273,40 @@ onBeforeUnmount(() => {
 .np-traffic-card {
   .np-tc-head {
     display: flex;
-    align-items: baseline;
+    align-items: flex-start;
+    justify-content: space-between;
     gap: 10px;
-    margin-bottom: 10px;
-    .np-tc-name {
-      font-size: 15px;
-      font-weight: 600;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--np-border, #eee);
+    .np-tc-head-left {
+      min-width: 0;
     }
-    .np-tc-dev {
-      color: var(--np-text-2);
+    .np-tc-devname {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .np-tc-meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      .np-tc-alias {
+        color: var(--np-text-2);
+        font-size: 12px;
+      }
+    }
+    .np-tc-status {
       font-size: 12px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: #fef0f0;
+      color: #f56c6c;
+      &.up {
+        background: #f0f9eb;
+        color: #67c23a;
+      }
     }
   }
   .np-tc-rates {

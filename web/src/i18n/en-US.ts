@@ -8,7 +8,6 @@ import topo from './en-US/topo'
 import monitor from './en-US/monitor'
 import container from './en-US/container'
 import report from './en-US/report'
-import configbackup from './en-US/configbackup'
 import alert from './en-US/alert'
 import node from './en-US/node'
 import dbmon from './en-US/dbmon'
@@ -22,6 +21,6 @@ import lang from './en-US/lang'
 
 export default {
   app, nav, common, login, dashboard, link, topo, monitor, container,
-  report, configbackup, alert, node, dbmon, script, ipam, traffic,
+  report, alert, node, dbmon, script, ipam, traffic,
   system, profile, theme, lang
 }

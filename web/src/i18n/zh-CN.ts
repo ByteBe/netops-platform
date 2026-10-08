@@ -8,7 +8,6 @@ import topo from './zh-CN/topo'
 import monitor from './zh-CN/monitor'
 import container from './zh-CN/container'
 import report from './zh-CN/report'
-import configbackup from './zh-CN/configbackup'
 import alert from './zh-CN/alert'
 import node from './zh-CN/node'
 import dbmon from './zh-CN/dbmon'
@@ -22,6 +21,6 @@ import lang from './zh-CN/lang'
 
 export default {
   app, nav, common, login, dashboard, link, topo, monitor, container,
-  report, configbackup, alert, node, dbmon, script, ipam, traffic,
+  report, alert, node, dbmon, script, ipam, traffic,
   system, profile, theme, lang
 }

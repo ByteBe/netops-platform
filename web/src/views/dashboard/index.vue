@@ -49,6 +49,7 @@ interface Overview {
 
 const kpi = ref<Kpi | null>(null)
 const nodeHealth = ref<{total:number;online:number;offline:number;device_total:number;container_total:number}|null>(null)
+const deployMode = ref<'standalone'|'distributed'>('standalone')
 const links = ref<Snapshot[]>([])
 const devices = ref<Snapshot[]>([])
 const dbs = ref<Snapshot[]>([])
@@ -78,7 +79,13 @@ async function loadOverview() {
   links.value = o.links as unknown as Snapshot[]
   devices.value = o.devices
   dbs.value = o.dbs as unknown as Snapshot[]
-  try { nodeHealth.value = await getEnc('/distributed/health') } catch {}
+  try {
+    const self = await getEnc('/distributed/self')
+    deployMode.value = (self as any).deploy_mode || 'standalone'
+    if (deployMode.value === 'distributed') {
+      nodeHealth.value = await getEnc('/distributed/health')
+    }
+  } catch {}
   now.value = Date.now()
 }
 

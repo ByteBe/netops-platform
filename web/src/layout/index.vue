@@ -18,7 +18,7 @@ const authStore = useAuthStore()
 const groups: { title: string; items: string[] }[] = [
   { title: '网络监控', items: ['linkdetect', 'monitor', 'topology', 'traffic'] },
   { title: '告警中心', items: ['alert'] },
-  { title: '资源与资产', items: ['resource', 'ipam', 'subnet', 'configbackup'] },
+  { title: '资源与资产', items: ['resource', 'ipam', 'subnet'] },
   { title: '基础设施', items: ['container', 'k8s', 'dbmonitor'] },
   { title: '运维工具', items: ['report', 'scriptgen'] },
   { title: '系统管理', items: ['system', 'distributed', 'dbmigrate'] }
