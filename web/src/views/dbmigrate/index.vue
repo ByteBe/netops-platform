@@ -28,7 +28,10 @@
                 <el-option label="SQLite" value="sqlite" />
                 <el-option label="MySQL" value="mysql" />
                 <el-option label="PostgreSQL" value="postgres" />
+                <el-option label="Oracle" value="oracle" />
+                <el-option label="达梦 DM" value="dm" />
                 <el-option label="人大金仓 Kingbase" value="kingbase" />
+                <el-option label="OceanBase" value="oceanbase" />
               </el-select>
             </el-form-item>
           </el-col>

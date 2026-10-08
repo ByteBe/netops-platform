@@ -8,7 +8,7 @@ import { validatePasswordStrength } from '@/utils'
 import { useAppStore } from '@/stores/app'
 import { login, changePassword, fetchPublicKey } from '@/api/login'
 import type { LoginForm, ChangePwdForm } from '@/api/types'
-import './style.scss'
+import '@/styles/login.scss'
 
 const route = useRoute()
 const router = useRouter()

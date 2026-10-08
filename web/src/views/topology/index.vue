@@ -7,6 +7,8 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { getEnc, postEnc, putEnc, delEnc } from '@/utils/request'
 import { deviceIcons, getDeviceSvgDataUrl } from '@/assets/icons/device-icons'
+import Topo3D from './Topo3D.vue'
+import Topo2D from './Topo2D.vue'
 
 const { t } = useI18n()
 
@@ -99,6 +101,16 @@ async function loadGraph() {
 async function autoDiscover() {
   const r = await postEnc('/topology/discover', {})
   ElMessage.success(`自动发现：新增设备 ${(r as any).devices || 0} 台，连线 ${(r as any).links || 0} 条`)
+  await loadGraph()
+}
+async function lldpDiscover() {
+  const r = await postEnc('/topology/lldp-discover', {})
+  ElMessage.success(`LLDP邻接：处理设备 ${(r as any).devices || 0} 台，新增连线 ${(r as any).links || 0} 条`)
+  await loadGraph()
+}
+async function autoLayout() {
+  const r = await postEnc('/topology/auto-layout', {})
+  ElMessage.success(`已自动布局 ${(r as any).updated || 0} 台设备`)
   await loadGraph()
 }
 
@@ -415,6 +427,8 @@ function svgViewBox() {
       <el-button type="warning" @click="autoDiscover">
         <el-icon><Search /></el-icon>自动发现
       </el-button>
+      <el-button type="danger" @click="lldpDiscover">LLDP邻接</el-button>
+      <el-button @click="autoLayout">自动布局</el-button>
       <el-button type="primary" @click="openDevAdd">
         <el-icon><Plus /></el-icon>{{ t('topo.addDevice') }}
       </el-button>
@@ -424,42 +438,10 @@ function svgViewBox() {
     </div>
 
     <!-- 2D SVG 拓扑 -->
-    <div v-show="mode === '2d'" class="np-card np-topo-2d">
-      <svg ref="svgRef" :viewBox="`0 0 ${svgViewBox().width} ${svgViewBox().height}`" class="np-topo-svg" @mousemove="onSvgMouseMove" @mouseup="onSvgMouseUp" @mouseleave="onSvgMouseUp">
-        <!-- 连线 -->
-        <g v-for="e in edges" :key="'e' + e.id">
-          <line
-            :x1="nodeById(e.source)?.x ?? 0" :y1="nodeById(e.source)?.y ?? 0"
-            :x2="nodeById(e.target)?.x ?? 0" :y2="nodeById(e.target)?.y ?? 0"
-            :stroke="e.color || '#22c55e'" stroke-width="3" class="np-topo-line"
-          />
-          <!-- 连线中点：多IP地址显示 -->
-          <g :transform="`translate(${(nodeById(e.source)?.x ?? 0 + (nodeById(e.target)?.x ?? 0)) / 2}, ${((nodeById(e.source)?.y ?? 0) + (nodeById(e.target)?.y ?? 0)) / 2})`">
-            <rect x="-70" y="-14" width="140" height="28" rx="6" fill="rgba(15,23,42,0.6)" />
-            <text text-anchor="middle" dominant-baseline="middle" fill="#e2e8f0" font-size="11">
-              {{ e.ips.join(', ') || e.name || e.status }}
-            </text>
-          </g>
-        </g>
-        <!-- 节点 -->
-        <g
-          v-for="n in nodes" :key="'n' + n.id"
-          class="np-topo-node"
-          :transform="`translate(${n.x}, ${n.y})`"
-          @click="selectedNode = n.id" @mousedown="onNodeMouseDown($event, n)"
-        >
-          <rect x="-30" y="-30" width="60" height="60" rx="12" :fill="nodeColor(n.type)"
-            :stroke="selectedNode === n.id ? '#ffffff' : 'transparent'" stroke-width="3" opacity="0.92" />
-          <image :href="getNodeImg(n)" x="-20" y="-20" width="40" height="40" />
-          <text text-anchor="middle" y="46" fill="var(--np-text-1)" font-size="13" font-weight="600">{{ n.name }}</text>
-          <text text-anchor="middle" y="62" fill="var(--np-text-2)" font-size="11">{{ n.ip }}</text>
-        </g>
-        <text v-if="!nodes.length" x="450" y="260" text-anchor="middle" fill="var(--np-text-2)">{{ t('common.noData') }}</text>
-      </svg>
-    </div>
+    <Topo2D v-show="mode === '2d'" :nodes="nodes" :edges="edges" />
 
     <!-- 3D 视图 -->
-    <div v-show="mode === '3d'" ref="threeRef" class="np-card np-topo-3d"></div>
+    <Topo3D v-show="mode === '3d'" :nodes="nodes" :edges="edges" />
 
     <!-- 设备列表 -->
     <div class="np-card">

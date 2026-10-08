@@ -194,4 +194,29 @@ func trimBearer(s string) string {
 func init() {
 	modreg.Register("auth", Register)
 	modreg.RegisterProtected("auth", RegisterProtected)
+	modreg.RegisterProtected("apikey", registerAPIKey)
+}
+
+// registerAPIKey API 开放平台：查看/生成 OpenAPI Token
+func registerAPIKey(a *core.App, g *gin.RouterGroup) {
+	g.GET("/apikey", func(c *gin.Context) {
+		uid, _ := c.Get("uid")
+		var u model.User
+		a.DB.First(&u, uid)
+		token := u.APIToken
+		if token == "" {
+			token = randStr(32)
+			a.DB.Model(&u).Update("api_token", token)
+		}
+		response.OK(c, gin.H{"token": token})
+	})
+}
+
+func randStr(n int) string {
+	const abc = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = abc[time.Now().UnixNano()%int64(len(abc))]
+	}
+	return string(b)
 }

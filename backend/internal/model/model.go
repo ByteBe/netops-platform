@@ -13,6 +13,7 @@ type User struct {
 	Salt           string     `gorm:"size:32" json:"-"`
 	Role           string     `gorm:"size:16;default:operator" json:"role"` // admin/operator/viewer
 	NodeScope      string     `gorm:"size:32;default:all" json:"node_scope"` // all=全部(总部) / node_id=仅本节点及下级
+	APIToken       string     `gorm:"size:64;index" json:"api_token"` // OpenAPI Token
 	Status         string     `gorm:"size:16;default:active" json:"status"` // active/disabled
 	MustChangePwd    bool       `gorm:"default:false" json:"must_change_pwd"`
 	LastPwdChangeAt *time.Time `json:"last_pwd_change_at"`

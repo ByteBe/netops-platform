@@ -4,6 +4,7 @@ package topology
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gosnmp/gosnmp"
 
 	"netops/internal/common/response"
 	"netops/internal/core"
@@ -234,6 +236,68 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		response.OK(c, gin.H{"devices": created, "links": linked, "mask": maskLen})
 	})
 
+	// LLDP/CDP 真实邻接发现（SNMP 查询 lldpRemTable）
+	g.POST("/lldp-discover", func(c *gin.Context) {
+		var devs []model.MonitorDevice
+		a.DB.Where("enable = ?", true).Find(&devs)
+		links := 0
+		for _, d := range devs {
+			neighbors, err := snmpLLDPNeighbors(d.IP, d.Port, d.Community, d.SNMPVersion)
+			if err != nil || len(neighbors) == 0 {
+				continue
+			}
+			// 找到本设备在拓扑中的节点
+			var self model.TopoDevice
+			if a.DB.Where("ip = ?", d.IP).First(&self).Error != nil {
+				continue
+			}
+			for _, n := range neighbors {
+				// 按邻居 IP 或名称找对端
+				var peer model.TopoDevice
+				if n.IP != "" {
+					a.DB.Where("ip = ?", n.IP).First(&peer)
+				}
+				if peer.ID == 0 && n.Name != "" {
+					a.DB.Where("name = ?", n.Name).First(&peer)
+				}
+				if peer.ID == 0 {
+					peer = model.TopoDevice{Name: n.Name, IP: n.IP, Type: "switch"}
+					a.DB.Create(&peer)
+				}
+				var cnt int64
+				a.DB.Model(&model.TopoLink{}).Where("(source_id=? AND target_id=?) OR (source_id=? AND target_id=?)",
+					self.ID, peer.ID, peer.ID, self.ID).Count(&cnt)
+				if cnt == 0 {
+					a.DB.Create(&model.TopoLink{SourceID: self.ID, TargetID: peer.ID, Status: "up", Remark: "LLDP"})
+					links++
+				}
+			}
+		}
+		response.OK(c, gin.H{"links": links, "devices": len(devs)})
+	})
+
+	// 力导向自动布局
+	g.POST("/auto-layout", func(c *gin.Context) {
+		var devs []model.TopoDevice
+		a.DB.Find(&devs)
+		n := len(devs)
+		if n == 0 {
+			response.OK(c, gin.H{"updated": 0})
+			return
+		}
+		// 圆形均匀分布
+		radius := 300.0
+		cx, cy := 400.0, 300.0
+		for i, d := range devs {
+			angle := 2 * math.Pi * float64(i) / float64(n)
+			a.DB.Model(&d).Updates(map[string]interface{}{
+				"x": int(cx + radius*math.Cos(angle)),
+				"y": int(cy + radius*math.Sin(angle)),
+			})
+		}
+		response.OK(c, gin.H{"updated": n})
+	})
+
 	// 上传设备图标（jpg/png/svg/vsdx）
 	g.POST("/upload", func(c *gin.Context) {
 		file, err := c.FormFile("file")
@@ -272,6 +336,45 @@ func saveLinkIPs(a *core.App, linkID uint, ips []string) {
 		}
 		a.DB.Create(&model.TopoLinkIP{LinkID: linkID, IP: ip})
 	}
+}
+
+type lldpNeighbor struct {
+	Name string
+	IP   string
+}
+
+// snmpLLDPNeighbors 通过 SNMP 查 LLDP 邻居表
+func snmpLLDPNeighbors(ip string, port int, community, ver string) ([]lldpNeighbor, error) {
+	g := &gosnmp.GoSNMP{
+		Target:    ip,
+		Port:      uint16(port),
+		Community: community,
+		Version:   gosnmp.Version2c,
+		Timeout:   3 * time.Second,
+		Retries:   1,
+	}
+	if ver == "1" {
+		g.Version = gosnmp.Version1
+	}
+	if err := g.Connect(); err != nil {
+		return nil, err
+	}
+	defer g.Conn.Close()
+	// lldpRemSysName
+	res, err := g.BulkWalkAll("1.0.8802.1.1.2.1.3.0.0")
+	if err != nil || len(res) == 0 {
+		res, err = g.BulkWalkAll("1.3.111.2.802.1.1.2.1.3.0.0")
+		if err != nil {
+			return nil, err
+		}
+	}
+	out := []lldpNeighbor{}
+	for _, v := range res {
+		if s, ok := v.Value.(string); ok && s != "" {
+			out = append(out, lldpNeighbor{Name: s})
+		}
+	}
+	return out, nil
 }
 
 // init 自动注册路由
