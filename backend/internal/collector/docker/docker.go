@@ -2,9 +2,11 @@
 package docker
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
+	"net"
 	"net/http"
 	"os/exec"
 	"strings"
@@ -15,6 +17,42 @@ import (
 	"netops/internal/notify"
 	"netops/internal/tsdb"
 )
+
+// 本地 Docker：优先 unix socket，失败回退 TCP 2375
+var localClient = &http.Client{
+	Timeout: 10 * time.Second,
+	Transport: &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			return net.DialTimeout("unix", "/var/run/docker.sock", 5*time.Second)
+		},
+	},
+}
+
+func dockerTransport(host string) *http.Transport {
+	addr := strings.TrimPrefix(host, "tcp://")
+	if addr == "" {
+		// 本机：unix socket
+		return &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return net.DialTimeout("unix", "/var/run/docker.sock", 5*time.Second)
+			},
+		}
+	}
+	return &http.Transport{}
+}
+
+func dockerClient(host string) *http.Client {
+	return &http.Client{Timeout: 10 * time.Second, Transport: dockerTransport(host)}
+}
+
+func dockerURL(host, path string) string {
+	addr := strings.TrimPrefix(host, "tcp://")
+	if addr == "" {
+		// unix socket 用占位 host，实际 dial 走 socket
+		return "http://localhost" + path
+	}
+	return "http://" + addr + path
+}
 
 type Container struct {
 	ID     string  `json:"id"`
@@ -91,12 +129,6 @@ func (m *Monitor) loop() {
 	}
 }
 
-func dockerURL(host, path string) string {
-	addr := strings.TrimPrefix(host, "tcp://")
-	if addr == "" { addr = "127.0.0.1:2375" }
-	return "http://" + addr + path
-}
-
 func hostName(host string) string {
 	if host == "" { return "本机" }
 	return host
@@ -166,7 +198,7 @@ func (m *Monitor) Snapshot() []Container {
 }
 
 func (m *Monitor) listContainers(host string) ([]Container, error) {
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := dockerClient(host)
 	resp, err := client.Get(dockerURL(host, "/containers/json?all=1"))
 	if err != nil { return nil, fmt.Errorf("连接失败: %w", err) }
 	defer resp.Body.Close()
@@ -265,7 +297,7 @@ type cpuStats struct {
 }
 
 func TestHost(host string) (string, error) {
-	client := &http.Client{Timeout: 8 * time.Second}
+	client := dockerClient(host)
 	resp, err := client.Get(dockerURL(host, "/version"))
 	if err != nil { return "", fmt.Errorf("连接失败: %w", err) }
 	defer resp.Body.Close()
