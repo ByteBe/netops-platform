@@ -306,16 +306,23 @@ func renderContainerSection(a *core.App, stats map[string]int) string {
 	containerCount := map[string]int{}
 	abnormalCount := map[string]int{}
 	for _, c := range containers {
-		containerCount[c.Host]++
+		k := c.Host
+		if k == "" { k = "本机" }
+		containerCount[k]++
 		if c.State != "running" {
-			abnormalCount[c.Host]++
+			abnormalCount[k]++
 		}
 	}
 
 	for _, h := range hosts {
 		stats["total"]++
 		online := false
-		if v, ok := dockerStatus[h.Address]; ok { online = v }
+		key := h.Address
+		if key == "" || key == "本机" || strings.HasPrefix(key, "unix://") { key = "本机" }
+		if v, ok := dockerStatus[key]; ok { online = v }
+		if !online {
+			if v, ok := dockerStatus[h.Address]; ok { online = v }
+		}
 		status, color := "离线", "#f5222d"
 		if online {
 			status, color = "在线", "#52c41a"
