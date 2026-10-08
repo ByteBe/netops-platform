@@ -135,14 +135,14 @@ async function saveRoles() { ElMessage.success('已保存') }
 const checking = ref(false), upgrading = ref(false), latest = ref<any>(null)
 async function loadVersion() { try { ver.value = await getEnc('/update/version') } catch {} }
 async function checkUpdate() { checking.value = true; try { latest.value = await getEnc('/update/check') } catch(e:any){ ElMessage.error(e.message||'检查失败') } finally { checking.value = false } }
-async function doOnline() { upgrading.value = true; try { await postEnc('/update/online', { url: latest.value.download_url }); ElMessage.success('正在升级'); setTimeout(()=>location.reload(), 8000) } catch(e:any){ ElMessage.error(e.message||'升级失败') } finally { upgrading.value = false } }
+async function doOnline() { upgrading.value = true; try { await postEnc('/update/online', { url: latest.value.download_url }); ElMessage.success('正在升级，完成后自动跳转登录'); setTimeout(()=>{ localStorage.clear(); location.href='/login'; }, 6000) } catch(e:any){ ElMessage.error(e.message||'升级失败') } finally { upgrading.value = false } }
 async function doUpload(opt: any) {
   const fd = new FormData(); fd.append('file', opt.file)
   const r = await fetch('/api/v1/update/upload', { method: 'POST', headers: { Authorization: 'Bearer ' + localStorage.getItem('np-token') || '' }, body: fd })
   const j = await r.json()
   if (j.code === 0) { uploadResult.value = j.data; ElMessage.success('上传成功') } else ElMessage.error(j.message || '上传失败')
 }
-async function doApply() { applying.value = true; try { await postEnc('/update/apply', { tmp_path: uploadResult.value.tmp_path }); ElMessage.success('更新完成'); setTimeout(()=>location.reload(), 5000) } finally { applying.value = false } }
+async function doApply() { applying.value = true; try { await postEnc('/update/apply', { tmp_path: uploadResult.value.tmp_path }); ElMessage.success('更新完成，正在跳转登录'); setTimeout(()=>{ localStorage.clear(); location.href='/login'; }, 4000) } finally { applying.value = false } }
 
 onMounted(() => { loadMCP(); loadEmails(); loadAudits(); loadSec(); loadVersion() })
 </script>
