@@ -1,5 +1,25 @@
 export default {
   dockerEnable: 'Docker Monitor', k8sEnable: 'Kubernetes Monitor', interval: 'Interval(s)',
   apiServer: 'API Server', token: 'Token', docker: 'Docker', k8s: 'Kubernetes',
-  cpu: 'CPU', mem: 'Memory', name: 'Name', status: 'Status'
+  cpu: 'CPU', mem: 'Memory', name: 'Name', status: 'Status',
+  running: 'Running', paused: 'Paused', exited: 'Exited', dead: 'Dead',
+  created: 'Created', restarting: 'Restarting',
+  nameRequired: 'Name is required',
+  saved: 'Saved',
+  confirmDelete: 'Delete',
+  addrEmptyLocal: 'Empty address = local host',
+  testSuccess: 'Connection OK', testFail: 'Connection failed',
+  done: 'Done',
+  enabled: 'Enabled', notEnabled: 'Not enabled',
+  saveConfig: 'Save Config', collectNow: 'Collect Now',
+  dockerHosts: 'Docker Hosts', addHost: 'Add Host',
+  online: 'Online', offline: 'Offline',
+  hostName: 'Host Name', address: 'Address', local: 'Local',
+  remark: 'Remark', yes: 'Yes', no: 'No', actions: 'Actions',
+  edit: 'Edit', del: 'Delete',
+  containers: 'Containers', host: 'Host', image: 'Image',
+  editHost: 'Edit Host', addHostTitle: 'Add Host',
+  addrPlaceholder: 'Empty=local; remote tcp://IP:2375',
+  testConn: 'Test Connection',
+  cancel: 'Cancel', save: 'Save'
 }

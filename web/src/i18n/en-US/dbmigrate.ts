@@ -1,0 +1,23 @@
+export default {
+  title: 'Database Migration',
+  runMigrate: 'Run Migration on Current DB',
+  dbType: 'DB Type', tsdb: 'Time-Series DB', host: 'Host',
+  dbNamePath: 'DB Name/Path', user: 'User', pool: 'Pool',
+  switchDb: 'Switch Database (auto restart after save)',
+  businessDb: 'Business Database',
+  type: 'Type', dm: 'Dameng DM', kingbase: 'KingbaseES',
+  port: 'Port', filePath: 'File Path', dbName: 'DB Name', password: 'Password',
+  tsDatabase: 'Time-Series Database', builtin: 'Built-in (memory)',
+  saveRestart: 'Save & Restart', saveOnly: 'Save Only',
+  tableStructure: 'Table Structure', tableName: 'Table', tableComment: 'Table Comment', rows: 'Rows',
+  migrateDone: 'Migration done', failed: 'Failed', saved: 'Saved',
+  restarting: 'Restarting', restartMsg: 'Service is restarting, please refresh later',
+  t_users: 'Users', t_audit: 'Audit Logs', t_groups: 'Device Groups', t_devices: 'Monitored Devices',
+  t_link: 'Link Check Tasks', t_topoDev: 'Topo Devices', t_topoLink: 'Topo Links', t_topoIp: 'Topo Link IPs',
+  t_db: 'DB Instances', t_tpl: 'Script Templates', t_hist: 'Script History',
+  t_subnet: 'Subnets', t_ip: 'IP Records', t_bind: 'Bind Devices', t_traffic: 'Traffic Rules',
+  t_ai: 'AI Config', t_mcp: 'MCP Agents', t_email: 'Email Config',
+  t_report: 'Report Records', t_setting: 'System Settings', t_docker: 'Docker Hosts',
+  t_k8s: 'K8s Clusters', t_tskv: 'TS Data',
+  t_nodes: 'Nodes', t_backup: 'Config Backups', t_alertRule: 'Alert Rules', t_alertEvent: 'Alert Events', t_notify: 'Notify Channels'
+}

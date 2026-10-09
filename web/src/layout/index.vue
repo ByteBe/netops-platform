@@ -15,17 +15,17 @@ const appStore = useAppStore()
 const authStore = useAuthStore()
 
 // 功能路由分组（左侧导航）
-const groups: { title: string; items: string[] }[] = [
-  { title: '网络监控', items: ['linkdetect', 'monitor', 'topology', 'traffic'] },
-  { title: '告警中心', items: ['alert'] },
-  { title: '资源与资产', items: ['resource', 'ipam', 'subnet'] },
-  { title: '基础设施', items: ['container', 'k8s', 'dbmonitor'] },
-  { title: '运维工具', items: ['report', 'scriptgen'] },
-  { title: '系统管理', items: ['system', 'distributed', 'dbmigrate'] }
+const groups: { titleKey: string; items: string[] }[] = [
+  { titleKey: 'group_monitor', items: ['linkdetect', 'monitor', 'topology', 'traffic', 'bgpmon'] },
+  { titleKey: 'group_alert', items: ['alert'] },
+  { titleKey: 'group_asset', items: ['resource', 'ipam', 'subnet'] },
+  { titleKey: 'group_infra', items: ['container', 'k8s', 'dbmonitor'] },
+  { titleKey: 'group_ops', items: ['report', 'scriptgen'] },
+  { titleKey: 'group_system', items: ['system', 'distributed', 'dbmigrate'] }
 ]
 const menus = computed(() => {
   return groups.map(g => ({
-    title: g.title,
+    title: t('nav.' + g.titleKey),
     items: g.items
       .filter(n => navMeta[n] && !navMeta[n].hidden)
       .map(n => ({ name: n, title: t(navMeta[n].title), icon: navMeta[n].icon }))

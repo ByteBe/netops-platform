@@ -23,7 +23,8 @@ interface GroupDevice {
 
 const groups = ref<DeviceGroup[]>([])
 const groupTypeMap: Record<string, string> = {
-  switch: '交换机', router: '路由器', firewall: '防火墙', server: '服务器', database: '数据库', other: '其他'
+  switch: t('resource.switch'), router: t('resource.router'), firewall: t('resource.firewall'),
+  server: t('resource.server'), database: t('resource.database'), other: t('resource.other')
 }
 
 const dialogVisible = ref(false)
@@ -74,7 +75,7 @@ async function showDevices(g: DeviceGroup) {
 
 async function autoAssign() {
   const r = await postEnc<{ assigned: number }>('/resource/auto-assign', {})
-  ElMessage.success(`已自动归集 ${r.assigned} 台设备`)
+  ElMessage.success(t('resource.autoAssign') + `: ${r.assigned} ${t('resource.devices')}`)
   await load()
 }
 
@@ -84,10 +85,10 @@ onMounted(load)
 <template>
   <div class="np-page">
     <div class="np-toolbar">
-      <span class="np-page-desc">将添加的监控设备按资源分组分类管理</span>
+      <span class="np-page-desc">{{ t('resource.desc') }}</span>
       <div class="spacer"></div>
       <el-button @click="autoAssign">
-        <el-icon><MagicStick /></el-icon>自动归集
+        <el-icon><MagicStick /></el-icon>{{ t('resource.autoAssign') }}
       </el-button>
       <el-button type="primary" @click="openAdd">
         <el-icon><Plus /></el-icon>{{ t('common.add') }}
@@ -103,7 +104,7 @@ onMounted(load)
             <el-tag size="small" effect="plain">{{ groupTypeMap[g.type] || g.type }}</el-tag>
           </div>
         </div>
-        <div class="np-group-count">{{ g.device_count || 0 }} 台设备</div>
+        <div class="np-group-count">{{ g.device_count || 0 }} {{ t('resource.devices') }}</div>
         <div class="np-group-actions" @click.stop>
           <el-button size="small" text type="primary" @click="openEdit(g)">{{ t('common.edit') }}</el-button>
           <el-button size="small" text type="danger" @click="remove(g)">{{ t('common.delete') }}</el-button>
@@ -122,7 +123,7 @@ onMounted(load)
             <el-option v-for="(label, key) in groupTypeMap" :key="key" :label="label" :value="key" />
           </el-select>
         </el-form-item>
-        <el-form-item label="颜色">
+        <el-form-item :label="t('resource.color')">
           <el-color-picker v-model="form.color" />
         </el-form-item>
         <el-form-item :label="t('common.remark')">
@@ -135,26 +136,26 @@ onMounted(load)
       </template>
     </el-dialog>
 
-    <el-dialog v-model="devicesVisible" :title="`组内设备 - ${currentGroup?.name}`" width="720px">
+    <el-dialog v-model="devicesVisible" :title="`${t('resource.groupDevices')} - ${currentGroup?.name}`" width="720px">
       <el-table :data="groupDevices" v-loading="devicesLoading" size="small" stripe>
-        <el-table-column prop="name" label="名称" min-width="140" />
-        <el-table-column prop="ip" label="IP/地址" min-width="130" />
-        <el-table-column prop="type" label="类型" width="90">
+        <el-table-column prop="name" :label="t('resource.name')" min-width="140" />
+        <el-table-column prop="ip" :label="t('resource.ipAddr')" min-width="130" />
+        <el-table-column :label="t('resource.type')" width="90">
           <template #default="{ row }">{{ groupTypeMap[row.type] || row.type }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="70">
+        <el-table-column :label="t('resource.status')" width="70">
           <template #default="{ row }">
-            <el-tag size="small" :type="row.up ? 'success' : 'danger'">{{ row.up ? '在线' : '离线' }}</el-tag>
+            <el-tag size="small" :type="row.up ? 'success' : 'danger'">{{ row.up ? t('resource.online') : t('resource.offline') }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="指标" min-width="150">
+        <el-table-column :label="t('resource.metrics')" min-width="150">
           <template #default="{ row }">
-            <span v-if="row.source === 'db'">连接数: {{ row.conns || 0 }}</span>
+            <span v-if="row.source === 'db'">{{ t('resource.connections') }}: {{ row.conns || 0 }}</span>
             <span v-else>CPU: {{ row.cpu ? row.cpu.toFixed(1)+'%' : '--' }} ｜ MEM: {{ row.mem ? row.mem.toFixed(1)+'%' : '--' }}</span>
           </template>
         </el-table-column>
       </el-table>
-      <div v-if="!groupDevices.length && !devicesLoading" style="text-align:center;color:#999;padding:30px">该分组暂无设备</div>
+      <div v-if="!groupDevices.length && !devicesLoading" style="text-align:center;color:#999;padding:30px">{{ t('resource.empty') }}</div>
     </el-dialog>
   </div>
 </template>

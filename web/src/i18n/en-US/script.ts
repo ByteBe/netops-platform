@@ -3,5 +3,20 @@ export default {
   params: 'Parameters', generated: 'Generated Script', history: 'History',
   generate: 'Generate', huawei: 'Huawei', h3c: 'H3C', router: 'Router',
   switch: 'Switch', ac: 'AC Controller',
-  templateTip: 'Templates are built-in, stored in database and cannot be modified from frontend/backend'
+  templateTip: 'Templates are built-in, stored in database and cannot be modified from frontend/backend',
+  copied: 'Copied',
+  generatedResult: 'Generated Result',
+  copy: 'Copy',
+  fillParamsTip: '// Fill params and click "Generate"',
+  cleanVersion: 'Clean Version (no comments)',
+  clean: '// clean',
+  selectFeature: 'Select a feature from the left',
+  prefixName: 'Prefix List Name',
+  seq: 'Seq', matchNet: 'Match Network', mask: 'Mask',
+  addRow: '+ Add Row',
+  scriptGen: 'Script Generator',
+  cisco: 'Cisco',
+  clear: 'Clear',
+  fillRequired: 'Please fill',
+  pleaseInput: 'Please input'
 }

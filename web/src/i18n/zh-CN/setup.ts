@@ -1,0 +1,20 @@
+export default {
+  subtitle: '系统初始化向导 - 选择存储数据库与时序数据库，创建管理员账号',
+  stepDeploy: '部署模式', stepDb: '存储数据库', stepTsdb: '时序数据库', stepAdmin: '管理员账号',
+  deployMode: '部署模式',
+  standalone: '单机部署', distributed: '分布式级联部署',
+  standaloneTip: '单机部署：所有数据在本机采集与存储，不与其他节点级联。',
+  distributedTip: '分布式部署：本节点可作为总部或下级，通过 HTTP/MQTT 与上下级节点同步设备/容器数据。后续可在系统中切换。',
+  next: '下一步', prev: '上一步',
+  storageDb: '存储数据库', dataFilePath: '数据文件路径',
+  host: '主机', port: '端口', username: '用户名', password: '密码', dbName: '库名',
+  testConn: '测试连接',
+  tsdb: '时序数据库', dataDir: '数据目录', database: '数据库',
+  adminUser: '管理员用户名', initialPwd: '初始密码', employeeNo: '工号', email: '邮箱',
+  finish: '完成初始化',
+  connOk: '连接成功', testFail: '测试失败',
+  done: '初始化完成，正在跳转到登录页...', failed: '初始化失败',
+  alreadyInit: '系统已完成初始化',
+  sqlite: '内置数据库 (SQLite)', dm: '达梦 (DM8)', kingbase: '人大金仓 (KingbaseES)',
+  builtin: '内置时序库 (SQLite)'
+}

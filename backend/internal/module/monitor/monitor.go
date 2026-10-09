@@ -48,6 +48,7 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 				"enable": d.Enable, "remark": d.Remark, "status": d.Status,
 				"username": d.Username, "auth_proto": d.AuthProto, "priv_proto": d.PrivProto,
 				"auth_pass": d.AuthPass, "priv_pass": d.PrivPass,
+				"ssh_user": d.SshUser, "ssh_pass": d.SshPass, "ssh_port": d.SshPort, "bgp_enable": d.BgpEnable,
 			}
 			if s, ok := a.SnmpMgr.DeviceSnapshotByID(d.ID); ok {
 				item["online"] = s.Up
@@ -116,6 +117,7 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			"username": req.Username, "auth_proto": req.AuthProto, "priv_proto": req.PrivProto,
 			"auth_pass": req.AuthPass, "priv_pass": req.PrivPass, "port": req.Port,
 			"interval": req.Interval, "enable": req.Enable, "remark": req.Remark,
+			"ssh_user": req.SshUser, "ssh_pass": req.SshPass, "ssh_port": req.SshPort, "bgp_enable": req.BgpEnable,
 		})
 		req.ID = uint(id); syncDevice(a, req)
 		response.OK(c, gin.H{"ok": true})

@@ -84,12 +84,9 @@ let animId = 0
 const threeMeshes: THREE.Object3D[] = []
 
 const nodeTypeMap: Record<string, string> = {
-  router: '路由器',
-  switch: '交换机',
-  firewall: '防火墙',
-  server: '服务器',
-  other: '其他'
+  router: 'router', switch: 'switch', firewall: 'firewall', server: 'server', other: 'other'
 }
+function nodeTypeLabel(k: string) { return t('topo.' + (nodeTypeMap[k] || 'other')) }
 
 async function loadGraph() {
   const g = await getEnc<{ nodes: TopoNode[]; edges: TopoEdge[] }>('/topology/graph')
@@ -100,17 +97,17 @@ async function loadGraph() {
 
 async function autoDiscover() {
   const r = await postEnc('/topology/discover', {})
-  ElMessage.success(`自动发现：新增设备 ${(r as any).devices || 0} 台，连线 ${(r as any).links || 0} 条`)
+  ElMessage.success(t('topo.discoverDone', { n: (r as any).devices || 0, l: (r as any).links || 0 }))
   await loadGraph()
 }
 async function lldpDiscover() {
   const r = await postEnc('/topology/lldp-discover', {})
-  ElMessage.success(`LLDP邻接：处理设备 ${(r as any).devices || 0} 台，新增连线 ${(r as any).links || 0} 条`)
+  ElMessage.success(t('topo.lldpDone', { n: (r as any).devices || 0, l: (r as any).links || 0 }))
   await loadGraph()
 }
 async function autoLayout() {
   const r = await postEnc('/topology/auto-layout', {})
-  ElMessage.success(`已自动布局 ${(r as any).updated || 0} 台设备`)
+  ElMessage.success(t('topo.layoutDone', { n: (r as any).updated || 0 }))
   await loadGraph()
 }
 
@@ -154,9 +151,9 @@ async function doUploadIcon(opt: any) {
   }).then(r => r.json())
   if (res.code === 0) {
     devForm.icon = res.data.url
-    ElMessage.success('上传成功')
+    ElMessage.success(t('topo.uploadOk'))
   } else {
-    ElMessage.error(res.msg || '上传失败')
+    ElMessage.error(res.msg || t('topo.uploadFail'))
   }
 }
 function iconUrl(icon: string) {
@@ -205,7 +202,7 @@ function openLinkAdd() {
 }
 async function saveLink() {
   if (!linkForm.source || !linkForm.target || linkForm.source === linkForm.target) {
-    ElMessage.warning('请选择两个不同设备')
+    ElMessage.warning(t('topo.pickTwo'))
     return
   }
   const body = {
@@ -425,10 +422,10 @@ function svgViewBox() {
       </el-radio-group>
       <div class="spacer"></div>
       <el-button type="warning" @click="autoDiscover">
-        <el-icon><Search /></el-icon>自动发现
+        <el-icon><Search /></el-icon>{{ t('topo.discover') }}
       </el-button>
-      <el-button type="danger" @click="lldpDiscover">LLDP邻接</el-button>
-      <el-button @click="autoLayout">自动布局</el-button>
+      <el-button type="danger" @click="lldpDiscover">{{ t('topo.lldp') }}</el-button>
+      <el-button @click="autoLayout">{{ t('topo.autoLayout') }}</el-button>
       <el-button type="primary" @click="openDevAdd">
         <el-icon><Plus /></el-icon>{{ t('topo.addDevice') }}
       </el-button>
@@ -515,19 +512,19 @@ function svgViewBox() {
         <el-form-item :label="t('topo.y')">
           <el-input-number v-model="devForm.y" :min="-400" :max="400" />
         </el-form-item>
-        <el-form-item label="设备图标">
+        <el-form-item :label="t('topo.deviceIcon')">
           <el-upload
             :show-file-list="false"
             :http-request="doUploadIcon"
             accept=".jpg,.jpeg,.png,.svg,.vsdx,.gif"
           >
-            <el-button type="primary" plain>上传图标</el-button>
-            <span style="margin-left:10px;color:var(--np-text-2);font-size:12px">支持 jpg/png/svg/vsdx（留空使用默认图标）</span>
+            <el-button type="primary" plain>{{ t('topo.uploadIcon') }}</el-button>
+            <span style="margin-left:10px;color:var(--np-text-2);font-size:12px">{{ t('topo.iconTip') }}</span>
           </el-upload>
           <div v-if="devForm.icon" style="margin-top:8px;display:flex;align-items:center;gap:8px">
             <img :src="iconUrl(devForm.icon)" style="width:36px;height:36px;border-radius:6px;background:#fff" />
             <span style="color:var(--np-text-2);font-size:12px;word-break:break-all">{{ devForm.icon }}</span>
-            <el-button link type="danger" @click="devForm.icon = ''">清除</el-button>
+            <el-button link type="danger" @click="devForm.icon = ''">{{ t('topo.clear') }}</el-button>
           </div>
         </el-form-item>
       </el-form>
@@ -541,12 +538,12 @@ function svgViewBox() {
     <el-dialog v-model="linkDialog" :title="t('topo.addLink')" width="480px">
       <el-form :model="linkForm" label-width="100px">
         <el-form-item :label="t('topo.from')" required>
-          <el-select v-model="linkForm.source" filterable placeholder="选择源设备">
+          <el-select v-model="linkForm.source" filterable :placeholder="t('topo.selectSource')">
             <el-option v-for="n in nodes" :key="n.id" :label="`${n.name} (${n.ip})`" :value="n.id" />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('topo.to')" required>
-          <el-select v-model="linkForm.target" filterable placeholder="选择目标设备">
+          <el-select v-model="linkForm.target" filterable :placeholder="t('topo.selectTarget')">
             <el-option v-for="n in nodes" :key="n.id" :label="`${n.name} (${n.ip})`" :value="n.id" />
           </el-select>
         </el-form-item>
@@ -554,7 +551,7 @@ function svgViewBox() {
           <el-input v-model="linkForm.name" />
         </el-form-item>
         <el-form-item :label="t('topo.ipList')">
-          <el-input v-model="linkForm.ips" placeholder="多个IP用逗号分隔" />
+          <el-input v-model="linkForm.ips" :placeholder="t('topo.ipsPlaceholder')" />
         </el-form-item>
         <el-form-item :label="t('common.status')">
           <el-radio-group v-model="linkForm.status">

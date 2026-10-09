@@ -68,6 +68,10 @@ type MonitorDevice struct {
 	Status      string    `gorm:"size:16;default:unknown" json:"status"` // up/down/unknown
 	NodeUUID    string    `gorm:"size:64;index;default:''" json:"node_uuid"` // 归属节点（下级上报的设备填下级UUID，本机空=本地）
 	Remark      string    `gorm:"size:256" json:"remark"`
+	SshUser     string    `gorm:"size:64" json:"ssh_user"`
+	SshPass     string    `gorm:"size:128" json:"ssh_pass"`
+	SshPort     int       `gorm:"default:22" json:"ssh_port"`
+	BgpEnable   bool      `gorm:"default:false" json:"bgp_enable"` // 启用BGP/VPNv4只读监控
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }

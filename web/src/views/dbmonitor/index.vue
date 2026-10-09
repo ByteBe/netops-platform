@@ -134,15 +134,15 @@ async function probe(d: DBInstance) {
 }
 
 async function testConn() {
-  if (!form.host) { ElMessage.warning('请填写主机'); return }
+  if (!form.host) { ElMessage.warning(t('dbmon.hostRequired')); return }
   testing.value = true; testResult.value = ''
   try {
     const r = await postEnc<{ok: boolean; version?: string; error?: string}>('/dbmonitor/test', {
       id: form.id, type: form.type, host: form.host, port: form.port, user: form.user, password: form.password 
     })
-    testResult.value = r.ok ? `连接成功 ${r.version || ''}` : `连接失败: ${r.error}`
+    testResult.value = r.ok ? `${t('dbmon.testSuccess')} ${r.version || ''}` : `${t('dbmon.testFail')}: ${r.error}`
     await load()
-  } catch (e: any) { testResult.value = '连接失败: ' + e.message } finally { testing.value = false }
+  } catch (e: any) { testResult.value = t('dbmon.testFail') + ': ' + e.message } finally { testing.value = false }
 }
 
 async function showHistory(d: DBInstance) {
@@ -251,15 +251,15 @@ onBeforeUnmount(() => {
         <el-form-item :label="t('dbmon.user')">
           <el-input v-model="form.user" />
         </el-form-item>
-        <el-form-item label="数据库名">
-          <el-input v-model="form.db_name" placeholder="留空默认mysql" />
+        <el-form-item :label="t('dbmon.dbName')">
+          <el-input v-model="form.db_name" :placeholder="t('dbmon.dbNamePlaceholder')" />
         </el-form-item>
         <el-form-item :label="t('dbmon.password')">
           <el-input v-model="form.password" type="password" show-password />
         </el-form-item>
         <el-form-item label=" ">
-          <el-button :loading="testing" @click="testConn">测试连接</el-button>
-          <span v-if="testResult" :style="{ marginLeft:'12px', color: testResult.startsWith('连接成功') ? '#67C23A' : '#F56C6C', fontSize:'13px' }">{{ testResult }}</span>
+          <el-button :loading="testing" @click="testConn">{{ t('dbmon.testConn') }}</el-button>
+          <span v-if="testResult" :style="{ marginLeft:'12px', color: testResult.indexOf(t('dbmon.testSuccess')) >= 0 ? '#67C23A' : '#F56C6C', fontSize:'13px' }">{{ testResult }}</span>
         </el-form-item>
         <el-form-item :label="t('monitor.interval')">
           <el-input-number v-model="form.interval" :min="10" :max="3600" />

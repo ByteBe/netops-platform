@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getEnc, postEnc, putEnc, delEnc } from '@/utils/request'
+const { t } = useI18n()
 interface Rule { id: number; name: string; metric: string; threshold: number; duration: number; level: string; channels: string; enabled: boolean }
 interface Event { id: number; metric: string; target: string; value: number; level: string; message: string; acked: boolean; created_at: string }
 const rules = ref<Rule[]>([])
@@ -19,9 +21,9 @@ function open(r?: Rule) {
 async function save() {
   if (form.id) await putEnc(`/alert/rules/${form.id}`, form)
   else await postEnc('/alert/rules', form)
-  ElMessage.success('保存成功'); dlg.value = false; loadRules()
+  ElMessage.success(t('alert.saved')); dlg.value = false; loadRules()
 }
-async function remove(r: Rule) { await ElMessageBox.confirm('删除?', '提示', { type: 'warning' }); await delEnc(`/alert/rules/${r.id}`); loadRules() }
+async function remove(r: Rule) { await ElMessageBox.confirm(t('alert.deleteConfirm'), t('common.tip'), { type: 'warning' }); await delEnc(`/alert/rules/${r.id}`); loadRules() }
 async function ack(e: Event) { await postEnc(`/alert/events/${e.id}/ack`, {}); loadEvents() }
 function levelTag(l: string) { return l === 'critical' ? 'danger' : l === 'warning' ? 'warning' : 'info' }
 </script>
@@ -29,46 +31,60 @@ function levelTag(l: string) { return l === 'critical' ? 'danger' : l === 'warni
   <div class="alert-page">
     <div class="np-toolbar">
       <el-tabs v-model="tab" class="alert-tabs">
-        <el-tab-pane label="告警事件" name="events" />
-        <el-tab-pane label="告警规则" name="rules" />
+        <el-tab-pane :label="t('alert.events')" name="events" />
+        <el-tab-pane :label="t('alert.rules')" name="rules" />
       </el-tabs>
       <div class="spacer"></div>
-      <el-button v-if="tab==='rules'" type="primary" @click="open()">新建告警规则</el-button>
+      <el-button v-if="tab==='rules'" type="primary" @click="open()">{{ t('alert.newRule') }}</el-button>
     </div>
     <div class="np-card">
       <el-table v-if="tab==='events'" :data="events" stripe>
-        <el-table-column prop="created_at" label="时间" width="180" />
-        <el-table-column label="级别" width="100"><template #default="{row}"><el-tag :type="levelTag(row.level)">{{ row.level }}</el-tag></template></el-table-column>
-        <el-table-column prop="target" label="目标" width="160" />
-        <el-table-column prop="message" label="内容" min-width="300" />
-        <el-table-column label="状态" width="100"><template #default="{row}">{{ row.acked ? '已确认' : '未确认' }}</template></el-table-column>
-        <el-table-column label="操作" width="100"><template #default="{row}"><el-button v-if="!row.acked" size="small" text type="primary" @click="ack(row)">确认</el-button></template></el-table-column>
+        <el-table-column prop="created_at" :label="t('alert.time')" width="180" />
+        <el-table-column :label="t('alert.level')" width="100"><template #default="{row}"><el-tag :type="levelTag(row.level)">{{ row.level }}</el-tag></template></el-table-column>
+        <el-table-column prop="target" :label="t('alert.target')" width="160" />
+        <el-table-column prop="message" :label="t('alert.message')" min-width="300" />
+        <el-table-column :label="t('common.status')" width="100"><template #default="{row}">{{ row.acked ? t('alert.acked') : t('alert.unacked') }}</template></el-table-column>
+        <el-table-column :label="t('common.actions')" width="100"><template #default="{row}"><el-button v-if="!row.acked" size="small" text type="primary" @click="ack(row)">{{ t('alert.ack') }}</el-button></template></el-table-column>
       </el-table>
       <el-table v-else-if="tab==='rules'" :data="rules" stripe>
-        <el-table-column prop="name" label="名称" min-width="140" />
-        <el-table-column prop="metric" label="指标" width="100" />
-        <el-table-column prop="threshold" label="阈值%" width="100" />
-        <el-table-column prop="duration" label="持续分" width="80" />
-        <el-table-column prop="level" label="级别" width="100" />
-        <el-table-column prop="channels" label="渠道" width="120" />
-        <el-table-column label="操作" width="150">
+        <el-table-column prop="name" :label="t('alert.ruleName')" min-width="140" />
+        <el-table-column prop="metric" :label="t('alert.metric')" width="100" />
+        <el-table-column prop="threshold" :label="t('alert.thresholdPct')" width="100" />
+        <el-table-column prop="duration" :label="t('alert.durationMin')" width="80" />
+        <el-table-column prop="level" :label="t('alert.level')" width="100" />
+        <el-table-column prop="channels" :label="t('alert.channel')" width="120" />
+        <el-table-column :label="t('common.actions')" width="150">
           <template #default="{row}">
-            <el-button size="small" text type="primary" @click="open(row)">编辑</el-button>
-            <el-button size="small" text type="danger" @click="remove(row)">删除</el-button>
+            <el-button size="small" text type="primary" @click="open(row)">{{ t('alert.edit') }}</el-button>
+            <el-button size="small" text type="danger" @click="remove(row)">{{ t('alert.del') }}</el-button>
           </template>
         </el-table-column>
       </el-table>
     </div>
-    <el-dialog v-model="dlg" title="告警规则" width="520px">
+    <el-dialog v-model="dlg" :title="t('alert.rules')" width="520px">
       <el-form :model="form" label-width="90px" class="alert-form">
-        <el-form-item label="名称"><el-input v-model="form.name" /></el-form-item>
-        <el-form-item label="指标"><el-select v-model="form.metric"><el-option label="CPU" value="cpu" /><el-option label="内存" value="mem" /><el-option label="磁盘" value="disk" /><el-option label="链路" value="link" /><el-option label="节点离线" value="node" /></el-select></el-form-item>
-        <el-form-item label="阈值%"><el-input-number v-model="form.threshold" /></el-form-item>
-        <el-form-item label="持续分"><el-input-number v-model="form.duration" /></el-form-item>
-        <el-form-item label="级别"><el-select v-model="form.level"><el-option label="信息" value="info" /><el-option label="警告" value="warning" /><el-option label="严重" value="critical" /></el-select></el-form-item>
-        <el-form-item label="渠道"><el-input v-model="form.channels" placeholder="webhook,dingtalk,email" /></el-form-item>
+        <el-form-item :label="t('alert.ruleName')"><el-input v-model="form.name" /></el-form-item>
+        <el-form-item :label="t('alert.metric')">
+          <el-select v-model="form.metric">
+            <el-option label="CPU" value="cpu" />
+            <el-option :label="t('alert.memHigh')" value="mem" />
+            <el-option :label="t('alert.diskHigh')" value="disk" />
+            <el-option :label="t('alert.link')" value="link" />
+            <el-option :label="t('alert.nodeOffline')" value="node" />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="t('alert.thresholdPct')"><el-input-number v-model="form.threshold" /></el-form-item>
+        <el-form-item :label="t('alert.durationMin')"><el-input-number v-model="form.duration" /></el-form-item>
+        <el-form-item :label="t('alert.level')">
+          <el-select v-model="form.level">
+            <el-option :label="t('alert.info')" value="info" />
+            <el-option :label="t('alert.warning')" value="warning" />
+            <el-option :label="t('alert.critical')" value="critical" />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="t('alert.channel')"><el-input v-model="form.channels" placeholder="webhook,dingtalk,email" /></el-form-item>
       </el-form>
-      <template #footer><el-button @click="dlg=false">取消</el-button><el-button type="primary" @click="save">保存</el-button></template>
+      <template #footer><el-button @click="dlg=false">{{ t('alert.cancel') }}</el-button><el-button type="primary" @click="save">{{ t('alert.save') }}</el-button></template>
     </el-dialog>
   </div>
 </template>

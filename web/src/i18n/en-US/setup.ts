@@ -1,0 +1,20 @@
+export default {
+  subtitle: 'Setup Wizard - choose storage DB and time-series DB, create admin account',
+  stepDeploy: 'Deploy Mode', stepDb: 'Storage DB', stepTsdb: 'Time-Series DB', stepAdmin: 'Admin Account',
+  deployMode: 'Deploy Mode',
+  standalone: 'Standalone', distributed: 'Distributed Cascade',
+  standaloneTip: 'Standalone: all data collected and stored locally, no cascade with other nodes.',
+  distributedTip: 'Distributed: this node can be HQ or sub-node, sync device/container data with upstream/downstream via HTTP/MQTT. Can be changed later in System.',
+  next: 'Next', prev: 'Previous',
+  storageDb: 'Storage Database', dataFilePath: 'Data File Path',
+  host: 'Host', port: 'Port', username: 'Username', password: 'Password', dbName: 'DB Name',
+  testConn: 'Test Connection',
+  tsdb: 'Time-Series Database', dataDir: 'Data Directory', database: 'Database',
+  adminUser: 'Admin Username', initialPwd: 'Initial Password', employeeNo: 'Employee No.', email: 'Email',
+  finish: 'Finish Setup',
+  connOk: 'Connection OK', testFail: 'Test failed',
+  done: 'Setup done, redirecting to login...', failed: 'Setup failed',
+  alreadyInit: 'System already initialized',
+  sqlite: 'Built-in DB (SQLite)', dm: 'Dameng (DM8)', kingbase: 'KingbaseES',
+  builtin: 'Built-in TSDB (SQLite)'
+}

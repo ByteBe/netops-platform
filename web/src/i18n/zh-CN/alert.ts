@@ -5,5 +5,16 @@ export default {
   time: '告警时间', nodeOffline: '节点离线', cpuHigh: 'CPU过高',
   memHigh: '内存过高', diskHigh: '磁盘过高', channel: '通知渠道',
   email: '邮件', webhook: 'Webhook', dingtalk: '钉钉',
-  wecom: '企业微信', feishu: '飞书', sms: '短信'
+  wecom: '企业微信', feishu: '飞书', sms: '短信',
+  saved: '保存成功',
+  deleteConfirm: '删除?',
+  target: '目标', message: '内容',
+  acked: '已确认', unacked: '未确认',
+  ack: '确认',
+  ruleName: '名称',
+  thresholdPct: '阈值%', durationMin: '持续分',
+  edit: '编辑', del: '删除',
+  cancel: '取消', save: '保存',
+  link: '链路',
+  info: '信息', warning: '警告', critical: '严重'
 }

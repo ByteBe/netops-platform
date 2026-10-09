@@ -1,0 +1,23 @@
+export default {
+  k8sMonitor: 'Kubernetes Monitor',
+  nameRequired: 'Name is required',
+  apiServerRequired: 'API Server is required',
+  saved: 'Saved',
+  confirmDelete: 'Delete',
+  fillApiServer: 'Please fill API Server first',
+  testSuccess: 'Connection OK', testFail: 'Connection failed',
+  done: 'Done',
+  enabled: 'Running', notEnabled: 'Not enabled',
+  saveConfig: 'Save Config', collectNow: 'Collect Now',
+  clusters: 'K8s Clusters', addCluster: 'Add Cluster',
+  online: 'Online', offline: 'Offline',
+  clusterName: 'Cluster Name', remark: 'Remark',
+  yes: 'Yes', no: 'No', actions: 'Actions',
+  edit: 'Edit', del: 'Delete',
+  nodeList: 'Node List', cluster: 'Cluster',
+  ready: 'Ready', notReady: 'Not Ready',
+  mem: 'Memory', role: 'Role',
+  editCluster: 'Edit Cluster', addClusterTitle: 'Add Cluster',
+  testConn: 'Test Connection',
+  cancel: 'Cancel', save: 'Save'
+}

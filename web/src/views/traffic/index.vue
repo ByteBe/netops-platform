@@ -176,7 +176,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="np-page">
     <div class="np-toolbar">
-      <span class="np-page-desc">专线带宽与接口速率可不同，上下行独立配置</span>
+      <span class="np-page-desc">{{ t('traffic.desc') }}</span>
       <div class="spacer"></div>
       <el-button type="primary" @click="openAdd">
         <el-icon><Plus /></el-icon>{{ t('traffic.addRule') }}
@@ -188,14 +188,14 @@ onBeforeUnmount(() => {
       <div v-for="r in rules" :key="r.id" class="np-card np-traffic-card" :style="{ borderLeft: `4px solid ${r.color}` }">
         <div class="np-tc-head">
           <div class="np-tc-head-left">
-            <div class="np-tc-devname">{{ r.device_name || '未知设备' }}</div>
+            <div class="np-tc-devname">{{ r.device_name || t('traffic.unknownDevice') }}</div>
             <div class="np-tc-meta">
               <el-tag size="small" effect="plain">{{ r.device_ip || '-' }}</el-tag>
               <el-tag size="small" type="info" effect="dark">{{ r.interface }}</el-tag>
               <span v-if="r.display_name && r.display_name !== r.interface" class="np-tc-alias">{{ r.display_name }}</span>
             </div>
           </div>
-          <span class="np-tc-status" :class="{up: currents[r.id]?.up}">{{ currents[r.id]?.up ? '在线' : '离线' }}</span>
+          <span class="np-tc-status" :class="{up: currents[r.id]?.up}">{{ currents[r.id]?.up ? t('traffic.online') : t('traffic.offline') }}</span>
         </div>
         <div class="np-tc-rates">
           <div class="np-tc-item">
@@ -244,7 +244,7 @@ onBeforeUnmount(() => {
         <el-form-item :label="t('traffic.downRate')">
           <el-input-number v-model="form.down_rate" :min="1" :max="1000000" />
         </el-form-item>
-        <el-form-item label="颜色">
+        <el-form-item :label="t('traffic.color')">
           <el-color-picker v-model="form.color" />
         </el-form-item>
         <el-form-item :label="t('common.enabled')">

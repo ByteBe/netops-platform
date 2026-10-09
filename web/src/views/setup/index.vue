@@ -30,6 +30,13 @@ const dbTypes: Record<string, string> = {
 const tsdbTypes: Record<string, string> = {
   builtin: '内置时序库 (SQLite)', tdengine: 'TDengine', influxdb: 'InfluxDB'
 }
+function dbLabel(k: string) {
+  if (k === 'sqlite') return t('setup.sqlite')
+  if (k === 'dm') return t('setup.dm')
+  if (k === 'kingbase') return t('setup.kingbase')
+  if (k === 'builtin') return t('setup.builtin')
+  return k
+}
 
 const dbForm = reactive({ type: 'sqlite', host: '127.0.0.1', port: 3306, user: '', password: '', database: 'netops', path: 'data/netops.db' })
 const tsdbForm = reactive({ type: 'builtin', host: '127.0.0.1', port: 6041, user: 'root', pass: 'taosdata', db: 'data', params: '' })
@@ -63,9 +70,9 @@ async function testDb() {
     if (dbForm.type === 'sqlite') body.path = dbForm.path
     else Object.assign(body, { host: dbForm.host, port: dbForm.port, user: dbForm.user, password: dbForm.password, database: dbForm.database })
     await encPost('/setup/db-test', body)
-    ElMessage.success('连接成功')
+    ElMessage.success(t('setup.connOk'))
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.message || e.message || '测试失败')
+    ElMessage.error(e?.response?.data?.message || e.message || t('setup.testFail'))
   } finally { testing.value = false }
 }
 
@@ -73,9 +80,9 @@ async function testTsdb() {
   testing.value = true
   try {
     await encPost('/setup/tsdb-test', { type: tsdbForm.type, host: tsdbForm.host, port: tsdbForm.port, user: tsdbForm.user, pass: tsdbForm.pass, db: tsdbForm.db, params: tsdbForm.params })
-    ElMessage.success('连接成功')
+    ElMessage.success(t('setup.connOk'))
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.message || e.message || '测试失败')
+    ElMessage.error(e?.response?.data?.message || e.message || t('setup.testFail'))
   } finally { testing.value = false }
 }
 
@@ -93,13 +100,13 @@ async function submit() {
     const key = sm2EncryptSessionKey(sm2PubKey, sessionKey)
     const data = sm4Encrypt(sessionKey, JSON.stringify({ deploy_mode: deployMode.value, database: dbForm, tsdb: tsdbForm, admin: adminForm }))
     await api.post('/setup/init', { key, data })
-    ElMessage.success('初始化完成，正在跳转到登录页...')
+    ElMessage.success(t('setup.done'))
     setTimeout(() => { window.location.href = '/login' }, 1000)
   } catch (e: any) {
     console.error('setup init error:', e)
     const status = e?.response?.status
     const respData = e?.response?.data
-    let msg = e?.message || '初始化失败'
+    let msg = e?.message || t('setup.failed')
     if (respData) {
       if (typeof respData === 'string') msg = respData
       else if (respData.message) msg = respData.message
@@ -107,7 +114,7 @@ async function submit() {
     }
     // HTTP 200 即使解密失败也视为成功
     if (status === 200 || status === 204) {
-      ElMessage.success('初始化完成，正在跳转到登录页...')
+      ElMessage.success(t('setup.done'))
       setTimeout(() => { window.location.href = '/login' }, 1000)
     } else {
       ElMessage.error(msg + ' (HTTP ' + status + ')')
@@ -119,7 +126,7 @@ onMounted(async () => {
   const r = await api.get('/setup/status')
   dbTypesList.value = r.data.data.db_types
   tsdbTypesList.value = r.data.data.tsdb_types
-  if (r.data.data.initialized) { ElMessage.warning('系统已完成初始化'); window.location.href = '/login' }
+  if (r.data.data.initialized) { ElMessage.warning(t('setup.alreadyInit')); window.location.href = '/login' }
 })
 </script>
 
@@ -128,82 +135,82 @@ onMounted(async () => {
     <div class="np-setup-card">
       <div class="np-setup-head">
         <h1>{{ t('app.name') }}</h1>
-        <p>系统初始化向导 - 选择存储数据库与时序数据库，创建管理员账号</p>
+        <p>{{ t('setup.subtitle') }}</p>
       </div>
       <el-steps :active="step" align-center>
-        <el-step title="部署模式" />
-        <el-step title="存储数据库" />
-        <el-step title="时序数据库" />
-        <el-step title="管理员账号" />
+        <el-step :title="t('setup.stepDeploy')" />
+        <el-step :title="t('setup.stepDb')" />
+        <el-step :title="t('setup.stepTsdb')" />
+        <el-step :title="t('setup.stepAdmin')" />
       </el-steps>
       <div v-show="step === 0" class="np-step-panel">
         <el-form label-width="120px" label-position="left">
-          <el-form-item label="部署模式" required>
+          <el-form-item :label="t('setup.deployMode')" required>
             <el-radio-group v-model="deployMode">
-              <el-radio value="standalone">单机部署</el-radio>
-              <el-radio value="distributed">分布式级联部署</el-radio>
+              <el-radio value="standalone">{{ t('setup.standalone') }}</el-radio>
+              <el-radio value="distributed">{{ t('setup.distributed') }}</el-radio>
             </el-radio-group>
           </el-form-item>
-          <el-alert v-if="deployMode==='standalone'" type="info" :closable="false" title="单机部署：所有数据在本机采集与存储，不与其他节点级联。" />
-          <el-alert v-else type="warning" :closable="false" title="分布式部署：本节点可作为总部或下级，通过 HTTP/MQTT 与上下级节点同步设备/容器数据。后续可在系统中切换。" />
+          <el-alert v-if="deployMode==='standalone'" type="info" :closable="false" :title="t('setup.standaloneTip')" />
+          <el-alert v-else type="warning" :closable="false" :title="t('setup.distributedTip')" />
         </el-form>
         <div class="np-step-actions">
-          <el-button type="primary" plain @click="step = 1">下一步</el-button>
+          <el-button type="primary" plain @click="step = 1">{{ t('setup.next') }}</el-button>
         </div>
       </div>
       <div v-show="step === 1" class="np-step-panel">
         <el-form label-width="120px" label-position="left">
-          <el-form-item label="存储数据库" required>
+          <el-form-item :label="t('setup.storageDb')" required>
             <el-select v-model="dbForm.type" style="width:100%">
-              <el-option v-for="k in dbTypesList" :key="k" :label="dbTypes[k] || k" :value="k" />
+              <el-option v-for="k in dbTypesList" :key="k" :label="dbLabel(k)" :value="k" />
             </el-select>
           </el-form-item>
-          <el-form-item v-if="dbForm.type === 'sqlite'" label="数据文件路径"><el-input v-model="dbForm.path" /></el-form-item>
+          <el-form-item v-if="dbForm.type === 'sqlite'" :label="t('setup.dataFilePath')"><el-input v-model="dbForm.path" /></el-form-item>
           <template v-else>
-            <el-form-item label="主机"><el-input v-model="dbForm.host" /></el-form-item>
-            <el-form-item label="端口"><el-input-number v-model="dbForm.port" :min="1" :max="65535" /></el-form-item>
-            <el-form-item label="用户名"><el-input v-model="dbForm.user" /></el-form-item>
-            <el-form-item label="密码"><el-input v-model="dbForm.password" type="password" show-password /></el-form-item>
-            <el-form-item label="库名"><el-input v-model="dbForm.database" /></el-form-item>
+            <el-form-item :label="t('setup.host')"><el-input v-model="dbForm.host" /></el-form-item>
+            <el-form-item :label="t('setup.port')"><el-input-number v-model="dbForm.port" :min="1" :max="65535" /></el-form-item>
+            <el-form-item :label="t('setup.username')"><el-input v-model="dbForm.user" /></el-form-item>
+            <el-form-item :label="t('setup.password')"><el-input v-model="dbForm.password" type="password" show-password /></el-form-item>
+            <el-form-item :label="t('setup.dbName')"><el-input v-model="dbForm.database" /></el-form-item>
           </template>
         </el-form>
         <div class="np-step-actions">
-          <el-button type="primary" :loading="testing" @click="testDb">测试连接</el-button>
-          <el-button type="primary" plain @click="step = 2">下一步</el-button>
+          <el-button type="primary" :loading="testing" @click="testDb">{{ t('setup.testConn') }}</el-button>
+          <el-button type="primary" plain @click="step = 2">{{ t('setup.next') }}</el-button>
         </div>
       </div>
       <div v-show="step === 2" class="np-step-panel">
         <el-form label-width="120px" label-position="left">
-          <el-form-item label="时序数据库" required>
+          <el-form-item :label="t('setup.tsdb')" required>
             <el-select v-model="tsdbForm.type" style="width:100%">
-              <el-option v-for="k in tsdbTypesList" :key="k" :label="tsdbTypes[k] || k" :value="k" />
+              <el-option v-for="k in tsdbTypesList" :key="k" :label="dbLabel(k)" :value="k" />
             </el-select>
           </el-form-item>
-          <el-form-item v-if="tsdbForm.type === 'builtin'" label="数据目录"><el-input v-model="tsdbForm.db" /></el-form-item>
+          <el-form-item v-if="tsdbForm.type === 'builtin'" :label="t('setup.dataDir')"><el-input v-model="tsdbForm.db" /></el-form-item>
           <template v-else>
-            <el-form-item label="主机"><el-input v-model="tsdbForm.host" /></el-form-item>
-            <el-form-item label="端口"><el-input-number v-model="tsdbForm.port" :min="1" :max="65535" /></el-form-item>
-            <el-form-item label="用户名"><el-input v-model="tsdbForm.user" /></el-form-item>
-            <el-form-item label="密码"><el-input v-model="tsdbForm.pass" type="password" show-password /></el-form-item>
-            <el-form-item label="数据库"><el-input v-model="tsdbForm.db" /></el-form-item>
+            <el-form-item :label="t('setup.host')"><el-input v-model="tsdbForm.host" /></el-form-item>
+            <el-form-item :label="t('setup.port')"><el-input-number v-model="tsdbForm.port" :min="1" :max="65535" /></el-form-item>
+            <el-form-item :label="t('setup.username')"><el-input v-model="tsdbForm.user" /></el-form-item>
+            <el-form-item :label="t('setup.password')"><el-input v-model="tsdbForm.pass" type="password" show-password /></el-form-item>
+            <el-form-item :label="t('setup.database')"><el-input v-model="tsdbForm.db" /></el-form-item>
           </template>
         </el-form>
         <div class="np-step-actions">
-          <el-button @click="step = 1">上一步</el-button>
-          <el-button type="primary" :loading="testing" @click="testTsdb">测试连接</el-button>
-          <el-button type="primary" plain @click="step = 3">下一步</el-button>
+          <el-button @click="step = 1">{{ t('setup.prev') }}</el-button>
+          <el-button type="primary" :loading="testing" @click="testTsdb">{{ t('setup.testConn') }}</el-button>
+          <el-button type="primary" plain @click="step = 3">{{ t('setup.next') }}</el-button>
         </div>
       </div>
       <div v-show="step === 3" class="np-step-panel">
         <el-form label-width="120px" label-position="left">
-          <el-form-item label="管理员用户名" required><el-input v-model="adminForm.username" /></el-form-item>
-          <el-form-item label="初始密码" required><el-input v-model="adminForm.password" type="password" show-password /></el-form-item>
-          <el-form-item label="工号"><el-input v-model="adminForm.employee_no" /></el-form-item>
-          <el-form-item label="邮箱"><el-input v-model="adminForm.email" /></el-form-item>
+          <el-form-item :label="t('setup.adminUser')" required><el-input v-model="adminForm.username" /></el-form-item>
+          <el-form-item :label="t('setup.initialPwd')" required><el-input v-model="adminForm.password" type="password" show-password /></el-form-item>
+          <el-form-item :label="t('setup.employeeNo')"><el-input v-model="adminForm.employee_no" /></el-form-item>
+          <el-form-item :label="t('setup.email')"><el-input v-model="adminForm.email" /></el-form-item>
         </el-form>
         <div class="np-step-actions">
-          <el-button @click="step = 2">上一步</el-button>
-          <el-button type="primary" :loading="submitting" @click="submit">完成初始化</el-button>
+          <el-button @click="step = 2">{{ t('setup.prev') }}</el-button>
+          <el-button type="primary" :loading="submitting" @click="submit">{{ t('setup.finish') }}</el-button>
         </div>
       </div>
     </div>

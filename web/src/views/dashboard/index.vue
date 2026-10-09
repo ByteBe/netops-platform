@@ -280,7 +280,7 @@ function renderGauge() {
         pointer: { show: true, length: '60%', width: 4 },
         detail: { valueAnimation: true, formatter: '{value}%', color: '#e2e8f0', fontSize: 22, offsetCenter: [0, '30%'] },
         title: { offsetCenter: [0, '60%'], color: '#94a3b8', fontSize: 12 },
-        data: [{ value: avgCpu.value, name: 'CPU 平均' }]
+        data: [{ value: avgCpu.value, name: t('dashboard.cpuAvg') }]
       }
     ]
   }, true)
@@ -403,7 +403,7 @@ function kpiCards() {
       <div class="np-screen-card np-realtime">
         <div class="np-screen-title">
           <span class="np-live-dot"></span>
-          实时状态
+          {{ t('dashboard.realtimeStatus') }}
         </div>
         <div class="np-realtime-body">
           <div class="np-gauge-wrap">
@@ -419,7 +419,7 @@ function kpiCards() {
             <div v-if="!links.length" class="np-empty">{{ t('common.noData') }}</div>
           </div>
         </div>
-        <div class="np-screen-time">更新于 {{ fmtTime(now) }}</div>
+        <div class="np-screen-time">{{ t('dashboard.updatedAt') }} {{ fmtTime(now) }}</div>
       </div>
     </div>
   </div>

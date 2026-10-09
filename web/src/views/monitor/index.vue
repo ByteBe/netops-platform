@@ -34,6 +34,7 @@ interface MonitorDevice {
   message?: string
   status?: string
   vendor?: string
+  ssh_user?: string; ssh_pass?: string; ssh_port?: number; bgp_enable?: boolean
 }
 interface DeviceSnap {
   device_id: number
@@ -58,7 +59,8 @@ const editingId = ref(0)
 const form = reactive<MonitorDevice>({
   id: 0, name: '', ip: '', type: 'switch', vendor: '', snmp_version: '2c', community: 'public',
   username: '', auth_proto: 'md5', priv_proto: 'des', auth_pass: '', priv_pass: '',
-  port: 161, interval: 60, group_id: 0, enable: true, remark: ''
+  port: 161, interval: 60, group_id: 0, enable: true, remark: '',
+  ssh_user: '', ssh_pass: '', ssh_port: 22, bgp_enable: false
 })
 
 // 历史曲线
@@ -135,7 +137,7 @@ async function remove(d: MonitorDevice) {
 }
 
 async function testConn() {
-  if (!form.ip) { ElMessage.warning('请填写IP地址'); return }
+  if (!form.ip) { ElMessage.warning(t('monitor.ipRequired')); return }
   testing.value = true; testResult.value = ''
   try {
     const r = await postEnc<{ok: boolean; uptime?: number; error?: string; message?: string}>('/monitor/test', {
@@ -143,8 +145,8 @@ async function testConn() {
       username: form.username, auth_proto: form.auth_proto, priv_proto: form.priv_proto,
       auth_pass: form.auth_pass, priv_pass: form.priv_pass, port: form.port
     })
-    testResult.value = r.ok ? `连接成功 (Uptime ${Math.floor((r.uptime||0)/86400)}天)` : `连接失败: ${r.error}`
-  } catch (e: any) { testResult.value = '连接失败: ' + e.message } finally { testing.value = false }
+    testResult.value = r.ok ? `${t('monitor.testSuccess')} (Uptime ${Math.floor((r.uptime||0)/86400)}${t('monitor.days')})` : `${t('monitor.testFail')}: ${r.error}`
+  } catch (e: any) { testResult.value = t('monitor.testFail') + ': ' + e.message } finally { testing.value = false }
 }
 
 async function showHistory(d: MonitorDevice) {
@@ -236,8 +238,8 @@ onBeforeUnmount(() => {
           <div v-if="!snaps[d.id]" class="np-if-empty">{{ t('common.loading') }}</div>
         </div>
         <div class="np-dev-foot">
-          <span>系统运行: {{ fmtDuration(snaps[d.id]?.uptime_s || 0) }}</span>
-          <span>更新: {{ snaps[d.id] ? fmtTime(snaps[d.id].ts) : '--' }}</span>
+          <span>{{ t('monitor.systemUptime') }}: {{ fmtDuration(snaps[d.id]?.uptime_s || 0) }}</span>
+          <span>{{ t('monitor.updated') }}: {{ snaps[d.id] ? fmtTime(snaps[d.id].ts) : '--' }}</span>
         </div>
         <div class="np-dev-actions">
           <el-button size="small" text type="primary" @click="showHistory(d)">{{ t('monitor.history') }}</el-button>
@@ -245,14 +247,14 @@ onBeforeUnmount(() => {
           <el-button size="small" text type="danger" @click="remove(d)">{{ t('common.delete') }}</el-button>
         </div>
       </div>
-      <div v-if="!devices.length" class="np-card np-empty">{{ t('common.noData') }}，请 {{ t('common.add') }}</div>
+      <div v-if="!devices.length" class="np-card np-empty">{{ t('common.noData') }}</div>
     </div>
 
     <!-- 设备管理表格 -->
     <div class="np-card">
       <div class="np-card-title">
         <el-icon><Cpu /></el-icon>
-        <span>设备管理</span>
+        <span>{{ t('monitor.deviceMgmt') }}</span>
       </div>
       <el-table :data="devices" v-loading="loading" stripe class="np-table">
         <el-table-column prop="name" :label="t('monitor.deviceName')" min-width="140" />
@@ -280,20 +282,20 @@ onBeforeUnmount(() => {
         </el-form-item>
         <el-form-item :label="t('monitor.deviceType')">
           <el-select v-model="form.type">
-            <el-option label="交换机" value="switch" />
-            <el-option label="路由器" value="router" />
-            <el-option label="Linux服务器" value="server" />
-            <el-option label="Windows服务器" value="windows" />
-            <el-option label="防火墙" value="firewall" />
-            <el-option label="其他" value="other" />
+            <el-option :label="t('monitor.switch')" value="switch" />
+            <el-option :label="t('monitor.router')" value="router" />
+            <el-option :label="t('monitor.linuxServer')" value="server" />
+            <el-option :label="t('monitor.windowsServer')" value="windows" />
+            <el-option :label="t('monitor.firewall')" value="firewall" />
+            <el-option :label="t('monitor.other')" value="other" />
           </el-select>
         </el-form-item>
-        <el-form-item label="厂商">
-          <el-select v-model="form.vendor" placeholder="自动识别" clearable>
-            <el-option label="自动识别" value="" />
-            <el-option label="Cisco 思科" value="cisco" />
-            <el-option label="Huawei 华为" value="huawei" />
-            <el-option label="H3C 华三" value="h3c" />
+        <el-form-item :label="t('monitor.vendor')">
+          <el-select v-model="form.vendor" :placeholder="t('monitor.autoDetect')" clearable>
+            <el-option :label="t('monitor.autoDetect')" value="" />
+            <el-option :label="t('monitor.cisco')" value="cisco" />
+            <el-option :label="t('monitor.huawei')" value="huawei" />
+            <el-option :label="t('monitor.h3c')" value="h3c" />
             <el-option label="Windows" value="windows" />
             <el-option label="Linux" value="linux" />
           </el-select>
@@ -340,8 +342,21 @@ onBeforeUnmount(() => {
           <el-input-number v-model="form.interval" :min="10" :max="3600" />
         </el-form-item>
         <el-form-item label=" ">
-          <el-button :loading="testing" @click="testConn">测试连接</el-button>
-          <span v-if="testResult" :style="{ marginLeft:'12px', color: testResult.startsWith('连接成功') ? '#67C23A' : '#F56C6C', fontSize:'13px' }">{{ testResult }}</span>
+          <el-button :loading="testing" @click="testConn">{{ t('monitor.testConn') }}</el-button>
+          <span v-if="testResult" :style="{ marginLeft:'12px', color: testResult.indexOf(t('monitor.testSuccess')) >= 0 ? '#67C23A' : '#F56C6C', fontSize:'13px' }">{{ testResult }}</span>
+        </el-form-item>
+        <el-divider content-position="left">BGP/VPNv4 SSH</el-divider>
+        <el-form-item :label="t('bgp.sshUser')">
+          <el-input v-model="form.ssh_user" placeholder="admin" />
+        </el-form-item>
+        <el-form-item :label="t('bgp.sshPass')">
+          <el-input v-model="form.ssh_pass" type="password" show-password />
+        </el-form-item>
+        <el-form-item :label="t('bgp.sshPort')">
+          <el-input-number v-model="form.ssh_port" :min="1" :max="65535" />
+        </el-form-item>
+        <el-form-item :label="t('bgp.bgpEnable')">
+          <el-switch v-model="form.bgp_enable" />
         </el-form-item>
         <el-form-item :label="t('common.enabled')">
           <el-switch v-model="form.enable" />

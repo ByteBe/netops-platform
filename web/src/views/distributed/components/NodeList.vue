@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { getEnc, postEnc } from '@/utils/request'
+const { t } = useI18n()
 const props = defineProps<{ nodes: any[] }>()
 const emit = defineEmits(['changed'])
 const groups = ref<string[]>([])
@@ -23,40 +25,40 @@ defineExpose({ reloadGroups: async () => { groups.value = await getEnc('/distrib
 </script>
 <template>
   <el-card shadow="never">
-    <template #header><b>下级节点</b></template>
+    <template #header><b>{{ t('node.childNodes') }}</b></template>
     <el-table :data="nodes" stripe size="small">
-      <el-table-column prop="name" label="节点名称" min-width="140" />
-      <el-table-column label="分组" width="140">
+      <el-table-column prop="name" :label="t('node.name')" min-width="140" />
+      <el-table-column :label="t('node.group')" width="140">
         <template #default="{ row }">
           <el-select v-if="editing===row.id" v-model="draft" size="small" filterable allow-create default-first-option @change="setGroup(row)">
             <el-option v-for="g in groups" :key="g" :label="g" :value="g" />
           </el-select>
-          <el-button v-else link size="small" @click="editing=row.id; draft=row.group||''">{{ row.group || '未分组' }}</el-button>
+          <el-button v-else link size="small" @click="editing=row.id; draft=row.group||''">{{ row.group || t('node.ungrouped') }}</el-button>
         </template>
       </el-table-column>
-      <el-table-column label="层级" width="80">
-        <template #default="{ row }">{{ ['','总部','省级','市级','县级'][row.level] || 'L'+row.level }}</template>
+      <el-table-column :label="t('node.level')" width="80">
+        <template #default="{ row }">{{ ['',t('node.l1'),t('node.l2'),t('node.l3'),t('node.l4')][row.level] || 'L'+row.level }}</template>
       </el-table-column>
-      <el-table-column label="状态" width="80">
+      <el-table-column :label="t('common.status')" width="80">
         <template #default="{ row }">
-          <el-tag :type="row.status==='online'?'success':'info'" size="small">{{ row.status==='online'?'在线':'离线' }}</el-tag>
+          <el-tag :type="row.status==='online'?'success':'info'" size="small">{{ row.status==='online' ? t('node.online') : t('node.offline') }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="device_cnt" label="设备数" width="80" />
-      <el-table-column prop="container_cnt" label="容器数" width="80" />
-      <el-table-column prop="last_seen_at" label="最后上报" min-width="160" />
-      <el-table-column label="操作" width="100">
+      <el-table-column prop="device_cnt" :label="t('node.devices')" width="80" />
+      <el-table-column prop="container_cnt" :label="t('node.containers')" width="80" />
+      <el-table-column prop="last_seen_at" :label="t('node.lastSeen')" min-width="160" />
+      <el-table-column :label="t('node.actions')" width="100">
         <template #default="{ row }">
-          <el-button link type="primary" size="small" @click="showDevices(row)">设备明细</el-button>
+          <el-button link type="primary" size="small" @click="showDevices(row)">{{ t('node.deviceDetail') }}</el-button>
         </template>
       </el-table-column>
     </el-table>
   </el-card>
-  <el-dialog v-model="dlg" :title="'下级设备 - ' + (cur?.name || '')" width="700px">
+  <el-dialog v-model="dlg" :title="t('node.childDevices') + ' - ' + (cur?.name || '')" width="700px">
     <el-table :data="devices" stripe size="small">
-      <el-table-column prop="name" label="名称" />
+      <el-table-column prop="name" :label="t('common.name')" />
       <el-table-column prop="ip" label="IP" />
-      <el-table-column prop="type" label="类型" />
+      <el-table-column prop="type" :label="t('node.type')" />
     </el-table>
   </el-dialog>
 </template>

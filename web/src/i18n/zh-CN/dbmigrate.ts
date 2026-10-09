@@ -1,0 +1,23 @@
+export default {
+  title: '数据库迁移',
+  runMigrate: '在当前库执行迁移',
+  dbType: '数据库类型', tsdb: '时序数据库', host: '主机',
+  dbNamePath: '库名/路径', user: '用户', pool: '连接池',
+  switchDb: '切换数据库（保存后自动重启）',
+  businessDb: '业务数据库',
+  type: '类型', dm: '达梦 DM', kingbase: '人大金仓 Kingbase',
+  port: '端口', filePath: '文件路径', dbName: '库名', password: '密码',
+  tsDatabase: '时序数据库', builtin: '内置 (memory)',
+  saveRestart: '保存并重启', saveOnly: '仅保存',
+  tableStructure: '表结构', tableName: '表名', tableComment: '表中文名称', rows: '行数',
+  migrateDone: '迁移完成', failed: '失败', saved: '已保存',
+  restarting: '重启中', restartMsg: '服务正在重启，请稍候刷新页面',
+  t_users: '用户表', t_audit: '审计日志', t_groups: '设备分组', t_devices: '监控设备',
+  t_link: '链路检测任务', t_topoDev: '拓扑设备', t_topoLink: '拓扑链路', t_topoIp: '拓扑链路IP',
+  t_db: '数据库实例', t_tpl: '脚本模板', t_hist: '脚本执行历史',
+  t_subnet: '子网记录', t_ip: 'IP记录', t_bind: '绑定设备', t_traffic: '流量策略',
+  t_ai: 'AI配置', t_mcp: 'MCP代理', t_email: '邮件配置',
+  t_report: '巡检报告记录', t_setting: '系统设置', t_docker: 'Docker主机',
+  t_k8s: 'K8S集群', t_tskv: '时序数据',
+  t_nodes: '节点表', t_backup: '配置备份', t_alertRule: '告警规则', t_alertEvent: '告警事件', t_notify: '通知渠道配置'
+}

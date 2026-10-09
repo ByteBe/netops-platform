@@ -4,5 +4,6 @@ export default {
   realtime: '实时监控', realtimeDesc: '实时延迟与丢包率', history: '历史数据',
   current: '实时状态', rtt: '往返时延(ms)', loss: '丢包率(%)',
   addTask: '新增检测任务', editTask: '编辑检测任务', multiMonitor: '多地址长时间并行监控',
-  up: '正常', down: '异常', icmp: 'ICMP', tcp: 'TCP', cmd: '系统Ping命令'
+  up: '正常', down: '异常', icmp: 'ICMP', tcp: 'TCP', cmd: '系统Ping命令',
+  ipOrDomain: 'IP或域名', systemPing: '系统Ping命令'
 }

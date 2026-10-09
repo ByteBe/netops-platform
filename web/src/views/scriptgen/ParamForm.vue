@@ -1,7 +1,8 @@
 <script setup lang="ts">
-// 脚本生成器：中栏参数表单
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { Category, Field } from '@/types/scriptgen'
+const { t } = useI18n()
 
 const props = defineProps<{ selected: Category | null; params: Record<string, string>; loading: boolean }>()
 const emit = defineEmits<{ (e: 'gen'): void }>()
@@ -44,7 +45,7 @@ function flushRules() {
   <div class="np-card">
     <div v-if="!selected" style="text-align:center;padding:80px 0;color:#909399">
       <div style="font-size:40px;margin-bottom:10px">👈</div>
-      <div>从左侧选择要配置的功能</div>
+      <div>{{ t('script.selectFeature') }}</div>
     </div>
     <template v-else>
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
@@ -73,29 +74,29 @@ function flushRules() {
         </el-form>
         <template v-if="params.enable_prefix === 'on'">
           <div style="display:grid;grid-template-columns:100px 120px 90px 110px 200px 80px;gap:10px;align-items:center;margin-bottom:10px;padding:10px;background:#fafbfc;border-radius:6px">
-            <span style="font-size:14px;color:#303133;font-weight:500">前缀列表名</span>
+            <span style="font-size:14px;color:#303133;font-weight:500">{{ t('script.prefixName') }}</span>
             <el-input size="default" :model-value="params.prefix" placeholder="如TO-beijing" @update:model-value="(v:any)=>set('prefix',v)" />
-            <el-input size="default" :model-value="params.pfx_index" placeholder="序号" @update:model-value="(v:any)=>set('pfx_index',String(v))" />
+            <el-input size="default" :model-value="params.pfx_index" :placeholder="t('script.seq')" @update:model-value="(v:any)=>set('pfx_index',String(v))" />
             <el-select size="default" :model-value="params.pfx_action || 'permit'" @update:model-value="(v:any)=>set('pfx_action',String(v))">
               <el-option label="permit" value="permit"/><el-option label="deny" value="deny"/>
             </el-select>
-            <el-input size="default" :model-value="params.pfx_net" placeholder="匹配网段" @update:model-value="(v:any)=>set('pfx_net',v)" />
-            <el-input size="default" :model-value="params.pfx_masklen" placeholder="掩码" @update:model-value="(v:any)=>set('pfx_masklen',String(v))" />
+            <el-input size="default" :model-value="params.pfx_net" :placeholder="t('script.matchNet')" @update:model-value="(v:any)=>set('pfx_net',v)" />
+            <el-input size="default" :model-value="params.pfx_masklen" :placeholder="t('script.mask')" @update:model-value="(v:any)=>set('pfx_masklen',String(v))" />
           </div>
           <div v-for="(r,i) in rules" :key="i" style="display:grid;grid-template-columns:100px 120px 90px 110px 200px 80px 40px;gap:10px;align-items:center;margin-bottom:8px;padding:8px 10px;background:#f5f7fa;border-radius:6px">
             <span style="font-size:14px;color:#303133">{{ params.prefix || '' }}</span>
-            <el-input size="default" v-model="r.idx" placeholder="序号" />
+            <el-input size="default" v-model="r.idx" :placeholder="t('script.seq')" />
             <el-select size="default" v-model="r.act">
               <el-option label="permit" value="permit"/><el-option label="deny" value="deny"/>
             </el-select>
-            <el-input size="default" v-model="r.net" placeholder="匹配网段" />
-            <el-input size="default" v-model="r.mask" placeholder="掩码" />
+            <el-input size="default" v-model="r.net" :placeholder="t('script.matchNet')" />
+            <el-input size="default" v-model="r.mask" :placeholder="t('script.mask')" />
             <el-button size="small" type="danger" circle @click="removeRule(i)">🗑</el-button>
           </div>
-          <el-button size="small" style="margin-bottom:10px" @click="addRule">+ 添加一行</el-button>
+          <el-button size="small" style="margin-bottom:10px" @click="addRule">{{ t('script.addRow') }}</el-button>
         </template>
       </div>
-      <el-button type="success" size="large" style="width:100%" :loading="loading" @click="flushRules();emit('gen')">⚡ 生成脚本</el-button>
+      <el-button type="success" size="large" style="width:100%" :loading="loading" @click="flushRules();emit('gen')">⚡ {{ t('script.generate') }}</el-button>
     </template>
   </div>
 </template>

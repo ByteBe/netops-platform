@@ -1,7 +1,9 @@
 <script setup lang="ts">
 // 拓扑 2D SVG 视图组件
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { getEnc, putEnc } from '@/utils/request'
+const { t } = useI18n()
 
 interface TopoNode { id: number; name: string; ip: string; type: string; x: number; y: number; z: number; icon: string }
 interface TopoEdge { id: number; name: string; source: number; target: number; color: string; ips: string[]; status: string }
@@ -68,7 +70,7 @@ function onSvgMouseUp() {
         <text text-anchor="middle" y="46" fill="#e2e8f0" font-size="13" font-weight="600">{{ n.name }}</text>
         <text text-anchor="middle" y="62" fill="#94a3b8" font-size="11">{{ n.ip }}</text>
       </g>
-      <text v-if="!nodes.length" x="450" y="260" text-anchor="middle" fill="#94a3b8">暂无数据</text>
+      <text v-if="!nodes.length" x="450" y="260" text-anchor="middle" fill="#94a3b8">{{ t('topo.noData') }}</text>
     </svg>
   </div>
 </template>

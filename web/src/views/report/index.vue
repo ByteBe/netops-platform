@@ -22,7 +22,7 @@ const loading = ref(false)
 const genDialog = ref(false)
 const genLoading = ref(false)
 const genForm = reactive({
-  title: '运维巡检报告',
+  title: t('report.reportTitle'),
   send_email: false,
   channels: [] as string[],
   email_to: '',
@@ -48,7 +48,7 @@ async function load() {
 
 async function generate() {
   if (!genForm.include.length) {
-    ElMessage.warning('请至少选择一类巡检内容')
+    ElMessage.warning(t('report.selectContent'))
     return
   }
   genLoading.value = true
@@ -63,7 +63,7 @@ async function generate() {
 }
 
 async function send(r: ReportRecord) {
-  const to = await ElMessageBox.prompt('请输入接收邮箱（留空使用默认）', t('report.sendMail'), {
+  const to = await ElMessageBox.prompt(t('report.emailPrompt'), t('report.sendMail'), {
     inputValue: '',
     confirmButtonText: t('common.confirm'),
     cancelButtonText: t('common.cancel')
@@ -81,7 +81,7 @@ async function remove(r: ReportRecord) {
 
 async function view(r: ReportRecord) {
   viewVisible.value = true
-  viewContent.value = '<p style="color:#999">加载中...</p>'
+  viewContent.value = '<p style="color:#999">' + t('report.loading') + '</p>'
   try {
     const detail = await getEnc<ReportRecord>(`/report/${r.id}`)
     let html = detail.content || r.content || ''
@@ -89,9 +89,9 @@ async function view(r: ReportRecord) {
     if (!html.toLowerCase().includes('<html')) {
       html = '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>' + html + '</body></html>'
     }
-    viewContent.value = html || '<p>报告内容为空</p>'
+    viewContent.value = html || '<p>' + t('report.emptyContent') + '</p>'
   } catch (e: any) {
-    viewContent.value = '<p>加载失败: ' + (e.message || '未知错误') + '</p>'
+    viewContent.value = '<p>' + t('report.loadFailed') + (e.message || t('report.unknownError')) + '</p>'
   }
 }
 
@@ -102,24 +102,24 @@ async function quickGen(kind: string) {
   let start: Date, title: string
   if (kind === 'weekly') {
     start = new Date(now.getTime() - 7 * 86400000)
-    title = `运维周报 ${start.toISOString().slice(0,10)}~${now.toISOString().slice(0,10)}`
+    title = `${t('report.weeklyTitle')} ${start.toISOString().slice(0,10)}~${now.toISOString().slice(0,10)}`
   } else {
     start = new Date(now.getTime() - 30 * 86400000)
-    title = `运维月报 ${start.toISOString().slice(0,7)}`
+    title = `${t('report.monthlyTitle')} ${start.toISOString().slice(0,7)}`
   }
   const fmt = (d: Date) => d.toISOString().slice(0,10) + ' 00:00:00'
   await postEnc('/report/generate', { title, start: fmt(start), end: fmt(now), include: ['link','monitor','db','container','node'] })
-  ElMessage.success('已生成'); load()
+  ElMessage.success(t('report.generated')); load()
 }
 </script>
 
 <template>
   <div class="np-page">
     <div class="np-toolbar">
-      <span class="np-page-desc">包含链路通断、服务器使用情况、数据库状态等巡检内容</span>
+      <span class="np-page-desc">{{ t('report.desc') }}</span>
       <div class="spacer"></div>
-      <el-button @click="quickGen('weekly')">周报</el-button>
-      <el-button @click="quickGen('monthly')">月报</el-button>
+      <el-button @click="quickGen('weekly')">{{ t('report.weekly') }}</el-button>
+      <el-button @click="quickGen('monthly')">{{ t('report.monthly') }}</el-button>
       <el-button type="primary" @click="genDialog = true">
         <el-icon><Document /></el-icon>{{ t('report.generate') }}
       </el-button>
@@ -150,27 +150,27 @@ async function quickGen(kind: string) {
         <el-form-item :label="t('report.title')">
           <el-input v-model="genForm.title" />
         </el-form-item>
-        <el-form-item label="巡检内容">
+        <el-form-item :label="t('report.inspectItems')">
           <el-checkbox-group v-model="genForm.include">
             <el-checkbox value="link">{{ t('report.linkStatus') }}</el-checkbox>
             <el-checkbox value="monitor">{{ t('report.serverUsage') }}</el-checkbox>
-            <el-checkbox value="db">数据库状态</el-checkbox>
-            <el-checkbox value="container">容器/K8s</el-checkbox>
-            <el-checkbox value="node">节点健康性</el-checkbox>
+            <el-checkbox value="db">{{ t('report.dbStatus') }}</el-checkbox>
+            <el-checkbox value="container">{{ t('report.containerK8s') }}</el-checkbox>
+            <el-checkbox value="node">{{ t('report.nodeHealth') }}</el-checkbox>
           </el-checkbox-group>
         </el-form-item>
-        <el-form-item label="发送渠道">
-          <el-select v-model="genForm.channels" multiple placeholder="选择通知渠道（可多选）" style="width:100%">
-            <el-option label="邮件" value="email" />
-            <el-option label="钉钉" value="dingtalk" />
-            <el-option label="企业微信" value="wecom" />
-            <el-option label="飞书" value="feishu" />
-            <el-option label="短信" value="sms" />
+        <el-form-item :label="t('report.channels')">
+          <el-select v-model="genForm.channels" multiple :placeholder="t('report.channelsPlaceholder')" style="width:100%">
+            <el-option :label="t('report.email')" value="email" />
+            <el-option :label="t('report.dingtalk')" value="dingtalk" />
+            <el-option :label="t('report.wecom')" value="wecom" />
+            <el-option :label="t('report.feishu')" value="feishu" />
+            <el-option :label="t('report.sms')" value="sms" />
             <el-option label="Webhook" value="webhook" />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('report.target')" v-if="genForm.channels?.includes('email')">
-          <el-input v-model="genForm.email_to" placeholder="多个邮箱用逗号分隔" />
+          <el-input v-model="genForm.email_to" :placeholder="t('report.emailPlaceholder')" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -181,10 +181,10 @@ async function quickGen(kind: string) {
 
     <el-dialog v-model="viewVisible" :title="t('report.view')" width="950px" top="3vh" :destroy-on-close="true">
       <iframe ref="viewFrame" v-if="viewContent" :srcdoc="viewContent" style="width:100%;height:75vh;border:none;background:#fff"></iframe>
-      <div v-else style="padding:40px;text-align:center;color:#999">加载中...</div>
+      <div v-else style="padding:40px;text-align:center;color:#999">{{ t('report.loading') }}</div>
       <template #footer>
-        <el-button type="primary" @click="exportPDF">导出 PDF</el-button>
-        <el-button @click="viewVisible=false">关闭</el-button>
+        <el-button type="primary" @click="exportPDF">{{ t('report.exportPDF') }}</el-button>
+        <el-button @click="viewVisible=false">{{ t('report.close') }}</el-button>
       </template>
     </el-dialog>
   </div>

@@ -1,6 +1,8 @@
 ﻿<script setup lang="ts">
 import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
 
 const ipInput = ref('192.168.1.1')
 const cidrInput = ref(24)
@@ -24,14 +26,14 @@ function toBinary(ip: string): string {
 async function copy(text: string) {
   try {
     await navigator.clipboard.writeText(text)
-    ElMessage.success('已复制: ' + text)
+    ElMessage.success(t('subnet.copied') + text)
   } catch(e) {
     const ta = document.createElement('textarea')
     ta.value = text
     ta.style.position = 'fixed'; ta.style.top = '0'; ta.style.left = '0'
     ta.style.width = '100px'; ta.style.height = '30px'; ta.style.opacity = '0.01'
     document.body.appendChild(ta); ta.focus(); ta.select()
-    try { document.execCommand('copy'); ElMessage.success('已复制: ' + text) } catch(e2) { ElMessage.error('复制失败') }
+    try { document.execCommand('copy'); ElMessage.success(t('subnet.copied') + text) } catch(e2) { ElMessage.error(t('subnet.copyFailed')) }
     document.body.removeChild(ta)
   }
 }
@@ -54,8 +56,8 @@ function calc() {
   let cls = 'A'
   if (firstOctet >= 128 && firstOctet < 192) cls = 'B'
   else if (firstOctet >= 192 && firstOctet < 224) cls = 'C'
-  else if (firstOctet >= 224 && firstOctet < 240) cls = 'D (组播)'
-  else if (firstOctet >= 240) cls = 'E (保留)'
+  else if (firstOctet >= 224 && firstOctet < 240) cls = t('subnet.multicast')
+  else if (firstOctet >= 240) cls = t('subnet.reserved')
 
   const isPrivate = (firstOctet === 10) ||
     (firstOctet === 172 && parseInt(ip.split('.')[1]) >= 16 && parseInt(ip.split('.')[1]) <= 31) ||
@@ -63,10 +65,10 @@ function calc() {
   const isLoopback = (firstOctet === 127)
   const isLinkLocal = (firstOctet === 169 && parseInt(ip.split('.')[1]) === 254)
 
-  let addrType = '公网地址'
-  if (isLoopback) addrType = '环回地址 (127.0.0.0/8)'
-  else if (isLinkLocal) addrType = '链路本地地址 (169.254.0.0/16)'
-  else if (isPrivate) addrType = '私有地址 (RFC1918)'
+  let addrType = t('subnet.public')
+  if (isLoopback) addrType = t('subnet.loopback')
+  else if (isLinkLocal) addrType = t('subnet.linkLocal')
+  else if (isPrivate) addrType = t('subnet.private')
 
   result.value = {
     ip, cidr,
@@ -121,7 +123,7 @@ const commonMasks = computed(() => {
 
 function copyAllSubnets() {
   const text = splitList.value.map((r: any, i: number) =>
-    `${i + 1}. ${r.network}${r.cidr}  范围:${r.range}  广播:${r.broadcast}`
+    `${i + 1}. ${r.network}${r.cidr}  ${t('subnet.hostRange')}:${r.range}  ${t('subnet.broadcast')}:${r.broadcast}`
   ).join('\n')
   copy(text)
 }
@@ -132,13 +134,13 @@ calc()
 <template>
   <div class="ipcalc-page">
     <div class="calc-hero">
-      <h2>IP 地址/子网计算器</h2>
-      <p class="desc">输入 IP 地址和子网掩码前缀，自动计算网络地址、广播地址、可用主机范围</p>
+      <h2>{{ t('subnet.title') }}</h2>
+      <p class="desc">{{ t('subnet.desc') }}</p>
       <div class="input-row">
-        <el-input v-model="ipInput" placeholder="IP 地址，如 192.168.1.1" size="large" @keyup.enter="calc" />
+        <el-input v-model="ipInput" :placeholder="t('subnet.ipPlaceholder')" size="large" @keyup.enter="calc" />
         <span class="slash">/</span>
         <el-input-number v-model="cidrInput" :min="0" :max="32" size="large" controls-position="right" />
-        <el-button type="primary" size="large" @click="calc">计 算</el-button>
+        <el-button type="primary" size="large" @click="calc">{{ t('subnet.calc') }}</el-button>
       </div>
     </div>
 
@@ -146,45 +148,45 @@ calc()
       <!-- 核心结果 -->
       <div class="result-grid">
         <div class="r-card highlight">
-          <div class="r-label">IP 地址</div>
+          <div class="r-label">{{ t('subnet.ipAddr') }}</div>
           <div class="r-value">{{ result.ip }}</div>
           <div class="r-sub">/{{ result.cidr }}</div>
-          <el-button size="small" class="cp-btn" @click="copy(result.ip)">复制</el-button>
+          <el-button size="small" class="cp-btn" @click="copy(result.ip)">{{ t('common.copy') }}</el-button>
         </div>
         <div class="r-card">
-          <div class="r-label">子网掩码</div>
+          <div class="r-label">{{ t('subnet.mask') }}</div>
           <div class="r-value">{{ result.mask }}</div>
-          <el-button size="small" class="cp-btn" @click="copy(result.mask)">复制</el-button>
+          <el-button size="small" class="cp-btn" @click="copy(result.mask)">{{ t('common.copy') }}</el-button>
         </div>
         <div class="r-card">
-          <div class="r-label">网络地址</div>
+          <div class="r-label">{{ t('subnet.network') }}</div>
           <div class="r-value hl">{{ result.network }}</div>
-          <el-button size="small" class="cp-btn" @click="copy(result.network)">复制</el-button>
+          <el-button size="small" class="cp-btn" @click="copy(result.network)">{{ t('common.copy') }}</el-button>
         </div>
         <div class="r-card">
-          <div class="r-label">广播地址</div>
+          <div class="r-label">{{ t('subnet.broadcast') }}</div>
           <div class="r-value">{{ result.broadcast }}</div>
-          <el-button size="small" class="cp-btn" @click="copy(result.broadcast)">复制</el-button>
+          <el-button size="small" class="cp-btn" @click="copy(result.broadcast)">{{ t('common.copy') }}</el-button>
         </div>
         <div class="r-card">
-          <div class="r-label">可用主机范围</div>
+          <div class="r-label">{{ t('subnet.hostRange') }}</div>
           <div class="r-value sm">{{ result.firstHost }}<br>~ {{ result.lastHost }}</div>
-          <el-button size="small" class="cp-btn" @click="copy(result.firstHost + ' ~ ' + result.lastHost)">复制</el-button>
+          <el-button size="small" class="cp-btn" @click="copy(result.firstHost + ' ~ ' + result.lastHost)">{{ t('common.copy') }}</el-button>
         </div>
         <div class="r-card">
-          <div class="r-label">可用主机数</div>
+          <div class="r-label">{{ t('subnet.hostCount') }}</div>
           <div class="r-value hl">{{ result.totalHosts }}</div>
-          <div class="r-sub">总地址数: {{ result.totalAddrs }}</div>
+          <div class="r-sub">{{ t('subnet.totalAddrs') }}: {{ result.totalAddrs }}</div>
         </div>
         <div class="r-card">
-          <div class="r-label">反掩码</div>
+          <div class="r-label">{{ t('subnet.wildcard') }}</div>
           <div class="r-value sm">{{ result.wildcard }}</div>
-          <el-button size="small" class="cp-btn" @click="copy(result.wildcard)">复制</el-button>
+          <el-button size="small" class="cp-btn" @click="copy(result.wildcard)">{{ t('common.copy') }}</el-button>
         </div>
         <div class="r-card">
-          <div class="r-label">地址类别 / 类型</div>
+          <div class="r-label">{{ t('subnet.classType') }}</div>
           <div class="r-value sm">
-            <span class="tag">{{ result.cls }} 类</span>
+            <span class="tag">{{ result.cls }} {{ t('subnet.class') }}</span>
             <span class="tag blue">{{ result.type }}</span>
           </div>
         </div>
@@ -192,34 +194,34 @@ calc()
 
       <!-- 扩展信息 -->
       <div class="section-card">
-        <div class="section-head"><h3>IP 地址详情</h3></div>
+        <div class="section-head"><h3>{{ t('subnet.detail') }}</h3></div>
         <div class="info-grid">
-          <div class="info-row"><span class="k">十六进制</span><span class="v">{{ result.hex }}</span><el-button size="small" text type="primary" @click="copy(result.hex)">复制</el-button></div>
-          <div class="info-row"><span class="k">二进制 IP</span><span class="v mono">{{ result.bin }}</span><el-button size="small" text type="primary" @click="copy(result.bin)">复制</el-button></div>
-          <div class="info-row"><span class="k">二进制掩码</span><span class="v mono">{{ result.maskBin }}</span><el-button size="small" text type="primary" @click="copy(result.maskBin)">复制</el-button></div>
-          <div class="info-row"><span class="k">二进制网络</span><span class="v mono hl">{{ result.netBin }}</span><el-button size="small" text type="primary" @click="copy(result.netBin)">复制</el-button></div>
+          <div class="info-row"><span class="k">{{ t('subnet.hex') }}</span><span class="v">{{ result.hex }}</span><el-button size="small" text type="primary" @click="copy(result.hex)">{{ t('common.copy') }}</el-button></div>
+          <div class="info-row"><span class="k">{{ t('subnet.binIp') }}</span><span class="v mono">{{ result.bin }}</span><el-button size="small" text type="primary" @click="copy(result.bin)">{{ t('common.copy') }}</el-button></div>
+          <div class="info-row"><span class="k">{{ t('subnet.binMask') }}</span><span class="v mono">{{ result.maskBin }}</span><el-button size="small" text type="primary" @click="copy(result.maskBin)">{{ t('common.copy') }}</el-button></div>
+          <div class="info-row"><span class="k">{{ t('subnet.binNet') }}</span><span class="v mono hl">{{ result.netBin }}</span><el-button size="small" text type="primary" @click="copy(result.netBin)">{{ t('common.copy') }}</el-button></div>
         </div>
       </div>
 
       <!-- 子网划分 -->
       <div class="section-card">
         <div class="section-head">
-          <h3>子网划分</h3>
+          <h3>{{ t('subnet.split') }}</h3>
           <div class="split-ctrl">
-            <el-button size="small" type="primary" @click="copyAllSubnets">批量复制全部</el-button>
-            新前缀长度
+            <el-button size="small" type="primary" @click="copyAllSubnets">{{ t('subnet.copyAll') }}</el-button>
+            {{ t('subnet.newPrefix') }}
             <el-input-number v-model="splitPrefix" :min="result.cidr" :max="30" size="small" />
           </div>
         </div>
         <el-table :data="splitList" stripe max-height="280" size="small">
-          <el-table-column prop="network" label="网络地址" />
+          <el-table-column prop="network" :label="t('subnet.network')" />
           <el-table-column prop="cidr" label="CIDR" width="80" />
-          <el-table-column prop="range" label="可用主机范围" />
-          <el-table-column prop="broadcast" label="广播地址" />
-          <el-table-column prop="hosts" label="可用数" width="80" />
-          <el-table-column label="操作" width="90">
+          <el-table-column prop="range" :label="t('subnet.hostRange')" />
+          <el-table-column prop="broadcast" :label="t('subnet.broadcast')" />
+          <el-table-column prop="hosts" :label="t('subnet.hosts')" width="80" />
+          <el-table-column :label="t('subnet.actions')" width="90">
             <template #default="{ row }">
-              <el-button size="small" type="primary" plain @click="copy(row.network + row.cidr + ' 范围:' + row.range + ' 广播:' + row.broadcast)">复制</el-button>
+              <el-button size="small" type="primary" plain @click="copy(row.network + row.cidr + ' ' + row.range + ' ' + row.broadcast)">{{ t('common.copy') }}</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -227,10 +229,10 @@ calc()
 
       <!-- 掩码速查 -->
       <div class="section-card">
-        <div class="section-head"><h3>常用子网掩码速查</h3></div>
+        <div class="section-head"><h3>{{ t('subnet.commonMasks') }}</h3></div>
         <div class="mask-table">
           <div class="mask-row mask-header">
-            <span>CIDR</span><span>子网掩码</span><span>可用主机数</span>
+            <span>CIDR</span><span>{{ t('subnet.mask') }}</span><span>{{ t('subnet.hostCount') }}</span>
           </div>
           <div class="mask-row" v-for="m in commonMasks" :key="m.cidr"
                :class="{active: m.cidr === '/' + result.cidr}" @click="cidrInput = parseInt(m.cidr.slice(1)); calc()">

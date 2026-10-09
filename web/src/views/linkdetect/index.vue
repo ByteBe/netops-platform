@@ -311,11 +311,11 @@ function taskColor(row: LinkTask) { return row.color || '#64748b' }
           <el-input v-model="form.name" />
         </el-form-item>
         <el-form-item :label="t('link.target')" required>
-          <el-input v-model="form.target" placeholder="IP或域名" />
+          <el-input v-model="form.target" :placeholder="t('link.ipOrDomain')" />
         </el-form-item>
         <el-form-item :label="t('link.method')">
           <el-select v-model="form.method">
-            <el-option label="系统Ping命令" value="cmd" />
+            <el-option :label="t('link.systemPing')" value="cmd" />
             <el-option label="TCP" value="tcp" />
             <el-option label="ICMP" value="icmp" />
           </el-select>

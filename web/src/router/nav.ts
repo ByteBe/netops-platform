@@ -9,23 +9,24 @@ export interface NavMeta {
 
 // 手动覆盖（可选）：key 为 views 下的目录名
 const overrides: Record<string, NavMeta> = {
-  dashboard: { title: '数据大屏', icon: 'DataBoard', hidden: true },
-  linkdetect: { title: '链路检测', icon: 'Connection' },
-  topology: { title: '网络拓扑', icon: 'Share' },
-  monitor: { title: '设备监控', icon: 'Cpu' },
-  resource: { title: '资源管理', icon: 'FolderOpened' },
-  traffic: { title: '流量分析', icon: 'TrendCharts' },
-  container: { title: '容器监控', icon: 'Box' },
-  k8s: { title: 'K8S集群', icon: 'Ship' },
-  dbmonitor: { title: '数据库监控', icon: 'Coin' },
-  report: { title: '巡检报告', icon: 'Document' },
-  scriptgen: { title: '脚本生成', icon: 'MagicStick' },
-  ipam: { title: 'IP地址管理', icon: 'MapLocation' },
-  subnet: { title: '子网计算', icon: 'Grid' },
-  system: { title: '系统管理', icon: 'Setting' },
-  dbmigrate: { title: '数据库迁移', icon: 'Coin' },
-  distributed: { title: '节点管理', icon: 'Share' },
-  alert: { title: '告警中心', icon: 'Bell' }
+  dashboard: { title: 'nav.dashboard', icon: 'DataBoard', hidden: true },
+  linkdetect: { title: 'nav.linkdetect', icon: 'Connection' },
+  topology: { title: 'nav.topology', icon: 'Share' },
+  monitor: { title: 'nav.monitor', icon: 'Cpu' },
+  resource: { title: 'nav.resource', icon: 'FolderOpened' },
+  traffic: { title: 'nav.traffic', icon: 'TrendCharts' },
+  container: { title: 'nav.container', icon: 'Box' },
+  k8s: { title: 'nav.k8s', icon: 'Ship' },
+  dbmonitor: { title: 'nav.dbmonitor', icon: 'Coin' },
+  report: { title: 'nav.report', icon: 'Document' },
+  scriptgen: { title: 'nav.scriptgen', icon: 'MagicStick' },
+  ipam: { title: 'nav.ipam', icon: 'MapLocation' },
+  subnet: { title: 'nav.subnet', icon: 'Grid' },
+  system: { title: 'nav.system', icon: 'Setting' },
+  dbmigrate: { title: 'nav.dbmigrate', icon: 'Coin' },
+  distributed: { title: 'nav.distributed', icon: 'Share' },
+  alert: { title: 'nav.alert', icon: 'Bell' },
+  bgpmon: { title: 'nav.bgp', icon: 'Connection' }
 }
 
 // 自动扫描 views 目录，收集所有模块名

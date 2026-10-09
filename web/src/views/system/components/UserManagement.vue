@@ -32,51 +32,51 @@ async function remove(u: SysUser) {
   await delEnc(`/user/users/${u.id}`); ElMessage.success(t('common.success')); await load()
 }
 async function resetPwd(u: SysUser) {
-  const { value } = await ElMessageBox.prompt('输入新密码（>12位）', '重置密码', { inputType: 'password' })
+  const { value } = await ElMessageBox.prompt(t('system.pwdPrompt'), t('system.resetPwdTitle'), { inputType: 'password' })
   await postEnc(`/user/users/${u.id}/reset-password`, { password: value }); ElMessage.success(t('common.success'))
 }
-function scopeLabel(s: string) { return s === 'all' ? '全部节点' : (nodes.value.find(n => n.node_id === s)?.name || s) }
+function scopeLabel(s: string) { return s === 'all' ? t('system.allNodes') : (nodes.value.find(n => n.node_id === s)?.name || s) }
 </script>
 <template>
   <div>
-    <div class="np-toolbar"><div class="spacer"></div><el-button type="primary" @click="open()">添加用户</el-button></div>
+    <div class="np-toolbar"><div class="spacer"></div><el-button type="primary" @click="open()">{{ t('system.addUser') }}</el-button></div>
     <div class="np-card">
       <el-table :data="users" stripe class="np-table">
-        <el-table-column prop="username" label="用户名" min-width="120" />
-        <el-table-column prop="employee_no" label="工号" width="120" />
-        <el-table-column prop="email" label="邮箱" min-width="180" />
-        <el-table-column prop="role" label="角色" width="90" />
-        <el-table-column label="数据范围" min-width="140"><template #default="{row}">{{ scopeLabel(row.node_scope) }}</template></el-table-column>
-        <el-table-column prop="status" label="状态" width="90" />
+        <el-table-column prop="username" :label="t('system.username')" min-width="120" />
+        <el-table-column prop="employee_no" :label="t('system.empNo')" width="120" />
+        <el-table-column prop="email" :label="t('system.emailCol')" min-width="180" />
+        <el-table-column prop="role" :label="t('system.roleName')" width="90" />
+        <el-table-column :label="t('system.dataScope')" min-width="140"><template #default="{row}">{{ scopeLabel(row.node_scope) }}</template></el-table-column>
+        <el-table-column prop="status" :label="t('common.status')" width="90" />
         <el-table-column :label="t('common.actions')" width="230" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" text type="primary" @click="open(row)">编辑</el-button>
-            <el-button size="small" text type="warning" @click="resetPwd(row)">重置密码</el-button>
-            <el-button size="small" text type="danger" :disabled="row.username==='admin'" @click="remove(row)">删除</el-button>
+            <el-button size="small" text type="primary" @click="open(row)">{{ t('system.edit') }}</el-button>
+            <el-button size="small" text type="warning" @click="resetPwd(row)">{{ t('system.resetPwd') }}</el-button>
+            <el-button size="small" text type="danger" :disabled="row.username==='admin'" @click="remove(row)">{{ t('system.del') }}</el-button>
           </template>
         </el-table-column>
       </el-table>
     </div>
-    <el-dialog v-model="dlg" title="用户" width="500px">
+    <el-dialog v-model="dlg" :title="t('system.users')" width="500px">
       <el-form :model="form" label-width="90px">
-        <el-form-item label="用户名"><el-input v-model="form.username" :disabled="!!form.id" /></el-form-item>
-        <el-form-item label="工号"><el-input v-model="form.employee_no" /></el-form-item>
-        <el-form-item label="邮箱"><el-input v-model="form.email" /></el-form-item>
-        <el-form-item label="角色">
-          <el-select v-model="form.role"><el-option label="管理员" value="admin" /><el-option label="操作员" value="operator" /></el-select>
+        <el-form-item :label="t('system.username')"><el-input v-model="form.username" :disabled="!!form.id" /></el-form-item>
+        <el-form-item :label="t('system.empNo')"><el-input v-model="form.employee_no" /></el-form-item>
+        <el-form-item :label="t('system.emailCol')"><el-input v-model="form.email" /></el-form-item>
+        <el-form-item :label="t('system.roleName')">
+          <el-select v-model="form.role"><el-option :label="t('system.admin')" value="admin" /><el-option :label="t('system.opRole')" value="operator" /></el-select>
         </el-form-item>
-        <el-form-item label="数据范围">
-          <el-select v-model="form.node_scope" placeholder="选择节点">
-            <el-option label="全部节点（总部）" value="all" />
+        <el-form-item :label="t('system.dataScope')">
+          <el-select v-model="form.node_scope" :placeholder="t('system.selectNode')">
+            <el-option :label="t('system.allNodes')" value="all" />
             <el-option v-for="n in nodes" :key="n.node_id" :label="n.name" :value="n.node_id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="状态">
-          <el-select v-model="form.status"><el-option label="启用" value="active" /><el-option label="禁用" value="disabled" /></el-select>
+        <el-form-item :label="t('common.status')">
+          <el-select v-model="form.status"><el-option :label="t('common.enabled')" value="active" /><el-option :label="t('system.disabled')" value="disabled" /></el-select>
         </el-form-item>
-        <el-form-item v-if="!form.id" label="密码"><el-input v-model="form.password" type="password" /></el-form-item>
+        <el-form-item v-if="!form.id" :label="t('system.password')"><el-input v-model="form.password" type="password" /></el-form-item>
       </el-form>
-      <template #footer><el-button @click="dlg=false">取消</el-button><el-button type="primary" @click="save">保存</el-button></template>
+      <template #footer><el-button @click="dlg=false">{{ t('system.cancel') }}</el-button><el-button type="primary" @click="save">{{ t('system.save') }}</el-button></template>
     </el-dialog>
   </div>
 </template>

@@ -12,5 +12,16 @@ export default {
   scriptgen: '脚本生成器',
   ipam: 'IP地址管理',
   system: '系统管理',
-  profile: '个人中心'
+  profile: '个人中心',
+  subnet: '子网计算',
+  distributed: '节点管理',
+  alert: '告警中心',
+  dbmigrate: '数据库迁移',
+  bgp: 'BGP/VPNv4监控',
+  group_monitor: '网络监控',
+  group_alert: '告警中心',
+  group_asset: '资源与资产',
+  group_infra: '基础设施',
+  group_ops: '运维工具',
+  group_system: '系统管理'
 }

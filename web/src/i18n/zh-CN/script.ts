@@ -2,5 +2,20 @@ export default {
   vendor: '厂商', deviceType: '设备类型', category: '功能分类', template: '配置模板',
   params: '参数配置', generated: '生成结果', history: '生成历史', generate: '生成脚本',
   huawei: '华为', h3c: '华三', router: '路由器', switch: '交换机', ac: 'AC控制器',
-  templateTip: '模板由系统内置，存储于数据库，前后端均不可修改'
+  templateTip: '模板由系统内置，存储于数据库，前后端均不可修改',
+  copied: '已复制',
+  generatedResult: '生成结果',
+  copy: '复制',
+  fillParamsTip: '// 填写参数后点击"生成脚本"',
+  cleanVersion: '纯净版（无注释）',
+  clean: '// 纯净版',
+  selectFeature: '从左侧选择要配置的功能',
+  prefixName: '前缀列表名',
+  seq: '序号', matchNet: '匹配网段', mask: '掩码',
+  addRow: '+ 添加一行',
+  scriptGen: '脚本生成器',
+  cisco: '思科',
+  clear: '清空',
+  fillRequired: '请填写',
+  pleaseInput: '请输入'
 }

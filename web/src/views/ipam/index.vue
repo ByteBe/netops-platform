@@ -152,7 +152,7 @@ async function saveRec() {
   await loadIps()
 }
 async function unuse(item: IPItem) {
-  await ElMessageBox.confirm(`确定释放地址 ${item.ip} ？`, t('common.tip'), { type: 'warning' })
+  await ElMessageBox.confirm(`${t('ipam.releaseConfirm')} ${item.ip} ?`, t('common.tip'), { type: 'warning' })
   await delEnc(`/ipam/records/${item.record_id}`)
   ElMessage.success(t('common.success'))
   await loadIps()
@@ -160,14 +160,14 @@ async function unuse(item: IPItem) {
 
 async function bind(item: IPItem) {
   if (!bindingEnable.value) {
-    ElMessage.warning('地址绑定功能未开启，请先在「绑定配置」中开启')
+    ElMessage.warning(t('ipam.bindingNotEnabled'))
     return
   }
   if (!bindDevices.value.length) {
-    ElMessage.warning('请先添加下发配置的交换机（SSH）')
+    ElMessage.warning(t('ipam.addSwitchFirst'))
     return
   }
-  const { value } = await ElMessageBox.prompt('选择下发配置的交换机（输入设备ID）', '地址绑定下发', {
+  const { value } = await ElMessageBox.prompt(t('ipam.selectSwitch'), t('ipam.bindDelivery'), {
     inputValue: String(bindDevices.value[0].id),
     inputPlaceholder: bindDevices.value.map((d) => `${d.id}:${d.name}`).join('，'),
     confirmButtonText: t('common.confirm'),
@@ -214,10 +214,10 @@ async function testBindDevice(d: BindDevice) {
   try {
     const r = await postEnc<{ ok: boolean; output: string }>(`/ipam/bind-devices/${d.id}/test`, {})
     testOut.value = r.output
-    ElMessage.success("SSH连接测试成功")
+    ElMessage.success(t('ipam.sshTestOk'))
   } catch (e: any) {
     testOut.value = e?.message || String(e)
-    ElMessage.error("SSH连接测试失败")
+    ElMessage.error(t('ipam.sshTestFail'))
   }
 }
 async function toggleBinding() {
@@ -228,7 +228,7 @@ async function toggleBinding() {
 async function importARP() {
   if (!currentSubnet.value) return
   if (!bindDevices.value.length) {
-    ElMessage.warning('请先添加绑定交换机')
+    ElMessage.warning(t('ipam.addBindSwitchFirst'))
     return
   }
   arpDeviceId.value = bindDevices.value[0].id
@@ -240,7 +240,7 @@ async function confirmImportArp() {
   arpDialog.value = false
   const r = await postEnc<{ imported: number; updated: number; arp_count: number }>(
     `/ipam/subnets/${currentSubnet.value.id}/import-arp`, { bind_device_id: arpDeviceId.value })
-  ElMessage.success(`导入完成：新增 ${r.imported} 条，更新 ${r.updated} 条，ARP表共 ${r.arp_count} 条`)
+  ElMessage.success(`${t('ipam.importDone')}：${t('ipam.newCount')} ${r.imported}，${t('ipam.updatedCount')} ${r.updated}，${t('ipam.arpCount')} ${r.arp_count}`)
   await loadIps()
 }
 function rowClassName(data: { row: IPItem; rowIndex: number }): string {
@@ -258,11 +258,11 @@ onMounted(async () => {
 <template>
   <div class="np-page">
     <div class="np-toolbar">
-      <span class="np-page-desc">可显示已使用与未使用地址，登记使用人员/电脑MAC/办公室，并可下发绑定命令</span>
+      <span class="np-page-desc">{{ t('ipam.pageDesc') }}</span>
       <div class="spacer"></div>
-      <el-switch v-model="bindingEnable" @change="toggleBinding" active-text="地址绑定" />
+      <el-switch v-model="bindingEnable" @change="toggleBinding" :active-text="t('ipam.bindingEnabled')" />
       <el-button type="primary" @click="openBindDevice()">
-        <el-icon><Connection /></el-icon>绑定交换机
+        <el-icon><Connection /></el-icon>{{ t('ipam.bindDevice') }}
       </el-button>
       <el-button type="primary" @click="subnetDialog = true">
         <el-icon><Plus /></el-icon>{{ t('ipam.addSubnet') }}
@@ -282,7 +282,7 @@ onMounted(async () => {
           @click="selectSubnet(s)"
         >
           <div class="np-st-name">{{ s.name }}</div>
-          <div class="np-st-cidr">{{ s.cidr }} <el-tag v-if="s.binding_enabled" size="small" type="success">绑定</el-tag></div>
+          <div class="np-st-cidr">{{ s.cidr }} <el-tag v-if="s.binding_enabled" size="small" type="success">{{ t('ipam.bound') }}</el-tag></div>
           <div class="np-st-ops">
             <el-button size="small" text type="primary" @click.stop="Object.assign(subnetForm, s); subnetDialog = true">{{ t('common.edit') }}</el-button>
             <el-button size="small" text type="danger" @click.stop="removeSubnet(s)">{{ t('common.delete') }}</el-button>
@@ -296,16 +296,16 @@ onMounted(async () => {
     <div class="np-card">
       <div class="np-card-title">
         <el-icon><Position /></el-icon>
-        <span>{{ currentSubnet?.name || t('ipam.subnets') }} · IP 列表（{{ ipTotal }}）</span>
+        <span>{{ currentSubnet?.name || t('ipam.subnets') }} · {{ t('ipam.ipList') }}（{{ ipTotal }}）</span>
         <div class="spacer"></div>
         <el-radio-group v-model="ipStatus" @change="ipPage = 1; loadIps()" size="small">
-          <el-radio-button value="all">全部</el-radio-button>
-          <el-radio-button value="used">已使用</el-radio-button>
-          <el-radio-button value="unused">未使用</el-radio-button>
+          <el-radio-button value="all">{{ t('ipam.all') }}</el-radio-button>
+          <el-radio-button value="used">{{ t('ipam.used') }}</el-radio-button>
+          <el-radio-button value="unused">{{ t('ipam.unused') }}</el-radio-button>
         </el-radio-group>
-        <el-input v-model="ipKeyword" placeholder="搜索 IP/姓名/MAC" size="small" style="width: 200px; margin-left: 10px" clearable @change="ipPage = 1; loadIps()" />
+        <el-input v-model="ipKeyword" :placeholder="t('ipam.searchIp')" size="small" style="width: 200px; margin-left: 10px" clearable @change="ipPage = 1; loadIps()" />
         <el-button size="small" type="warning" style="margin-left: 10px" :disabled="!bindDevices.length" @click="importARP">
-          <el-icon><Download /></el-icon> 读取交换机ARP
+          <el-icon><Download /></el-icon> {{ t('ipam.readArp') }}
         </el-button>
       </div>
       <el-table :data="ipItems" stripe size="small" class="np-table" :row-class-name="rowClassName">
@@ -322,8 +322,8 @@ onMounted(async () => {
         <el-table-column prop="office" :label="t('ipam.office')" width="140" />
         <el-table-column :label="t('ipam.bindStatus')" width="100">
           <template #default="{ row }">
-            <el-tag v-if="row.bind_status === 'ok'" size="small" type="success">已绑定</el-tag>
-            <el-tag v-else-if="row.bind_status === 'fail'" size="small" type="danger">失败</el-tag>
+            <el-tag v-if="row.bind_status === 'ok'" size="small" type="success">{{ t('ipam.boundTag') }}</el-tag>
+            <el-tag v-else-if="row.bind_status === 'fail'" size="small" type="danger">{{ t('ipam.failTag') }}</el-tag>
             <span v-else>—</span>
           </template>
         </el-table-column>
@@ -332,8 +332,8 @@ onMounted(async () => {
             <el-button v-if="row.status === 'unused'" size="small" text type="primary" @click="openRec(row)">{{ t('ipam.register') }}</el-button>
             <template v-else>
               <el-button size="small" text type="primary" @click="openRec(row)">{{ t('common.edit') }}</el-button>
-              <el-button size="small" text type="primary" :disabled="!bindingEnable" @click="bind(row)">绑定下发</el-button>
-              <el-button size="small" text type="danger" @click="unuse(row)">释放</el-button>
+              <el-button size="small" text type="primary" :disabled="!bindingEnable" @click="bind(row)">{{ t('ipam.bindDeliver') }}</el-button>
+              <el-button size="small" text type="danger" @click="unuse(row)">{{ t('ipam.release') }}</el-button>
             </template>
           </template>
         </el-table-column>
@@ -347,19 +347,19 @@ onMounted(async () => {
     <div class="np-card">
       <div class="np-card-title">
         <el-icon><Connection /></el-icon>
-        <span>下发配置的交换机（SSH 远程登录，区别于 SNMP 监控）</span>
+        <span>{{ t('ipam.bindSwitchTitle') }}</span>
         <div class="spacer"></div>
-        <el-button size="small" type="primary" @click="openBindDevice()">添加</el-button>
+        <el-button size="small" type="primary" @click="openBindDevice()">{{ t('ipam.add') }}</el-button>
       </div>
       <el-table :data="bindDevices" stripe size="small" class="np-table">
-        <el-table-column prop="name" label="名称" min-width="140" />
+        <el-table-column prop="name" :label="t('ipam.name')" min-width="140" />
         <el-table-column prop="ip" label="IP" width="130" />
-        <el-table-column prop="ssh_user" label="SSH用户" width="100" />
-        <el-table-column prop="ssh_port" label="端口" width="80" />
-        <el-table-column prop="vendor" label="厂商" width="80" />
+        <el-table-column prop="ssh_user" :label="t('ipam.sshUser')" width="100" />
+        <el-table-column prop="ssh_port" :label="t('ipam.port')" width="80" />
+        <el-table-column prop="vendor" :label="t('ipam.vendor')" width="80" />
         <el-table-column :label="t('common.actions')" width="200">
           <template #default="{ row }">
-            <el-button size="small" text type="primary" @click="testBindDevice(row)">测试</el-button>
+            <el-button size="small" text type="primary" @click="testBindDevice(row)">{{ t('ipam.test') }}</el-button>
             <el-button size="small" text type="primary" @click="openBindDevice(row)">{{ t('common.edit') }}</el-button>
             <el-button size="small" text type="danger" @click="removeBindDevice(row)">{{ t('common.delete') }}</el-button>
           </template>
@@ -369,9 +369,9 @@ onMounted(async () => {
     </div>
 
     <!-- 导入ARP对话框 -->
-    <el-dialog v-model="arpDialog" title="从交换机导入ARP" width="420px">
+    <el-dialog v-model="arpDialog" :title="t('ipam.importArp')" width="420px">
       <el-form label-width="100px">
-        <el-form-item label="选择交换机">
+        <el-form-item :label="t('ipam.selectSwitchLabel')">
           <el-select v-model="arpDeviceId" style="width:100%">
             <el-option v-for="d in bindDevices" :key="d.id" :label="`${d.name} (${d.ip})`" :value="d.id" />
           </el-select>
@@ -437,7 +437,7 @@ onMounted(async () => {
     </el-dialog>
 
     <!-- 绑定交换机对话框 -->
-    <el-dialog v-model="bindDialog" :title="bindForm.id ? t('common.edit') : '添加绑定交换机'" width="500px">
+    <el-dialog v-model="bindDialog" :title="bindForm.id ? t('common.edit') : t('ipam.addBindSwitch')" width="500px">
       <el-form :model="bindForm" label-width="110px">
         <el-form-item :label="t('common.name')" required>
           <el-input v-model="bindForm.name" />
@@ -445,26 +445,27 @@ onMounted(async () => {
         <el-form-item label="IP" required>
           <el-input v-model="bindForm.ip" />
         </el-form-item>
-        <el-form-item label="SSH用户">
+        <el-form-item :label="t('ipam.sshUser')">
           <el-input v-model="bindForm.ssh_user" />
         </el-form-item>
-        <el-form-item label="SSH端口">
+        <el-form-item :label="t('ipam.sshPort')">
           <el-input-number v-model="bindForm.ssh_port" :min="1" :max="65535" />
         </el-form-item>
-        <el-form-item label="认证方式">
+        <el-form-item :label="t('ipam.authType')">
           <el-select v-model="bindForm.auth_type">
-            <el-option label="密码" value="password" />
-            <el-option label="密钥" value="key" />
+            <el-option :label="t('ipam.password')" value="password" />
+            <el-option :label="t('ipam.key')" value="key" />
           </el-select>
         </el-form-item>
-        <el-form-item :label="bindForm.auth_type === 'key' ? '私钥内容' : '密码'">
+        <el-form-item :label="bindForm.auth_type === 'key' ? t('ipam.privateKey') : t('ipam.password')">
           <el-input v-if="bindForm.auth_type === 'key'" v-model="bindForm.credential" type="textarea" :rows="4" />
           <el-input v-else v-model="bindForm.credential" type="password" show-password />
         </el-form-item>
-        <el-form-item label="厂商">
+        <el-form-item :label="t('ipam.vendor')">
           <el-select v-model="bindForm.vendor">
-            <el-option label="华为" value="huawei" />
-            <el-option label="华三" value="h3c" />
+            <el-option :label="t('ipam.huawei')" value="huawei" />
+            <el-option :label="t('ipam.h3c')" value="h3c" />
+            <el-option :label="t('ipam.cisco')" value="cisco" />
           </el-select>
         </el-form-item>
       </el-form>

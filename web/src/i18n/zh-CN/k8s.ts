@@ -1,0 +1,23 @@
+export default {
+  k8sMonitor: 'Kubernetes 监控',
+  nameRequired: '名称必填',
+  apiServerRequired: 'API Server必填',
+  saved: '已保存',
+  confirmDelete: '删除',
+  fillApiServer: '请先填写API Server',
+  testSuccess: '连接成功', testFail: '连接失败',
+  done: '完成',
+  enabled: '运行中', notEnabled: '未启用',
+  saveConfig: '保存配置', collectNow: '立即采集',
+  clusters: 'K8s 集群', addCluster: '添加集群',
+  online: '在线', offline: '离线',
+  clusterName: '集群名称', remark: '备注',
+  yes: '是', no: '否', actions: '操作',
+  edit: '编辑', del: '删除',
+  nodeList: '节点列表', cluster: '集群',
+  ready: '就绪', notReady: '未就绪',
+  mem: '内存', role: '角色',
+  editCluster: '编辑集群', addClusterTitle: '添加集群',
+  testConn: '测试连接',
+  cancel: '取消', save: '保存'
+}

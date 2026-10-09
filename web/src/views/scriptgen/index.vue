@@ -1,11 +1,13 @@
 ﻿<script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { getEnc, postEnc } from '@/utils/request'
 import type { Category, Group } from '@/types/scriptgen'
 import CateList from './CateList.vue'
 import ParamForm from './ParamForm.vue'
 import ScriptOutput from './ScriptOutput.vue'
+const { t } = useI18n()
 
 const groups = ref<Group[]>([])
 const vendor = ref('huawei')
@@ -32,7 +34,7 @@ async function gen() {
       if (f.showIf.eqAny && f.showIf.eqAny.length && !f.showIf.eqAny.includes(v)) continue
       if (f.showIf.eq && v !== f.showIf.eq) continue
     }
-    if (!params.value[f.key]) { ElMessage.warning(`请填写：${f.label}`); return }
+    if (!params.value[f.key]) { ElMessage.warning(`${t('script.fillRequired')}：${f.label}`); return }
   }
   loading.value = true
   try {
@@ -49,14 +51,14 @@ onMounted(load)
 <template>
   <div style="display:flex;flex-direction:column;gap:12px">
     <div style="display:flex;align-items:center">
-      <span style="font-size:16px;font-weight:700">⚡ 脚本生成器</span>
+      <span style="font-size:16px;font-weight:700">⚡ {{ t('script.scriptGen') }}</span>
       <el-radio-group v-model="vendor" size="default" style="margin-left:16px">
-        <el-radio-button value="huawei">华为</el-radio-button>
-        <el-radio-button value="h3c">华三</el-radio-button>
-        <el-radio-button value="cisco">思科</el-radio-button>
+        <el-radio-button value="huawei">{{ t('script.huawei') }}</el-radio-button>
+        <el-radio-button value="h3c">{{ t('script.h3c') }}</el-radio-button>
+        <el-radio-button value="cisco">{{ t('script.cisco') }}</el-radio-button>
       </el-radio-group>
       <div style="flex:1"></div>
-      <el-button size="small" @click="output='';outputClean=''">清空</el-button>
+      <el-button size="small" @click="output='';outputClean=''">{{ t('script.clear') }}</el-button>
     </div>
     <div style="display:grid;grid-template-columns:220px 1fr;gap:12px;align-items:start">
       <CateList :groups="groups" :selected="selected" @pick="pick" />

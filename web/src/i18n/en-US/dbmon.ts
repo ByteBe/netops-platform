@@ -4,5 +4,9 @@ export default {
   availability: 'Availability', status: 'Status', version: 'Version',
   connections: 'Connections', capacity: 'Capacity', tables: 'Tables',
   txRate: 'Tx/s', deadlocks: 'Deadlocks', errors: 'Errors',
-  uptime: 'Uptime', logPos: 'Log Position'
+  uptime: 'Uptime', logPos: 'Log Position',
+  dbName: 'Database Name', dbNamePlaceholder: 'Leave empty for mysql',
+  testConn: 'Test Connection', testSuccess: 'Connection OK', testFail: 'Connection failed',
+  hostRequired: 'Please enter host',
+  builtin: 'Built-in'
 }

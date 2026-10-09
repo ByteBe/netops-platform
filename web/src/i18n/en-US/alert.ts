@@ -5,5 +5,16 @@ export default {
   time: 'Time', nodeOffline: 'Node Offline', cpuHigh: 'CPU High',
   memHigh: 'Memory High', diskHigh: 'Disk High', channel: 'Channel',
   email: 'Email', webhook: 'Webhook', dingtalk: 'DingTalk',
-  wecom: 'WeCom', feishu: 'Feishu', sms: 'SMS'
+  wecom: 'WeCom', feishu: 'Feishu', sms: 'SMS',
+  saved: 'Saved',
+  deleteConfirm: 'Delete?',
+  target: 'Target', message: 'Message',
+  acked: 'Acknowledged', unacked: 'Unacknowledged',
+  ack: 'Ack',
+  ruleName: 'Rule Name',
+  thresholdPct: 'Threshold(%)', durationMin: 'Duration(min)',
+  edit: 'Edit', del: 'Delete',
+  cancel: 'Cancel', save: 'Save',
+  link: 'Link',
+  info: 'Info', warning: 'Warning', critical: 'Critical'
 }

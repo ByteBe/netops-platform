@@ -1,5 +1,25 @@
 export default {
   dockerEnable: 'Docker监控', k8sEnable: 'Kubernetes监控', interval: '采集间隔(秒)',
   apiServer: 'API Server地址', token: '访问令牌', docker: 'Docker容器',
-  k8s: 'Kubernetes集群', cpu: 'CPU', mem: '内存', name: '名称', status: '状态'
+  k8s: 'Kubernetes集群', cpu: 'CPU', mem: '内存', name: '名称', status: '状态',
+  running: '运行中', paused: '已暂停', exited: '已退出', dead: '异常',
+  created: '已创建', restarting: '重启中',
+  nameRequired: '名称必填',
+  saved: '已保存',
+  confirmDelete: '删除',
+  addrEmptyLocal: '地址为空时测试本机',
+  testSuccess: '连接成功', testFail: '连接失败',
+  done: '完成',
+  enabled: '运行中', notEnabled: '未启用',
+  saveConfig: '保存配置', collectNow: '立即采集',
+  dockerHosts: 'Docker 主机', addHost: '添加主机',
+  online: '在线', offline: '离线',
+  hostName: '主机名称', address: '地址', local: '本机',
+  remark: '备注', yes: '是', no: '否', actions: '操作',
+  edit: '编辑', del: '删除',
+  containers: '容器列表', host: '主机', image: '镜像',
+  editHost: '编辑主机', addHostTitle: '添加主机',
+  addrPlaceholder: '空=本机；远程 tcp://IP:2375',
+  testConn: '测试连接',
+  cancel: '取消', save: '保存'
 }
