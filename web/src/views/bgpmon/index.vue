@@ -3,8 +3,9 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { getEnc } from '@/utils/request'
+import { getEnc, postEnc } from '@/utils/request'
 import { fmtTime } from '@/utils'
+import { ElMessage } from 'element-plus'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -12,16 +13,41 @@ const router = useRouter()
 interface Peer {
   device_id: number; device_name: string; peer_ip: string; asn: string; v: string
   state: string; up_down: string; prefix_rcvd: number; prefix_sent: number
-  is_rr: boolean; updated_at: string
+  is_rr: boolean; out_iface?: string; updated_at: string
 }
+interface Dev { id: number; name: string; ip: string; bgp_enable: boolean }
 const peers = ref<Peer[]>([])
+const devs = ref<Dev[]>([])
+const testDevId = ref<number>(0)
+const testing = ref(false)
 let timer: any
 
 async function load() {
   try { peers.value = await getEnc<Peer[]>('/bgpmon/peers') } catch {}
+  try {
+    const list = await getEnc<Dev[]>('/monitor/devices')
+    devs.value = (list || []).filter((d: any) => d.bgp_enable)
+    if (!testDevId.value && devs.value.length) testDevId.value = devs.value[0].id
+  } catch {}
 }
 onMounted(() => { load(); timer = setInterval(load, 15000) })
 onBeforeUnmount(() => clearInterval(timer))
+
+async function runTest() {
+  if (!testDevId.value) { ElMessage.warning(t('bgp.pickDevice')); return }
+  testing.value = true
+  try {
+    const r = await postEnc<any>('/bgpmon/test', { device_id: testDevId.value })
+    if (r.ok) {
+      ElMessage.success(t('bgp.testOk', { n: r.count }))
+      load()
+    } else {
+      ElMessage.error(r.error || t('bgp.testFail'))
+    }
+  } catch (e: any) {
+    ElMessage.error(e?.message || t('bgp.testFail'))
+  } finally { testing.value = false }
+}
 
 function stateType(s: string) {
   if (s === 'Established') return 'success'
@@ -35,12 +61,19 @@ function stateType(s: string) {
       <span class="np-page-desc">{{ t('bgp.title') }}</span>
       <span class="np-tip">{{ t('bgp.readOnly') }}</span>
       <div class="spacer"></div>
+      <el-select v-model="testDevId" size="small" style="width:180px" :placeholder="t('bgp.pickDevice')">
+        <el-option v-for="d in devs" :key="d.id" :label="d.name + '(' + d.ip + ')'" :value="d.id" />
+      </el-select>
+      <el-button size="small" :loading="testing" @click="runTest">{{ t('bgp.testBtn') }}</el-button>
       <el-button type="primary" @click="router.push('/monitor')">{{ t('bgp.goDevice') }}</el-button>
     </div>
     <div class="np-card">
       <el-table :data="peers" stripe class="np-table" v-if="peers.length">
         <el-table-column :label="t('bgp.device')" prop="device_name" min-width="140" />
         <el-table-column :label="t('bgp.peerIp')" prop="peer_ip" min-width="130" />
+        <el-table-column :label="t('bgp.outIface')" prop="out_iface" min-width="170">
+          <template #default="{ row }">{{ row.out_iface || '--' }}</template>
+        </el-table-column>
         <el-table-column label="ASN" prop="asn" width="100" />
         <el-table-column label="V" prop="v" width="60" />
         <el-table-column :label="t('bgp.state')" width="120">

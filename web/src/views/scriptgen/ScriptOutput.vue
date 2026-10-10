@@ -4,7 +4,33 @@ import { ElMessage } from 'element-plus'
 const { t } = useI18n()
 defineProps<{ output: string; outputClean: string }>()
 
-function copy(s: string) { navigator.clipboard?.writeText(s); ElMessage.success(t('script.copied')) }
+async function copy(s: string) {
+  if (!s) return
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(s)
+    } else {
+      const ta = document.createElement('textarea')
+      ta.value = s
+      ta.style.position = 'fixed'
+      ta.style.top = '0'
+      ta.style.left = '0'
+      ta.style.width = '1px'
+      ta.style.height = '1px'
+      ta.style.opacity = '0'
+      ta.setAttribute('readonly', 'readonly')
+      document.body.appendChild(ta)
+      ta.focus()
+      ta.select()
+      ta.setSelectionRange(0, s.length)
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+    }
+    ElMessage.success(t('script.copied'))
+  } catch (e) {
+    ElMessage.error(t('script.copyFail'))
+  }
+}
 </script>
 
 <template>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // 设备监控：SNMP采集（服务器/交换机/路由器）+ 快照 + 历史
-import { ref, reactive, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import * as echarts from 'echarts'
@@ -35,6 +35,7 @@ interface MonitorDevice {
   status?: string
   vendor?: string
   ssh_user?: string; ssh_pass?: string; ssh_port?: number; bgp_enable?: boolean
+  display_ifs?: string
 }
 interface DeviceSnap {
   device_id: number
@@ -60,7 +61,11 @@ const form = reactive<MonitorDevice>({
   id: 0, name: '', ip: '', type: 'switch', vendor: '', snmp_version: '2c', community: 'public',
   username: '', auth_proto: 'md5', priv_proto: 'des', auth_pass: '', priv_pass: '',
   port: 161, interval: 60, group_id: 0, enable: true, remark: '',
-  ssh_user: '', ssh_pass: '', ssh_port: 22, bgp_enable: false
+  ssh_user: '', ssh_pass: '', ssh_port: 22, bgp_enable: false, display_ifs: ''
+})
+const displayIfArr = computed<string[]>({
+  get: () => form.display_ifs ? form.display_ifs.split(',').filter(Boolean) : [],
+  set: (v) => { form.display_ifs = (v || []).join(',') }
 })
 
 // 历史曲线
@@ -149,6 +154,20 @@ async function testConn() {
   } catch (e: any) { testResult.value = t('monitor.testFail') + ': ' + e.message } finally { testing.value = false }
 }
 
+const sshTesting = ref(false)
+const sshTestResult = ref('')
+async function testSsh() {
+  if (!form.ip || !form.ssh_user) { ElMessage.warning('请填写 IP 与 SSH 账号'); return }
+  sshTesting.value = true; sshTestResult.value = ''
+  try {
+    const r = await postEnc<{ok: boolean; count?: number; error?: string}>('/bgpmon/test', {
+      ip: form.ip, ssh_user: form.ssh_user, ssh_pass: form.ssh_pass,
+      ssh_port: form.ssh_port, vendor: form.vendor
+    })
+    sshTestResult.value = r.ok ? `OK (${r.count||0} peers)` : (r.error || 'fail')
+  } catch (e: any) { sshTestResult.value = 'ERR: ' + (e.message||'') } finally { sshTesting.value = false }
+}
+
 async function showHistory(d: MonitorDevice) {
   histDevice.value = d
   histVisible.value = true
@@ -174,6 +193,19 @@ async function showHistory(d: MonitorDevice) {
 
 function ifName(s: DeviceSnap, name: string): string {
   return s.interfaces.find((i) => i.name === name || i.index === name)?.name || name
+}
+
+function displayIfs(s?: DeviceSnap, d?: MonitorDevice) {
+  if (!s?.interfaces) return []
+  const virtual = /NULL|LoopBack|InLoopBack|Tunnel|Register|MEth|Vlan|Bridge|BSI|Dialer|Cellular/i
+  let list = s.interfaces.filter((i) => !virtual.test(i.name))
+  if (d?.display_ifs) {
+    const sel = d.display_ifs.split(',').filter(Boolean)
+    list = list.filter((i) => sel.includes(i.name))
+  }
+  return list
+    .sort((a, b) => (b.in_bps + b.out_bps) - (a.in_bps + a.out_bps))
+    .slice(0, 5)
 }
 
 onMounted(async () => {
@@ -229,7 +261,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <div v-if="d.type !== 'server' && (snaps[d.id]?.interfaces || []).length" class="np-dev-ifs">
-          <div v-for="ifs in (snaps[d.id]?.interfaces || []).slice(0, 5)" :key="ifs.index" class="np-if-row">
+          <div v-for="ifs in displayIfs(snaps[d.id], d)" :key="ifs.index" class="np-if-row">
             <span class="np-if-name">{{ ifs.name }}</span>
             <span class="np-if-val">↓ {{ fmtBps(ifs.in_bps) }}</span>
             <span class="np-if-val">↑ {{ fmtBps(ifs.out_bps) }}</span>
@@ -260,7 +292,9 @@ onBeforeUnmount(() => {
         <el-table-column prop="name" :label="t('monitor.deviceName')" min-width="140" />
         <el-table-column prop="ip" :label="t('monitor.ip')" min-width="140" />
         <el-table-column prop="type" :label="t('monitor.deviceType')" width="110" />
-        <el-table-column prop="snmp_version" label="SNMP" width="80" />
+        <el-table-column label="SNMP" width="80">
+          <template #default="{ row }">v{{ row.snmp_version }}</template>
+        </el-table-column>
         <el-table-column prop="interval" :label="t('monitor.interval')" width="110" />
         <el-table-column :label="t('common.status')" width="90">
           <template #default="{ row }">
@@ -353,10 +387,17 @@ onBeforeUnmount(() => {
           <el-input v-model="form.ssh_pass" type="password" show-password />
         </el-form-item>
         <el-form-item :label="t('bgp.sshPort')">
-          <el-input-number v-model="form.ssh_port" :min="1" :max="65535" />
+          <el-input-number v-model="form.ssh_port" :min="1" :max="65535" style="margin-right:12px" />
+          <el-button :loading="sshTesting" @click="testSsh">{{ t('bgp.testBtn') }}</el-button>
+          <span v-if="sshTestResult" :style="{ marginLeft:'12px', color: sshTestResult.indexOf('OK') >= 0 ? '#67C23A' : '#F56C6C', fontSize:'13px' }">{{ sshTestResult }}</span>
         </el-form-item>
         <el-form-item :label="t('bgp.bgpEnable')">
           <el-switch v-model="form.bgp_enable" />
+        </el-form-item>
+        <el-form-item :label="t('monitor.displayIfs')">
+          <el-select v-model="displayIfArr" multiple filterable :placeholder="t('monitor.displayIfsPlaceholder')" style="width:100%">
+            <el-option v-for="i in (snaps[form.id]?.interfaces || [])" :key="i.index" :label="i.name" :value="i.name" />
+          </el-select>
         </el-form-item>
         <el-form-item :label="t('common.enabled')">
           <el-switch v-model="form.enable" />

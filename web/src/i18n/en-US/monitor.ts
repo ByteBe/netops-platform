@@ -15,5 +15,6 @@ export default {
   firewall: 'Firewall', other: 'Other',
   vendor: 'Vendor', autoDetect: 'Auto Detect',
   cisco: 'Cisco', huawei: 'Huawei', h3c: 'H3C',
-  testConn: 'Test Connection'
+  testConn: 'Test Connection',
+  displayIfs: 'Card Interfaces', displayIfsPlaceholder: 'Empty = top 5 by traffic'
 }

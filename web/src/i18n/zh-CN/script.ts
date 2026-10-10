@@ -4,6 +4,7 @@ export default {
   huawei: '华为', h3c: '华三', router: '路由器', switch: '交换机', ac: 'AC控制器',
   templateTip: '模板由系统内置，存储于数据库，前后端均不可修改',
   copied: '已复制',
+  copyFail: '复制失败，请手动选择文本复制',
   generatedResult: '生成结果',
   copy: '复制',
   fillParamsTip: '// 填写参数后点击"生成脚本"',

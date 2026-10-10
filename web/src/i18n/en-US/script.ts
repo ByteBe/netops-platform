@@ -5,6 +5,7 @@ export default {
   switch: 'Switch', ac: 'AC Controller',
   templateTip: 'Templates are built-in, stored in database and cannot be modified from frontend/backend',
   copied: 'Copied',
+  copyFail: 'Copy failed, please select text manually',
   generatedResult: 'Generated Result',
   copy: 'Copy',
   fillParamsTip: '// Fill params and click "Generate"',

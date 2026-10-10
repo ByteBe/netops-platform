@@ -128,7 +128,9 @@ func DecryptBody() gin.HandlerFunc {
 // EncryptResponse SM4 响应体加密（存在会话密钥时对 JSON 响应整体加密）
 func EncryptResponse(app *core.App) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if !strings.HasPrefix(c.Request.URL.Path, "/api/") || strings.HasSuffix(c.Request.URL.Path, "/html") {
+		if !strings.HasPrefix(c.Request.URL.Path, "/api/") ||
+			strings.HasSuffix(c.Request.URL.Path, "/html") ||
+			strings.HasSuffix(c.Request.URL.Path, "/upload") {
 			c.Next()
 			return
 		}

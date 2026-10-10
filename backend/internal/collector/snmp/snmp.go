@@ -27,6 +27,7 @@ const (
 	oidIfOutOctets      = "1.3.6.1.2.1.2.2.1.16"
 	oidIfHCInOctets    = "1.3.6.1.2.1.31.1.1.1.6"
 	oidIfHCOutOctets   = "1.3.6.1.2.1.31.1.1.1.10"
+	oidIfHighSpeed     = "1.3.6.1.2.1.31.1.1.1.15"
 	oidHrProcessorLoad  = "1.3.6.1.2.1.25.3.3.1.2"
 	oidHrStorageIndex   = "1.3.6.1.2.1.25.2.3.1.1"
 	oidHrStorageType    = "1.3.6.1.2.1.25.2.3.1.2"
@@ -54,9 +55,9 @@ const (
 	oidHuaweiCpu = "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5"
 	oidHuaweiMem = "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7"
 
-	// H3C: hh3cEntityCpuUsage, hh3cEntityMemoryUsage
+	// H3C: hh3cEntityExtCpuUsage, hh3cEntityExtMemUsage
 	oidH3cCpu = "1.3.6.1.4.1.25506.2.6.1.1.1.1.6"
-	oidH3cMem = "1.3.6.1.4.1.25506.2.6.1.1.1.1.7"
+	oidH3cMem = "1.3.6.1.4.1.25506.2.6.1.1.1.1.8"
 
 	// Windows: hrProcessorLoad + hrStorage 已覆盖，额外采集 logical disk
 	// Windows 逻辑磁盘 hrStorageDescr 通常是 "C:" "D:" 等
@@ -82,14 +83,14 @@ type Device struct {
 
 // IfStats 接口统计（瞬时）
 type IfStats struct {
-	Index    string
-	Name     string
-	Speed    uint64
-	Oper     string
-	InBps    float64
-	OutBps   float64
-	InOctets uint64
-	OutOctets uint64
+	Index    string  `json:"index"`
+	Name     string  `json:"name"`
+	Speed    uint64  `json:"speed"`
+	Oper     string  `json:"oper"`
+	InBps    float64 `json:"in_bps"`
+	OutBps   float64 `json:"out_bps"`
+	InOctets uint64  `json:"in_octets"`
+	OutOctets uint64 `json:"out_octets"`
 }
 
 // DeviceSnapshot 设备采集快照
@@ -121,6 +122,7 @@ type Manager struct {
 	runs     map[uint]chan struct{}
 	lastOct  map[string]map[string]uint64
 	lastTime map[string]time.Time
+	smooth   map[string][2]float64 // device:ifIndex -> [in,out] EWMA
 	snap     map[uint]*DeviceSnapshot
 	ts       tsdb.Engine
 	hub      *notify.Hub
@@ -135,6 +137,7 @@ func NewManager(ts tsdb.Engine, hub *notify.Hub) *Manager {
 		runs:     map[uint]chan struct{}{},
 		lastOct:  map[string]map[string]uint64{},
 		lastTime: map[string]time.Time{},
+		smooth:   map[string][2]float64{},
 		snap:     map[uint]*DeviceSnapshot{},
 		ts:       ts,
 		hub:      hub,
@@ -207,12 +210,17 @@ func (m *Manager) collectLoop(d Device, stop chan struct{}) {
 	tick := time.NewTicker(interval)
 	defer tick.Stop()
 	m.collect(d)
+	// 启动后 3 秒补采一次，让登录后立即有速率
+	quick := time.NewTimer(3 * time.Second)
+	defer quick.Stop()
 	for {
 		select {
 		case <-m.stopAll:
 			return
 		case <-stop:
 			return
+		case <-quick.C:
+			m.collect(d)
 		case <-tick.C:
 			m.collect(d)
 		}
@@ -309,15 +317,15 @@ func (m *Manager) collectOnce(d Device) (*DeviceSnapshot, error) {
 
 	snap := &DeviceSnapshot{DeviceID: d.ID, Name: d.Name, IP: d.IP, Up: true, TS: time.Now()}
 
-	// Uptime: hrSystemUptime 优先，sysUpTime 回退
-	if uptime, err := params.Get([]string{"1.3.6.1.2.1.25.1.1.0"}); err == nil && len(uptime.Variables) > 0 {
+	// Uptime: sysUpTime (1.3.6.1.2.1.1.3.0) 优先，hrSystemUptime 回退
+	if uptime2, err2 := params.Get([]string{oidSysUpTime}); err2 == nil && len(uptime2.Variables) > 0 && uptime2.Variables[0].Value != nil {
+		snap.Uptime = float64(toUint32(uptime2.Variables[0].Value)) / 100
+		log.Printf("[snmp] device=%s uptime via sysUpTime: raw=%v -> %.0fs", d.Name, uptime2.Variables[0].Value, snap.Uptime)
+	} else if uptime, err := params.Get([]string{"1.3.6.1.2.1.25.1.1.0"}); err == nil && len(uptime.Variables) > 0 && uptime.Variables[0].Value != nil {
 		snap.Uptime = float64(toUint32(uptime.Variables[0].Value)) / 100
 		log.Printf("[snmp] device=%s uptime via hrSystemUptime: raw=%v -> %.0fs", d.Name, uptime.Variables[0].Value, snap.Uptime)
-	} else if uptime2, err2 := params.Get([]string{oidSysUpTime}); err2 == nil && len(uptime2.Variables) > 0 {
-		snap.Uptime = float64(toUint32(uptime2.Variables[0].Value)) / 100
-		log.Printf("[snmp] device=%s uptime via sysUpTime: raw=%v -> %.0fs (hrErr=%v)", d.Name, uptime2.Variables[0].Value, snap.Uptime, err)
 	} else {
-		log.Printf("[snmp] device=%s uptime GET failed: hrErr=%v sysErr=%v", d.Name, err, err2)
+		log.Printf("[snmp] device=%s uptime GET failed: sysErr=%v hrErr=%v", d.Name, err2, err)
 	}
 
 	// 采集 CPU
@@ -707,6 +715,7 @@ func (m *Manager) collectInterfaces(params *gosnmp.GoSNMP, d Device, snap *Devic
 	}
 	hcIn := map[string]uint64{}
 	hcOut := map[string]uint64{}
+	highSpeed := map[string]uint64{}
 	if rows, err := params.BulkWalkAll(oidIfHCInOctets); err == nil {
 		for _, v := range rows {
 			hcIn[oidLast(v.Name)] = toUint64(v.Value)
@@ -715,6 +724,11 @@ func (m *Manager) collectInterfaces(params *gosnmp.GoSNMP, d Device, snap *Devic
 	if rows, err := params.BulkWalkAll(oidIfHCOutOctets); err == nil {
 		for _, v := range rows {
 			hcOut[oidLast(v.Name)] = toUint64(v.Value)
+		}
+	}
+	if rows, err := params.BulkWalkAll(oidIfHighSpeed); err == nil {
+		for _, v := range rows {
+			highSpeed[oidLast(v.Name)] = toUint64(v.Value) * 1000000 // Mbps -> bps
 		}
 	}
 
@@ -734,6 +748,9 @@ func (m *Manager) collectInterfaces(params *gosnmp.GoSNMP, d Device, snap *Devic
 			name = "if" + idx
 		}
 		speed := speeds[oid]
+		if speed == 0 {
+			speed = highSpeed[oid]
+		}
 		oper := "down"
 		if op, ok := opers[oid]; ok && op == "1" {
 			oper = "up"
@@ -749,9 +766,9 @@ func (m *Manager) collectInterfaces(params *gosnmp.GoSNMP, d Device, snap *Devic
 		curOuts[idx] = outO
 
 		ifs := IfStats{Index: idx, Name: name, Speed: speed, Oper: oper, InOctets: inO, OutOctets: outO}
-		if prevIns != nil && prevOuts != nil && !prevT.IsZero() {
+		if prevIns != nil && prevOuts != nil && !prevT.IsZero() && oper == "up" {
 			dt := now.Sub(prevT).Seconds()
-			if dt > 0 {
+			if dt > 1 && dt < 600 {
 				if inO >= prevIns[idx] {
 					ifs.InBps = float64(inO-prevIns[idx]) * 8 / dt
 				}
@@ -760,6 +777,16 @@ func (m *Manager) collectInterfaces(params *gosnmp.GoSNMP, d Device, snap *Devic
 				}
 			}
 		}
+		// EWMA 平滑，避免瞬时跳变
+		sk := fmt.Sprintf("%d_%s", d.ID, idx)
+		m.mu.Lock()
+		old, has := m.smooth[sk]
+		if has {
+			ifs.InBps = math.Round(ifs.InBps*0.6 + old[0]*0.4)
+			ifs.OutBps = math.Round(ifs.OutBps*0.6 + old[1]*0.4)
+		}
+		m.smooth[sk] = [2]float64{ifs.InBps, ifs.OutBps}
+		m.mu.Unlock()
 		snap.Interfaces = append(snap.Interfaces, ifs)
 	}
 	m.mu.Lock()
@@ -767,6 +794,15 @@ func (m *Manager) collectInterfaces(params *gosnmp.GoSNMP, d Device, snap *Devic
 	m.lastOct[key+"_out"] = curOuts
 	m.lastTime[key+"_rate"] = now
 	m.mu.Unlock()
+	upCnt := 0
+	var phys []string
+	for _, ifs := range snap.Interfaces {
+		if ifs.Oper == "up" {
+			upCnt++
+			phys = append(phys, fmt.Sprintf("%s(idx=%s,speed=%d,in=%d,out=%d,inBps=%.0f,outBps=%.0f)", ifs.Name, ifs.Index, ifs.Speed, ifs.InOctets, ifs.OutOctets, ifs.InBps, ifs.OutBps))
+		}
+	}
+	log.Printf("[snmp] device=%s interfaces=%d up=%d %v", d.Name, len(snap.Interfaces), upCnt, strings.Join(phys, " | "))
 }
 
 // TestDevice 即时测试

@@ -72,6 +72,7 @@ type MonitorDevice struct {
 	SshPass     string    `gorm:"size:128" json:"ssh_pass"`
 	SshPort     int       `gorm:"default:22" json:"ssh_port"`
 	BgpEnable   bool      `gorm:"default:false" json:"bgp_enable"` // 启用BGP/VPNv4只读监控
+	DisplayIfs  string    `gorm:"size:512;default:''" json:"display_ifs"` // 卡片显示接口，逗号分隔名称
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
@@ -98,8 +99,11 @@ type TopoDevice struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	Name      string    `gorm:"size:128;not null" json:"name"`
 	IP        string    `gorm:"size:64" json:"ip"`
+	Vendor    string    `gorm:"size:32;default:h3c" json:"vendor"`
 	Type      string    `gorm:"size:32;default:switch" json:"type"` // switch/router/server/firewall
-	Icon      string    `gorm:"size:64" json:"icon"`
+	Layer     string    `gorm:"size:32;default:access" json:"layer"`
+	Status    string    `gorm:"size:16;default:up" json:"status"`
+	Icon      string    `gorm:"size:128" json:"icon"`
 	X         float64   `json:"x"`
 	Y         float64   `json:"y"`
 	Z         float64   `json:"z"`
@@ -115,7 +119,8 @@ type TopoLink struct {
 	SourceID  uint      `gorm:"index;not null" json:"source_id"`
 	TargetID  uint      `gorm:"index;not null" json:"target_id"`
 	Color     string    `gorm:"size:16;default:#67C23A" json:"color"`
-	Bandwidth string    `gorm:"size:64" json:"bandwidth"`
+	Bandwidth  string  `gorm:"size:64" json:"bandwidth"`
+	Utilization float64 `json:"utilization"`
 	Status    string    `gorm:"size:16;default:unknown" json:"status"` // up/down
 	Remark    string    `gorm:"size:256" json:"remark"`
 	CreatedAt time.Time `json:"created_at"`

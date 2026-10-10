@@ -15,5 +15,6 @@ export default {
   firewall: '防火墙', other: '其他',
   vendor: '厂商', autoDetect: '自动识别',
   cisco: 'Cisco 思科', huawei: 'Huawei 华为', h3c: 'H3C 华三',
-  testConn: '测试连接'
+  testConn: '测试连接',
+  displayIfs: '卡片显示接口', displayIfsPlaceholder: '留空=自动显示流量最大的5个'
 }

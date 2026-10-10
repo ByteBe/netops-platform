@@ -2,6 +2,7 @@
 package bgpmon
 
 import (
+	"log"
 	"regexp"
 	"strconv"
 	"strings"
@@ -30,6 +31,7 @@ type Peer struct {
 	PrefixRcvd int64  `json:"prefix_rcvd"`
 	PrefixSent int64  `json:"prefix_sent"`
 	IsRR       bool   `json:"is_rr"` // 自动识别：对端为路由反射器
+	OutIface   string `json:"out_iface"` // 到邻居的出接口
 	UpdatedAt  string `json:"updated_at"`
 }
 
@@ -55,13 +57,26 @@ func start(a *core.App) {
 }
 
 func collect(a *core.App) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[bgpmon] collect skipped: %v", r)
+		}
+	}()
+	if a.DB == nil {
+		return
+	}
 	var devs []model.MonitorDevice
 	a.DB.Where("bgp_enable = ?", true).Find(&devs)
+	log.Printf("[bgpmon] collect tick, devices_with_bgp=%d", len(devs))
+	keep := map[uint]bool{}
 	for _, d := range devs {
+		keep[d.ID] = true
 		ps, err := pollDevice(d)
 		if err != nil {
+			log.Printf("[bgpmon] device=%s(%s) poll failed: %v", d.Name, d.IP, err)
 			continue
 		}
+		log.Printf("[bgpmon] device=%s(%s) peers=%d", d.Name, d.IP, len(ps))
 		mu.Lock()
 		snap[d.ID] = ps
 		mu.Unlock()
@@ -81,33 +96,82 @@ func collect(a *core.App) {
 		}
 		_ = a.TSDB.Write(rows)
 	}
+	mu.Lock()
+	for id := range snap {
+		if !keep[id] {
+			delete(snap, id)
+		}
+	}
+	mu.Unlock()
 }
 
 func pollDevice(d model.MonitorDevice) ([]Peer, error) {
+	log.Printf("[bgpmon] poll device=%s ip=%s user=%s passLen=%d port=%d vendor=%s", d.Name, d.IP, d.SshUser, len(d.SshPass), d.SshPort, d.Vendor)
 	vendor := strings.ToLower(d.Vendor)
-	cmd := "display bgp vpnv4 all peer"
+	cmd := "display bgp peer vpnv4"
 	if strings.Contains(vendor, "cisco") || strings.Contains(vendor, "思科") {
 		cmd = "show bgp vpnv4 all summary"
+	} else if strings.Contains(vendor, "huawei") || strings.Contains(d.Vendor, "华为") {
+		cmd = "display bgp vpnv4 all peer"
 	}
-	out, err := sshsvc.Exec(sshsvc.Target{
+	out, err := sshsvc.Run(sshsvc.Target{
 		Host: d.IP, Port: orInt(d.SshPort, 22), User: d.SshUser, Credential: d.SshPass,
-	}, []string{cmd})
+	}, cmd)
 	if err != nil {
 		return nil, err
 	}
+	log.Printf("[bgpmon] device=%s raw output (%d bytes):\n%s", d.IP, len(out), out)
 	ps := parsePeers(out, d)
+	for i := range ps {
+		ps[i].OutIface = lookupOutIface(d, ps[i].PeerIP)
+	}
 	return ps, nil
+}
+
+func lookupOutIface(d model.MonitorDevice, peer string) string {
+	cmd := "display ip routing-table " + peer
+	if strings.Contains(strings.ToLower(d.Vendor), "cisco") {
+		cmd = "show ip route " + peer
+	}
+	out, err := sshsvc.Run(sshsvc.Target{
+		Host: d.IP, Port: orInt(d.SshPort, 22), User: d.SshUser, Credential: d.SshPass,
+	}, cmd)
+	if err != nil {
+		log.Printf("[bgpmon] route lookup peer=%s failed: %v", peer, err)
+		return ""
+	}
+	log.Printf("[bgpmon] route lookup peer=%s output:\n%s", peer, out)
+	lines := strings.Split(out, "\n")
+	for _, ln := range lines {
+		// H3C/Huawei 路由表：... NextHop Interface 最后一列为接口
+		if strings.Contains(ln, peer+"/") || strings.Contains(ln, peer+" ") {
+			fields := strings.Fields(ln)
+			if len(fields) >= 2 {
+				return fields[len(fields)-1]
+			}
+		}
+		if strings.Contains(ln, "Interface") {
+			parts := strings.SplitN(ln, ":", 2)
+			if len(parts) == 2 {
+				return strings.TrimSpace(parts[1])
+			}
+		}
+	}
+	return ""
 }
 
 var (
 	// 华为/华三：Peer ASN MsgRcvd MsgSent ... Up/Down State PrefRcv
 	reHuawei = regexp.MustCompile(`^\s*(\d+\.\d+\.\d+\.\d+)\s+(\d)\s+(\d+)\s+(\d+)\s+(\d+)\s+\S+\s+(\S+)\s+(\S+)\s+(\d+)`)
+	// H3C: Peer AS MsgRcvd MsgSent OutQ PrefRcv Up/Down State
+	reH3c = regexp.MustCompile(`^\s*(\d+\.\d+\.\d+\.\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(\S+)`)
 	// 思科 summary：Neighbor V AS ... Up/Down State/PfxRcd（State/PfxRcd 为数字=Established，否则为状态词）
 	reCisco = regexp.MustCompile(`^\s*(\d+\.\d+\.\d+\.\d+)\s+(\d)\s+(\d+)\s+\d+\s+\d+\s+\d+\s+\d+\s+\S+\s+(\S+)\s+(\S+)`)
 )
 
 func parsePeers(out string, d model.MonitorDevice) []Peer {
 	isCisco := strings.Contains(strings.ToLower(d.Vendor), "cisco") || strings.Contains(d.Vendor, "思科")
+	isH3c := strings.Contains(strings.ToLower(d.Vendor), "h3c") || strings.Contains(d.Vendor, "华三")
 	lines := strings.Split(out, "\n")
 	// 统计 ASN 出现次数，自动识别 RR：同 ASN 下收到 Prefix 远大于普通对端
 	asnCount := map[string]int{}
@@ -129,6 +193,15 @@ func parsePeers(out string, d model.MonitorDevice) []Peer {
 			}
 			list = append(list, tmpP{m[1], m[3], m[2], state, m[4], rcvd, 0})
 			asnCount[m[3]]++
+		} else if isH3c {
+			m := reH3c.FindStringSubmatch(ln)
+			if m == nil {
+				continue
+			}
+			rcvd, _ := strconv.ParseInt(m[6], 10, 64)
+			sent, _ := strconv.ParseInt(m[4], 10, 64)
+			list = append(list, tmpP{m[1], m[2], "v4", m[8], m[7], rcvd, sent})
+			asnCount[m[2]]++
 		} else {
 			m := reHuawei.FindStringSubmatch(ln)
 			if m == nil {
@@ -164,17 +237,18 @@ func orInt(v, def int) int {
 func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 	start(a)
 
-	g.GET("/bgpmon/peers", func(c *gin.Context) {
+	g.GET("/peers", func(c *gin.Context) {
 		mu.RLock()
-		defer mu.RUnlock()
 		out := []Peer{}
 		for _, ps := range snap {
 			out = append(out, ps...)
 		}
+		mu.RUnlock()
+		log.Printf("[bgpmon] GET /peers -> %d peers, snap keys=%v", len(out), func() []uint { ks := []uint{}; for k := range snap { ks = append(ks, k) }; return ks }())
 		response.OK(c, out)
 	})
 
-	g.GET("/bgpmon/history", func(c *gin.Context) {
+	g.GET("/history", func(c *gin.Context) {
 		deviceID := c.Query("device_id")
 		peer := c.Query("peer")
 		end := time.Now()
@@ -189,6 +263,44 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			return s[0].Points
 		}
 		response.OK(c, gin.H{"prefix_rcvd": points(rcvd), "state": points(state)})
+	})
+
+	// 测试 BGP SSH 采集
+	g.POST("/test", func(c *gin.Context) {
+		var req struct {
+			DeviceID uint   `json:"device_id"`
+			IP       string `json:"ip"`
+			User     string `json:"ssh_user"`
+			Pass     string `json:"ssh_pass"`
+			Port     int    `json:"ssh_port"`
+			Vendor   string `json:"vendor"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			response.Bad(c, "参数错误")
+			return
+		}
+		d := model.MonitorDevice{}
+		if req.DeviceID > 0 {
+			if err := a.DB.First(&d, req.DeviceID).Error; err != nil {
+				response.OK(c, gin.H{"ok": false, "error": "设备不存在"})
+				return
+			}
+		} else {
+			d.IP = req.IP
+			d.SshUser = req.User
+			d.SshPass = req.Pass
+			d.SshPort = req.Port
+			d.Vendor = req.Vendor
+		}
+		if d.SshPort == 0 {
+			d.SshPort = 22
+		}
+		ps, err := pollDevice(d)
+		if err != nil {
+			response.OK(c, gin.H{"ok": false, "error": err.Error()})
+			return
+		}
+		response.OK(c, gin.H{"ok": true, "peers": ps, "count": len(ps)})
 	})
 }
 

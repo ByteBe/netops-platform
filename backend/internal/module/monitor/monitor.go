@@ -49,6 +49,7 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 				"username": d.Username, "auth_proto": d.AuthProto, "priv_proto": d.PrivProto,
 				"auth_pass": d.AuthPass, "priv_pass": d.PrivPass,
 				"ssh_user": d.SshUser, "ssh_pass": d.SshPass, "ssh_port": d.SshPort, "bgp_enable": d.BgpEnable,
+				"display_ifs": d.DisplayIfs,
 			}
 			if s, ok := a.SnmpMgr.DeviceSnapshotByID(d.ID); ok {
 				item["online"] = s.Up

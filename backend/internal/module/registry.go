@@ -14,6 +14,7 @@ import (
 
 	// 功能模块（空白导入触发 init 自注册）
 	_ "netops/internal/module/auth"
+	_ "netops/internal/module/bgpmon"
 	_ "netops/internal/module/containermon"
 	_ "netops/internal/module/dashboard"
 	_ "netops/internal/module/distributed"
@@ -25,6 +26,7 @@ import (
 	_ "netops/internal/module/report"
 	_ "netops/internal/module/resource"
 	_ "netops/internal/module/scriptgen"
+	_ "netops/internal/module/snmptrap"
 	_ "netops/internal/module/setup"
 	_ "netops/internal/module/system"
 	_ "netops/internal/module/topology"
