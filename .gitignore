@@ -45,3 +45,6 @@ backend/netops-server-linux
 backend/netops-server.exe
 backend/data/
 backend/logs/
+
+package/
+
