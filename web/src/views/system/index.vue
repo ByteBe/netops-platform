@@ -306,6 +306,7 @@ onMounted(() => { loadMCP(); loadEmails(); loadAudits(); loadSec(); loadVersion(
           </el-descriptions>
           <el-divider />
           <el-button :loading="checking" @click="checkUpdate">{{ t('system.checkUpdate') }}</el-button>
+          <el-button type="warning" style="margin-left:10px" @click="doRollback">回滚上一版本</el-button>
           <div v-if="latest" style="margin-top:12px;padding:12px;background:#f0f9ff;border-radius:6px">
             <div>{{ t('system.latestVer') }}: <b>{{ latest.latest }}</b></div>
             <el-button v-if="latest.has_update" type="primary" style="margin-top:10px" :loading="upgrading" @click="doOnline">{{ t('system.upgradeNow') }}</el-button>
@@ -318,7 +319,6 @@ onMounted(() => { loadMCP(); loadEmails(); loadAudits(); loadSec(); loadVersion(
             已上传 {{ uploadResult.filename }}，大小 {{ (uploadResult.size/1024/1024).toFixed(2) }} MB，ZIP 完整性校验通过
           </div>
           <el-button v-if="uploadResult" type="danger" style="margin-top:10px" :loading="applying" @click="doApply">{{ t('system.confirmApply') }}</el-button>
-          <el-button type="warning" style="margin-top:10px;margin-left:10px" @click="doRollback">回滚上一版本</el-button>
         </div>
       </el-tab-pane>
     </el-tabs>
