@@ -3,6 +3,7 @@ export default {
   email: '通知渠道', settings: '系统参数', audit: '审计日志',
   aiName: 'AI名称', provider: '服务商', apiKey: 'API密钥', apiBase: 'API地址',
   model: '模型', enabled: '启用', chat: 'AI对话', mcpAgent: 'Agent名称',
+  detectModel: '识别模型',
   serverAddr: '服务器地址', endpoint: '接口路径', emailEnable: '启用邮箱',
   smtpHost: 'SMTP服务器', smtpPort: 'SMTP端口', smtpUser: '发件账号',
   smtpPass: '授权码', fromName: '发件人名称', auditUser: '操作用户',

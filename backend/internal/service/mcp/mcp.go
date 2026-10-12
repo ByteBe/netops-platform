@@ -13,8 +13,8 @@ import (
 
 // Tool 工具定义（MCP 发现协议）
 type Tool struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
 	InputSchema map[string]any `json:"inputSchema"`
 }
 
@@ -23,7 +23,7 @@ type Handler func(args map[string]any) (map[string]any, error)
 
 // Server MCP 服务器
 type Server struct {
-	tools   map[string]Tool
+	tools    map[string]Tool
 	handlers map[string]Handler
 }
 
@@ -56,7 +56,10 @@ func (s *Server) HandleHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Connection", "keep-alive")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		flusher, ok := w.(http.Flusher)
-		if !ok { http.Error(w, "SSE not supported", 500); return }
+		if !ok {
+			http.Error(w, "SSE not supported", 500)
+			return
+		}
 		fmt.Fprintf(w, "event: endpoint\ndata: /mcp?session=%d\n\n", time.Now().UnixNano())
 		flusher.Flush()
 		<-r.Context().Done()
@@ -107,9 +110,17 @@ func (s *Server) HandleHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "result": result})
 	default:
 		// MCP 服务信息（Agent 发现用）
+		scheme := r.Header.Get("X-Forwarded-Proto")
+		if scheme == "" {
+			if r.TLS != nil {
+				scheme = "https"
+			} else {
+				scheme = "http"
+			}
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"name": "NetOps-MCP", "version": "1.0.0",
-			"server": r.Host, "tools_endpoint": "/mcp/tools", "call_endpoint": "/mcp/call",
+			"server": scheme + "://" + r.Host, "tools_endpoint": "/mcp/tools", "call_endpoint": "/mcp/call",
 			"description": "NetOps 网络运维平台能力接口（链路状态/设备监控/巡检报告/IPAM）",
 		})
 	}
@@ -135,12 +146,14 @@ func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 	case "initialize":
 		json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": req.ID, "result": map[string]any{
 			"protocolVersion": "2024-11-05",
-			"capabilities":     map[string]any{"tools": map[string]any{}},
-			"serverInfo":       map[string]any{"name": "NetOps-MCP", "version": "1.0.0"},
+			"capabilities":    map[string]any{"tools": map[string]any{}},
+			"serverInfo":      map[string]any{"name": "NetOps-MCP", "version": "1.0.0"},
 		}})
 	case "tools/list":
 		list := make([]Tool, 0, len(s.tools))
-		for _, t := range s.tools { list = append(list, t) }
+		for _, t := range s.tools {
+			list = append(list, t)
+		}
 		json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": req.ID, "result": map[string]any{"tools": list}})
 	case "tools/call":
 		h, ok := s.handlers[req.Params.Name]

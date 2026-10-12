@@ -6,6 +6,7 @@ import (
 
 	"netops/internal/appinit"
 	"netops/internal/common/logger"
+	"netops/internal/common/secstore"
 	"netops/internal/config"
 	"netops/internal/core"
 	"netops/internal/module"
@@ -40,6 +41,7 @@ func Init(cfg *config.Config) (*core.App, error) {
 	if err := app.EnsureCrypto(); err != nil {
 		logger.Warnf("国密密钥持久化失败: %v", err)
 	}
+	secstore.Init(cfg.App.JWTKey + cfg.Crypto.SM2PrivateKey)
 	if cfg.Initialized {
 		if err := appinit.InitStorage(app, cfg); err != nil {
 			return nil, err

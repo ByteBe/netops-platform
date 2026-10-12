@@ -23,13 +23,13 @@ type Server struct {
 
 // Database 存储数据库配置（系统初始化时选择：mysql/oracle/dm/kingbase/sqlite(内置)）
 type Database struct {
-	Type     string `yaml:"type"`     // mysql | oracle | dm | kingbase | sqlite
+	Type     string `yaml:"type"` // mysql | oracle | dm | kingbase | sqlite
 	Host     string `yaml:"host"`
 	Port     int    `yaml:"port"`
 	User     string `yaml:"user"`
 	Password string `yaml:"password"`
 	Database string `yaml:"database"`
-	Path     string `yaml:"path"`     // sqlite 专用：数据库文件路径
+	Path     string `yaml:"path"`   // sqlite 专用：数据库文件路径
 	Params   string `yaml:"params"` // 附加连接参数
 	MaxIdle  int    `yaml:"max_idle_conns"`
 	MaxOpen  int    `yaml:"max_open_conns"`

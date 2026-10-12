@@ -11,7 +11,10 @@ body,
   width: 100%;
   font-family: $font-family;
   color: var(--np-text-1);
-  background: var(--np-bg);
+  background:
+    radial-gradient(circle at 15% 0%, rgba(47, 107, 255, 0.08), transparent 35%),
+    radial-gradient(circle at 85% 10%, rgba(16, 185, 129, 0.06), transparent 30%),
+    var(--np-bg);
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
 }
@@ -47,11 +50,12 @@ html.dark {
 
 // 通用卡片
 .np-card {
-  background: var(--np-card-bg);
+  background: linear-gradient(180deg, rgba(255,255,255,.95), rgba(248,250,255,.9));
   border: 1px solid var(--np-border);
   border-radius: $radius-md;
   box-shadow: var(--np-shadow);
   padding: 16px;
+  backdrop-filter: blur(8px);
 }
 
 .np-card-title {
@@ -76,9 +80,20 @@ html.dark {
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+  background: linear-gradient(180deg, #ffffff, #f8fbff);
+  border: 1px solid #e6eef8;
+  border-radius: 12px;
+  padding: 12px 16px;
+  box-shadow: 0 6px 18px rgba(47, 107, 255, 0.08);
   .spacer {
     flex: 1;
   }
+}
+
+.el-card {
+  border-radius: 12px;
+  border-color: #e6eef8;
+  box-shadow: 0 8px 24px rgba(47, 107, 255, 0.08);
 }
 
 .np-table {

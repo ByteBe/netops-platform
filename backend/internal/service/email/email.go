@@ -10,14 +10,14 @@ import (
 
 // Config 邮件配置
 type Config struct {
-	Name    string
+	Name     string
 	SMTPHost string
 	SMTPPort int
-	User    string
+	User     string
 	Password string
-	UseSSL  bool
-	Enable  bool
-	From    string
+	UseSSL   bool
+	Enable   bool
+	From     string
 }
 
 // Send 发送邮件（支持HTML正文与多个收件人）

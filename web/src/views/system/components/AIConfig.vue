@@ -8,6 +8,8 @@ interface AIConfig { id: number; name: string; provider: string; base_url: strin
 const list = ref<AIConfig[]>([])
 const providers = ref<any[]>([])
 const dlg = ref(false)
+const modelOptions = ref<string[]>([])
+const loadingModels = ref(false)
 const form = reactive<AIConfig>({ id: 0, name: '', provider: 'openai', base_url: '', api_key: '', model: '', temperature: 0.7, priority: 0, enable: true, remark: '' })
 async function load() {
   const [l, p] = await Promise.all([getEnc<AIConfig[]>('/system/ai/list'), getEnc<any[]>('/system/ai/providers')])
@@ -21,6 +23,16 @@ function open(a?: AIConfig) {
   dlg.value = true
 }
 function onProvider() { const p = providers.value.find(x => x.value === form.provider); if (p?.base_url) form.base_url = p.base_url }
+async function fetchModels() {
+  if (!form.base_url) return ElMessage.warning('请先填写 API 地址')
+  loadingModels.value = true
+  try {
+    modelOptions.value = await postEnc<string[]>('/system/ai/models', { base_url: form.base_url, api_key: form.api_key })
+    if (!modelOptions.value.length) ElMessage.warning('未识别到模型')
+  } catch (e: any) {
+    ElMessage.error(e?.message || '识别模型失败')
+  } finally { loadingModels.value = false }
+}
 async function save() {
   if (!form.name || !form.base_url) return ElMessage.warning(t('common.tip'))
   if (form.id) await putEnc(`/system/ai/${form.id}`, form); else await postEnc('/system/ai', form)
@@ -63,7 +75,12 @@ async function test(a: AIConfig) { const r = await postEnc<any>(`/system/ai/${a.
         </el-form-item>
         <el-form-item :label="t('system.apiBase')"><el-input v-model="form.base_url" /></el-form-item>
         <el-form-item :label="t('system.apiKey')"><el-input v-model="form.api_key" /></el-form-item>
-        <el-form-item :label="t('system.model')"><el-input v-model="form.model" /></el-form-item>
+        <el-form-item :label="t('system.model')">
+          <el-select v-model="form.model" filterable allow-create :loading="loadingModels" :placeholder="t('system.model')" style="width: 420px">
+            <el-option v-for="m in modelOptions" :key="m" :label="m" :value="m" />
+          </el-select>
+          <el-button style="margin-left:8px" size="small" :loading="loadingModels" @click="fetchModels">{{ t('system.detectModel') }}</el-button>
+        </el-form-item>
         <el-form-item label="Temperature"><el-input-number v-model="form.temperature" :step="0.1" :min="0" :max="2" /></el-form-item>
         <el-form-item :label="t('system.priority')"><el-input-number v-model="form.priority" /></el-form-item>
         <el-form-item :label="t('common.enabled')"><el-switch v-model="form.enable" /></el-form-item>

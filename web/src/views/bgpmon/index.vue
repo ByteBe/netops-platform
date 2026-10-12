@@ -18,7 +18,7 @@ interface Peer {
 interface Dev { id: number; name: string; ip: string; bgp_enable: boolean }
 const peers = ref<Peer[]>([])
 const devs = ref<Dev[]>([])
-const testDevId = ref<number>(0)
+const testDevId = ref<number | undefined>(undefined)
 const testing = ref(false)
 let timer: any
 
@@ -61,10 +61,10 @@ function stateType(s: string) {
       <span class="np-page-desc">{{ t('bgp.title') }}</span>
       <span class="np-tip">{{ t('bgp.readOnly') }}</span>
       <div class="spacer"></div>
-      <el-select v-model="testDevId" size="small" style="width:180px" :placeholder="t('bgp.pickDevice')">
+      <el-select v-model="testDevId" size="small" style="width:180px" :placeholder="devs.length ? t('bgp.pickDevice') : t('bgp.noEnabledDevice')" :disabled="!devs.length" clearable>
         <el-option v-for="d in devs" :key="d.id" :label="d.name + '(' + d.ip + ')'" :value="d.id" />
       </el-select>
-      <el-button size="small" :loading="testing" @click="runTest">{{ t('bgp.testBtn') }}</el-button>
+      <el-button size="small" :loading="testing" :disabled="!testDevId" @click="runTest">{{ t('bgp.testBtn') }}</el-button>
       <el-button type="primary" @click="router.push('/monitor')">{{ t('bgp.goDevice') }}</el-button>
     </div>
     <div class="np-card">

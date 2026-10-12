@@ -77,12 +77,12 @@ func PushOnce(a *core.App) {
 
 // ForwardToParent 把下级上报的数据再转发给本节点的上级（多级级联）
 func ForwardToParent(a *core.App, req struct {
-	NodeUUID  string                   `json:"node_uuid"`
-	Token     string                   `json:"token"`
-	Name      string                   `json:"name"`
-	Devices   []map[string]interface{} `json:"devices"`
+	NodeUUID   string                   `json:"node_uuid"`
+	Token      string                   `json:"token"`
+	Name       string                   `json:"name"`
+	Devices    []map[string]interface{} `json:"devices"`
 	Containers []map[string]interface{} `json:"containers"`
-	Links     []map[string]interface{} `json:"links"`
+	Links      []map[string]interface{} `json:"links"`
 }) {
 	parent := getSetting(a, "parent_url")
 	if parent == "" {
@@ -131,7 +131,9 @@ func startWeeklyReport(a *core.App) {
 		now := time.Now()
 		next := time.Date(now.Year(), now.Month(), now.Day(), 9, 0, 0, 0, now.Location())
 		days := (8 - int(now.Weekday())) % 7
-		if days == 0 { days = 7 }
+		if days == 0 {
+			days = 7
+		}
 		next = next.AddDate(0, 0, days)
 		time.Sleep(next.Sub(now))
 		a.DB.Exec("INSERT INTO report_records (title, start_time, end_time, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",

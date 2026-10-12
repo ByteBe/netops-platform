@@ -123,6 +123,8 @@ async function downloadBackup() {
 // Update
 const ver = ref<any>({})
 const uploadResult = ref<any>(null)
+const uploadPercent = ref(0)
+const uploading = ref(false)
 const applying = ref(false)
 
 const roleList = ref([
@@ -136,14 +138,48 @@ async function saveRoles() { ElMessage.success(t('system.saved')) }
 const checking = ref(false), upgrading = ref(false), latest = ref<any>(null)
 async function loadVersion() { try { ver.value = await getEnc('/update/version') } catch {} }
 async function checkUpdate() { checking.value = true; try { latest.value = await getEnc('/update/check') } catch(e:any){ ElMessage.error(e.message||t('system.checkFail')) } finally { checking.value = false } }
-async function doOnline() { upgrading.value = true; try { await postEnc('/update/online', { url: latest.value.download_url }); ElMessage.success(t('system.upgrading')); setTimeout(()=>{ localStorage.clear(); location.href='/login'; }, 6000) } catch(e:any){ ElMessage.error(e.message||t('system.upgradeFail')) } finally { upgrading.value = false } }
-async function doUpload(opt: any) {
-  const fd = new FormData(); fd.append('file', opt.file)
-  const r = await fetch('/api/v1/update/upload', { method: 'POST', headers: { Authorization: 'Bearer ' + localStorage.getItem('np-token') || '' }, body: fd })
-  const j = await r.json()
-  if (j.code === 0) { uploadResult.value = j.data; ElMessage.success(t('system.uploadOk')) } else ElMessage.error(j.message || t('system.uploadFail'))
+function isRestartNetworkError(e: any) {
+  const msg = String(e?.message || e || '')
+  return /Network Error|ERR_CONNECTION|timeout|Failed to fetch|Load failed/i.test(msg)
 }
-async function doApply() { applying.value = true; try { await postEnc('/update/apply', { tmp_path: uploadResult.value.tmp_path }); ElMessage.success(t('system.applyDone')); setTimeout(()=>{ localStorage.clear(); location.href='/login'; }, 4000) } finally { applying.value = false } }
+function redirectAfterRestart(delay = 6000) {
+  ElMessage.success(t('system.upgrading'))
+  setTimeout(() => { localStorage.clear(); location.href = '/login' }, delay)
+}
+async function doOnline() { upgrading.value = true; try { await postEnc('/update/online', { url: latest.value.download_url }); redirectAfterRestart(6000) } catch(e:any){ if (isRestartNetworkError(e)) { redirectAfterRestart(6000) } else { ElMessage.error(e.message||t('system.upgradeFail')); upgrading.value = false } } }
+async function doUpload(opt: any) {
+  if (!opt.file?.name?.toLowerCase().endsWith('.zip')) {
+    ElMessage.warning('请上传 ZIP 更新包')
+    return
+  }
+  uploading.value = true
+  uploadPercent.value = 0
+  uploadResult.value = null
+  const fd = new FormData(); fd.append('file', opt.file)
+  const xhr = new XMLHttpRequest()
+  xhr.open('POST', '/api/v1/update/upload')
+  xhr.setRequestHeader('Authorization', 'Bearer ' + (localStorage.getItem('np-token') || ''))
+  xhr.setRequestHeader('X-Timestamp', String(Math.floor(Date.now() / 1000)))
+  xhr.setRequestHeader('X-Nonce', Math.random().toString(36).slice(2, 15) + Date.now().toString(36))
+  xhr.upload.onprogress = (e) => { if (e.lengthComputable) uploadPercent.value = Math.round(e.loaded / e.total * 100) }
+  xhr.onload = () => {
+    uploading.value = false
+    try {
+      const j = JSON.parse(xhr.responseText)
+      if (j.code === 0) {
+        uploadResult.value = j.data
+        ElMessage.success(`${t('system.uploadOk')}（${(j.data.size/1024/1024).toFixed(2)} MB，完整性校验通过）`)
+      } else ElMessage.error(j.message || t('system.uploadFail'))
+    } catch { ElMessage.error(t('system.uploadFail')) }
+  }
+  xhr.onerror = () => { uploading.value = false; ElMessage.error(t('system.uploadFail')) }
+  xhr.send(fd)
+}
+async function doApply() { applying.value = true; try { await postEnc('/update/apply', { tmp_path: uploadResult.value.tmp_path }); redirectAfterRestart(4000) } catch(e:any){ if (isRestartNetworkError(e)) { redirectAfterRestart(4000) } else { ElMessage.error(e.message||t('system.upgradeFail')); applying.value = false } } }
+async function doRollback() {
+  await ElMessageBox.confirm('回滚后系统将重启并恢复到上一版本，是否继续？', '回滚确认', { type: 'warning' })
+  try { await postEnc('/update/rollback', {}); redirectAfterRestart(4000) } catch(e:any){ if (isRestartNetworkError(e)) redirectAfterRestart(4000); else ElMessage.error(e.message||t('system.upgradeFail')) }
+}
 
 onMounted(() => { loadMCP(); loadEmails(); loadAudits(); loadSec(); loadVersion() })
 </script>
@@ -274,10 +310,15 @@ onMounted(() => { loadMCP(); loadEmails(); loadAudits(); loadSec(); loadVersion(
             <div>{{ t('system.latestVer') }}: <b>{{ latest.latest }}</b></div>
             <el-button v-if="latest.has_update" type="primary" style="margin-top:10px" :loading="upgrading" @click="doOnline">{{ t('system.upgradeNow') }}</el-button>
           </div>
-          <el-upload :http-request="doUpload" :show-file-list="false" style="margin-top:20px" drag>
+          <el-upload :http-request="doUpload" :show-file-list="false" accept=".zip" style="margin-top:20px" drag>
             <div>{{ t('system.uploadHint') }}</div>
           </el-upload>
+          <el-progress v-if="uploading || uploadPercent > 0" :percentage="uploadPercent" style="margin-top:12px" />
+          <div v-if="uploadResult" style="margin-top:8px;color:#67c23a;font-size:13px">
+            已上传 {{ uploadResult.filename }}，大小 {{ (uploadResult.size/1024/1024).toFixed(2) }} MB，ZIP 完整性校验通过
+          </div>
           <el-button v-if="uploadResult" type="danger" style="margin-top:10px" :loading="applying" @click="doApply">{{ t('system.confirmApply') }}</el-button>
+          <el-button type="warning" style="margin-top:10px;margin-left:10px" @click="doRollback">回滚上一版本</el-button>
         </div>
       </el-tab-pane>
     </el-tabs>

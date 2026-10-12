@@ -1,4 +1,4 @@
-﻿// Package scriptgen 脚本生成器（全新设计：纯代码生成，无数据库模板）
+// Package scriptgen 脚本生成器（全新设计：纯代码生成，无数据库模板）
 package scriptgen
 
 import (
@@ -33,8 +33,8 @@ type Field struct {
 }
 
 type ShowIf struct {
-	Key   string `json:"key"`
-	Eq    string `json:"eq"`
+	Key   string   `json:"key"`
+	Eq    string   `json:"eq"`
 	NotEq string   `json:"notEq,omitempty"`
 	EqAny []string `json:"eqAny,omitempty"`
 }
@@ -236,7 +236,9 @@ func sysView(v string) string {
 }
 
 func p(m map[string]string, k, def string) string {
-	if v, ok := m[k]; ok && v != "" { return v }
+	if v, ok := m[k]; ok && v != "" {
+		return v
+	}
 	return def
 }
 
@@ -255,10 +257,18 @@ func cidrMask(cidr string) (addr, mask string) {
 	parts := strings.Split(strings.TrimSpace(cidr), "/")
 	addr = parts[0]
 	prefix := 24
-	if len(parts) == 2 { fmt.Sscanf(parts[1], "%d", &prefix) }
+	if len(parts) == 2 {
+		fmt.Sscanf(parts[1], "%d", &prefix)
+	}
 	mp := []string{}
 	for i := 0; i < 4; i++ {
-		if prefix >= 8 { mp = append(mp, "255"); prefix -= 8 } else { mp = append(mp, fmt.Sprintf("%d", 256-(1<<(8-prefix)))); prefix = 0 }
+		if prefix >= 8 {
+			mp = append(mp, "255")
+			prefix -= 8
+		} else {
+			mp = append(mp, fmt.Sprintf("%d", 256-(1<<(8-prefix))))
+			prefix = 0
+		}
 	}
 	mask = strings.Join(mp, ".")
 	return
@@ -267,7 +277,9 @@ func cidrMask(cidr string) (addr, mask string) {
 func wildOf(cidr string) string {
 	parts := strings.Split(strings.TrimSpace(cidr), "/")
 	prefix := 24
-	if len(parts) == 2 { fmt.Sscanf(parts[1], "%d", &prefix) }
+	if len(parts) == 2 {
+		fmt.Sscanf(parts[1], "%d", &prefix)
+	}
 	w := uint32(0xFFFFFFFF >> prefix)
 	return fmt.Sprintf("%d.%d.%d.%d", w>>24, (w>>16)&0xFF, (w>>8)&0xFF, w&0xFF)
 }

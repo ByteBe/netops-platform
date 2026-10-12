@@ -1,8 +1,8 @@
 // Package crypto 国密算法封装（SM2 非对称 / SM3 摘要 / SM4 对称）
 // 加密流程：
-//   1. 前端生成随机 SM4 会话密钥，用后端 SM2 公钥加密后随登录请求提交
-//   2. 后端用 SM2 私钥解密得到会话密钥，绑定到登录令牌
-//   3. 后续请求/响应体均使用 SM4-CBC 加密（IV 随机，随密文传输）
+//  1. 前端生成随机 SM4 会话密钥，用后端 SM2 公钥加密后随登录请求提交
+//  2. 后端用 SM2 私钥解密得到会话密钥，绑定到登录令牌
+//  3. 后续请求/响应体均使用 SM4-CBC 加密（IV 随机，随密文传输）
 package crypto
 
 import (
@@ -46,7 +46,7 @@ func GenerateSM2Key() (*SM2Key, error) {
 // 兼容格式：
 //   - tjfoc/gmsm 标准密文：C1 为未压缩点(04||X||Y,65字节)或压缩点(02/03||X,33字节)
 //   - sm-crypto 默认产物：C1 为无前缀点(X||Y,64字节)，需补 04 前缀
-//   顺序同时兼容 C1C3C2 与 C1C2C3
+//     顺序同时兼容 C1C3C2 与 C1C2C3
 func SM2Decrypt(privateHex, cipherHex string) ([]byte, error) {
 	d, err := hex.DecodeString(privateHex)
 	if err != nil || len(d) == 0 {

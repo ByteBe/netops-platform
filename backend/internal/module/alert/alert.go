@@ -60,9 +60,15 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		level := c.Query("level")
 		ack := c.Query("acked")
 		q := a.DB.Model(&model.AlertEvent{})
-		if level != "" { q = q.Where("level = ?", level) }
+		if level != "" {
+			q = q.Where("level = ?", level)
+		}
 		if ack != "" {
-			if ack == "true" { q = q.Where("acked = ?", true) } else { q = q.Where("acked = ?", false) }
+			if ack == "true" {
+				q = q.Where("acked = ?", true)
+			} else {
+				q = q.Where("acked = ?", false)
+			}
 		}
 		var total int64
 		q.Count(&total)
@@ -86,7 +92,10 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 	})
 	g.PUT("/alert/notifiers/:type", middleware.RequireRole("admin"), func(c *gin.Context) {
 		t := c.Param("type")
-		var req struct { Config string `json:"config"`; Enabled bool `json:"enabled"` }
+		var req struct {
+			Config  string `json:"config"`
+			Enabled bool   `json:"enabled"`
+		}
 		c.ShouldBindJSON(&req)
 		var nc model.NotifyConfig
 		if err := a.DB.Where("type = ?", t).First(&nc).Error; err != nil {
@@ -142,13 +151,13 @@ func Notify(app *core.App, level, target, msg string) {
 			payload, _ := json.Marshal(map[string]string{"level": level, "target": target, "message": msg})
 			http.Post(nc.Config, "application/json", bytes.NewReader(payload))
 		case "dingtalk":
-			payload, _ := json.Marshal(map[string]any{"msgtype": "text", "text": map[string]string{"content": "["+level+"] "+target+"\n"+msg}})
+			payload, _ := json.Marshal(map[string]any{"msgtype": "text", "text": map[string]string{"content": "[" + level + "] " + target + "\n" + msg}})
 			http.Post(nc.Config, "application/json", bytes.NewReader(payload))
 		case "wecom":
-			payload, _ := json.Marshal(map[string]any{"msgtype": "text", "text": map[string]string{"content": "["+level+"] "+target+"\n"+msg}})
+			payload, _ := json.Marshal(map[string]any{"msgtype": "text", "text": map[string]string{"content": "[" + level + "] " + target + "\n" + msg}})
 			http.Post(nc.Config, "application/json", bytes.NewReader(payload))
 		case "feishu":
-			payload, _ := json.Marshal(map[string]any{"msg_type": "text", "content": map[string]string{"text": "["+level+"] "+target+"\n"+msg}})
+			payload, _ := json.Marshal(map[string]any{"msg_type": "text", "content": map[string]string{"text": "[" + level + "] " + target + "\n" + msg}})
 			http.Post(nc.Config, "application/json", bytes.NewReader(payload))
 		case "sms":
 			// 短信网关（阿里云/腾讯云）占位，Config 存 API 地址

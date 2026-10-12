@@ -1,6 +1,7 @@
 // Package tdengine TDengine 时序引擎（RESTful API，纯HTTP，跨平台）
 // 表模型：每个指标一张表 t_<metric>，列为 (ts TIMESTAMP, fname VARCHAR(64), value DOUBLE)，
-//         不同标签组合以 t_<metric>_<taghash> 区分，符合 TDengine 一表多标签-多表模型实践
+//
+//	不同标签组合以 t_<metric>_<taghash> 区分，符合 TDengine 一表多标签-多表模型实践
 package tdengine
 
 import (

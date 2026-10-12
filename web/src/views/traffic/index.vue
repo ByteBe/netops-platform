@@ -271,6 +271,12 @@ onBeforeUnmount(() => {
 }
 
 .np-traffic-card {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  border: 1px solid #e6eef8;
+  border-radius: 12px;
+  box-shadow: 0 10px 28px rgba(47, 107, 255, 0.10), inset 0 1px 0 rgba(255,255,255,.9);
+  transition: transform .2s, box-shadow .2s;
+  &:hover { transform: translateY(-2px); box-shadow: 0 16px 36px rgba(47,107,255,.16); }
   .np-tc-head {
     display: flex;
     align-items: flex-start;

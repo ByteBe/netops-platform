@@ -33,11 +33,11 @@ type App struct {
 	Ready    bool // 是否已完成初始化向导
 	Started  time.Time
 
-	PingMgr  *ping.Manager
-	SnmpMgr  *snmp.Manager
-	DockerM  *docker.Monitor
-	K8sM     *k8s.Monitor
-	DBProbe  *dbprobe.Manager
+	PingMgr *ping.Manager
+	SnmpMgr *snmp.Manager
+	DockerM *docker.Monitor
+	K8sM    *k8s.Monitor
+	DBProbe *dbprobe.Manager
 
 	// MCP 能力服务（外部 Agent 接入本系统）
 	MCPServer *mcp.Server
@@ -118,16 +118,16 @@ func (a *App) Stats() map[string]any {
 		linkTotal = len(a.PingMgr.Snapshot())
 	}
 	return map[string]any{
-		"app":         a.Cfg.App.Name,
-		"ready":       a.Ready,
-		"uptime_s":    int(time.Since(a.Started).Seconds()),
-		"go_version":  runtime.Version(),
-		"goroutines":  runtime.NumGoroutine(),
+		"app":          a.Cfg.App.Name,
+		"ready":        a.Ready,
+		"uptime_s":     int(time.Since(a.Started).Seconds()),
+		"go_version":   runtime.Version(),
+		"goroutines":   runtime.NumGoroutine(),
 		"mem_alloc_mb": float64(mem.Alloc) / 1024 / 1024,
-		"mem_sys_mb":  float64(mem.Sys) / 1024 / 1024,
-		"sessions":    a.Sessions.Count(),
-		"link_tasks":  linkTotal,
-		"tsdb":        tsdbName(a.TSDB),
+		"mem_sys_mb":   float64(mem.Sys) / 1024 / 1024,
+		"sessions":     a.Sessions.Count(),
+		"link_tasks":   linkTotal,
+		"tsdb":         tsdbName(a.TSDB),
 	}
 }
 

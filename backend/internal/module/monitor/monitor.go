@@ -120,7 +120,8 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			"interval": req.Interval, "enable": req.Enable, "remark": req.Remark,
 			"ssh_user": req.SshUser, "ssh_pass": req.SshPass, "ssh_port": req.SshPort, "bgp_enable": req.BgpEnable,
 		})
-		req.ID = uint(id); syncDevice(a, req)
+		req.ID = uint(id)
+		syncDevice(a, req)
 		response.OK(c, gin.H{"ok": true})
 	})
 

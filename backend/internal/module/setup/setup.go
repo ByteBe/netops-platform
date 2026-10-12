@@ -1,4 +1,4 @@
-﻿// Package setup 系统初始化向导（首次启动时选择存储数据库与时序数据库、创建管理员）
+// Package setup 系统初始化向导（首次启动时选择存储数据库与时序数据库、创建管理员）
 package setup
 
 import (
@@ -126,7 +126,7 @@ func Register(a *core.App, g *gin.RouterGroup) {
 			var req struct {
 				Database   config.Database `json:"database"`
 				TSDB       config.TSDB     `json:"tsdb"`
-				DeployMode string         `json:"deploy_mode"`
+				DeployMode string          `json:"deploy_mode"`
 				Admin      struct {
 					Username   string `json:"username"`
 					Password   string `json:"password"`

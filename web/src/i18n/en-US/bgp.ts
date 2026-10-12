@@ -9,6 +9,7 @@ export default {
   emptyHint: 'No BGP peers. Add a router in Device Monitoring and enable "BGP Monitor" with SSH credentials.',
   testBtn: 'Test Collect',
   pickDevice: 'Select device',
+  noEnabledDevice: 'No device with BGP monitor enabled',
   testOk: 'Connected, found {n} peers',
   testFail: 'Test failed, check backend log'
 }

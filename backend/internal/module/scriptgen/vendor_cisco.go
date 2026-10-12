@@ -24,7 +24,9 @@ func buildCisco(code string, m map[string]string) []string {
 		rule := fmt.Sprintf("%s %s %s %s", act, proto, srcAddr, wild)
 		if dst := p(m, "dst", ""); dst != "" {
 			rule += fmt.Sprintf(" %s %s", strings.Split(dst, "/")[0], wildOf(dst))
-		} else { rule += " any" }
+		} else {
+			rule += " any"
+		}
 		return []string{fmt.Sprintf("ip access-list extended %s", num), " " + rule}
 	case "router_nat":
 		return []string{
@@ -35,15 +37,19 @@ func buildCisco(code string, m map[string]string) []string {
 	case "router_ospf":
 		net := p(m, "net", "0.0.0.0")
 		vrf := ""
-		if p(m, "enable_vpn", "") == "on" && p(m, "vpn", "") != "" { vrf = fmt.Sprintf(" vrf %s", p(m, "vpn", "")) }
+		if p(m, "enable_vpn", "") == "on" && p(m, "vpn", "") != "" {
+			vrf = fmt.Sprintf(" vrf %s", p(m, "vpn", ""))
+		}
 		return []string{
 			fmt.Sprintf("router ospf %s%s", p(m, "process", "1"), vrf),
 			fmt.Sprintf(" router-id %s", p(m, "rid", "1.1.1.1")),
-			fmt.Sprintf(" network %s %s area %s", net, wildcardOf(p(m,"netmask","255.255.255.0")), p(m, "area", "0")),
+			fmt.Sprintf(" network %s %s area %s", net, wildcardOf(p(m, "netmask", "255.255.255.0")), p(m, "area", "0")),
 		}
 	case "router_static", "sw_static":
 		vrf := ""
-		if p(m, "enable_vpn", "") == "on" && p(m, "vpn", "") != "" { vrf = fmt.Sprintf(" vrf %s", p(m, "vpn", "")) }
+		if p(m, "enable_vpn", "") == "on" && p(m, "vpn", "") != "" {
+			vrf = fmt.Sprintf(" vrf %s", p(m, "vpn", ""))
+		}
 		return []string{fmt.Sprintf("ip route%s %s %s %s", vrf, p(m, "dest", "0.0.0.0"), p(m, "mask", "0.0.0.0"), p(m, "nh", ""))}
 	case "com_ssh":
 		user, pass, vty := p(m, "user", "admin"), p(m, "pass", ""), p(m, "vty", "0 15")
@@ -56,17 +62,21 @@ func buildCisco(code string, m map[string]string) []string {
 			" login local",
 		}
 	case "com_user":
-		return []string{fmt.Sprintf("username %s password 0 %s", p(m,"user","admin"), p(m,"pass",""))}
+		return []string{fmt.Sprintf("username %s password 0 %s", p(m, "user", "admin"), p(m, "pass", ""))}
 	case "com_log":
 		return []string{fmt.Sprintf("logging host %s", p(m, "logip", ""))}
 	case "com_snmp":
 		host := p(m, "host", "")
 		lines := []string{fmt.Sprintf("snmp-server community %s RO", p(m, "community", "public"))}
-		if host != "" { lines = append(lines, fmt.Sprintf("snmp-server host %s version 2c %s", host, p(m, "community", "public"))) }
+		if host != "" {
+			lines = append(lines, fmt.Sprintf("snmp-server host %s version 2c %s", host, p(m, "community", "public")))
+		}
 		return lines
 	case "sw_vlan":
 		lines := []string{}
-		for _, v := range splitList(p(m, "vlan", "")) { lines = append(lines, "vlan "+v, " name VLAN_"+v) }
+		for _, v := range splitList(p(m, "vlan", "")) {
+			lines = append(lines, "vlan "+v, " name VLAN_"+v)
+		}
 		if vif := p(m, "vlanif", ""); vif != "" && p(m, "ip", "") != "" {
 			lines = append(lines, fmt.Sprintf("interface Vlan%s", vif), fmt.Sprintf(" ip address %s", p(m, "ip", "")))
 		}

@@ -30,7 +30,7 @@ type Peer struct {
 	UpDown     string `json:"up_down"`
 	PrefixRcvd int64  `json:"prefix_rcvd"`
 	PrefixSent int64  `json:"prefix_sent"`
-	IsRR       bool   `json:"is_rr"` // 自动识别：对端为路由反射器
+	IsRR       bool   `json:"is_rr"`     // 自动识别：对端为路由反射器
 	OutIface   string `json:"out_iface"` // 到邻居的出接口
 	UpdatedAt  string `json:"updated_at"`
 }
@@ -244,7 +244,13 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			out = append(out, ps...)
 		}
 		mu.RUnlock()
-		log.Printf("[bgpmon] GET /peers -> %d peers, snap keys=%v", len(out), func() []uint { ks := []uint{}; for k := range snap { ks = append(ks, k) }; return ks }())
+		log.Printf("[bgpmon] GET /peers -> %d peers, snap keys=%v", len(out), func() []uint {
+			ks := []uint{}
+			for k := range snap {
+				ks = append(ks, k)
+			}
+			return ks
+		}())
 		response.OK(c, out)
 	})
 

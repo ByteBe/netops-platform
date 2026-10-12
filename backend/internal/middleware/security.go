@@ -22,8 +22,8 @@ const (
 
 // loginFailRecord 登录失败记录
 type loginFail struct {
-	count    int
-	lastFail time.Time
+	count       int
+	lastFail    time.Time
 	lockedUntil time.Time
 }
 
@@ -74,8 +74,8 @@ func RecordLoginSuccess(ip string) {
 // RateLimit 接口限流中间件（每IP每秒100请求）
 func RateLimit() gin.HandlerFunc {
 	type bucket struct {
-		count    int
-		resetAt  time.Time
+		count   int
+		resetAt time.Time
 	}
 	return func(c *gin.Context) {
 		ip := c.ClientIP()

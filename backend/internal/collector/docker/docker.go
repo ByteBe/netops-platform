@@ -88,31 +88,44 @@ func (m *Monitor) SetConfig(enable bool, interval int, hosts string) {
 	start := enable && !m.enable
 	stop := !enable && m.enable
 	m.enable = enable
-	if interval > 0 { m.interval = interval }
+	if interval > 0 {
+		m.interval = interval
+	}
 	m.hosts = nil
 	if hosts != "" {
 		var arr []string
 		if err := json.Unmarshal([]byte(hosts), &arr); err == nil {
 			for _, h := range arr {
 				h = strings.TrimSpace(h)
-				if h != "" { m.hosts = append(m.hosts, h) }
+				if h != "" {
+					m.hosts = append(m.hosts, h)
+				}
 			}
 		} else {
 			for _, h := range strings.Split(hosts, ",") {
 				h = strings.TrimSpace(h)
-				if h != "" { m.hosts = append(m.hosts, h) }
+				if h != "" {
+					m.hosts = append(m.hosts, h)
+				}
 			}
 		}
 	}
 	hostsSnap := append([]string{}, m.hosts...)
 	m.mu.Unlock()
 	logger.Infof("[docker] SetConfig enable=%v interval=%d hosts=%v start=%v stop=%v", enable, interval, hostsSnap, start, stop)
-	if start { m.wg.Add(1); go m.loop() }
-	if stop { close(m.stop); m.stop = make(chan struct{}) }
+	if start {
+		m.wg.Add(1)
+		go m.loop()
+	}
+	if stop {
+		close(m.stop)
+		m.stop = make(chan struct{})
+	}
 }
 
 func (m *Monitor) Enabled() bool {
-	m.mu.RLock(); defer m.mu.RUnlock()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.enable
 }
 
@@ -123,14 +136,18 @@ func (m *Monitor) loop() {
 	m.Collect()
 	for {
 		select {
-		case <-m.stop: return
-		case <-tick.C: m.Collect()
+		case <-m.stop:
+			return
+		case <-tick.C:
+			m.Collect()
 		}
 	}
 }
 
 func hostName(host string) string {
-	if host == "" { return "本机" }
+	if host == "" {
+		return "本机"
+	}
 	return host
 }
 
@@ -143,7 +160,9 @@ func (m *Monitor) Collect() {
 		logger.Warnf("[docker] Collect called but monitor disabled")
 		return
 	}
-	if len(hosts) == 0 { hosts = []string{""} }
+	if len(hosts) == 0 {
+		hosts = []string{""}
+	}
 	logger.Infof("[docker] Collect hosts=%v", hosts)
 
 	allContainers := []Container{}
@@ -169,7 +188,9 @@ func (m *Monitor) Collect() {
 	now := time.Now()
 	rows := []tsdb.Row{}
 	m.mu.Lock()
-	for k := range m.containers { delete(m.containers, k) }
+	for k := range m.containers {
+		delete(m.containers, k)
+	}
 	for _, c := range allContainers {
 		m.containers[c.Host+"/"+c.ID] = c
 		rows = append(rows,
@@ -178,31 +199,43 @@ func (m *Monitor) Collect() {
 		)
 	}
 	m.mu.Unlock()
-	if m.ts != nil { _ = m.ts.Write(rows) }
+	if m.ts != nil {
+		_ = m.ts.Write(rows)
+	}
 	m.hub.Publish("containermon", "docker_snapshot", allContainers)
 }
 
 // HostStatus 返回各主机在线状态
 func (m *Monitor) HostStatus() map[string]bool {
-	m.mu.RLock(); defer m.mu.RUnlock()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	out := map[string]bool{}
-	for k, v := range m.hostStatus { out[k] = v }
+	for k, v := range m.hostStatus {
+		out[k] = v
+	}
 	return out
 }
 
 func (m *Monitor) Snapshot() []Container {
-	m.mu.RLock(); defer m.mu.RUnlock()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	out := make([]Container, 0, len(m.containers))
-	for _, c := range m.containers { out = append(out, c) }
+	for _, c := range m.containers {
+		out = append(out, c)
+	}
 	return out
 }
 
 func (m *Monitor) listContainers(host string) ([]Container, error) {
 	client := dockerClient(host)
 	resp, err := client.Get(dockerURL(host, "/containers/json?all=1"))
-	if err != nil { return nil, fmt.Errorf("连接失败: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("连接失败: %w", err)
+	}
 	defer resp.Body.Close()
-	if resp.StatusCode != 200 { return nil, fmt.Errorf("HTTP %d", resp.StatusCode) }
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
 	var raw []struct {
 		ID     string   `json:"Id"`
 		Names  []string `json:"Names"`
@@ -210,14 +243,20 @@ func (m *Monitor) listContainers(host string) ([]Container, error) {
 		State  string   `json:"State"`
 		Status string   `json:"Status"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil { return nil, err }
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, err
+	}
 	list := []Container{}
 	for _, r := range raw {
 		name := ""
-		if len(r.Names) > 0 { name = strings.TrimPrefix(r.Names[0], "/") }
+		if len(r.Names) > 0 {
+			name = strings.TrimPrefix(r.Names[0], "/")
+		}
 		cid := r.ID
 		short := cid
-		if len(short) > 12 { short = short[:12] }
+		if len(short) > 12 {
+			short = short[:12]
+		}
 		c := Container{ID: short, Names: name, Image: r.Image, State: r.State, Status: r.Status, Host: hostName(host)}
 		if r.State == "running" {
 			if cpu, mem, err := m.containerStats(client, host, cid); err == nil {
@@ -234,9 +273,13 @@ func (m *Monitor) listContainers(host string) ([]Container, error) {
 func (m *Monitor) containerStats(client *http.Client, host, cid string) (cpuPct, memPct float64, err error) {
 	u := dockerURL(host, "/containers/"+cid+"/stats?stream=false")
 	resp, err := client.Get(u)
-	if err != nil { return 0, 0, err }
+	if err != nil {
+		return 0, 0, err
+	}
 	defer resp.Body.Close()
-	if resp.StatusCode != 200 { return 0, 0, fmt.Errorf("HTTP %d", resp.StatusCode) }
+	if resp.StatusCode != 200 {
+		return 0, 0, fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
 	var st struct {
 		CPUStats struct {
 			CPUUsage struct {
@@ -256,7 +299,9 @@ func (m *Monitor) containerStats(client *http.Client, host, cid string) (cpuPct,
 			Limit uint64 `json:"limit"`
 		} `json:"memory_stats"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&st); err != nil { return 0, 0, err }
+	if err := json.NewDecoder(resp.Body).Decode(&st); err != nil {
+		return 0, 0, err
+	}
 	// CPU%: 单次 stats 接口返回的 precpu 与 cpu 是同一瞬间，差值为 0；
 	// 这里直接按 (total/system)*online_cpus*100 的近似（Docker 官方推荐公式需要两次采样）。
 	// 因为每次 Collect 间隔固定，我们用差值缓存算。
@@ -274,8 +319,12 @@ func (m *Monitor) containerStats(client *http.Client, host, cid string) (cpuPct,
 		dCPU := float64(st.CPUStats.CPUUsage.TotalUsage - prev.cpuTotal)
 		dSys := float64(st.CPUStats.SystemCPUUsage - prev.sysCPU)
 		n := float64(st.CPUStats.OnlineCpus)
-		if n <= 0 { n = float64(prev.online) }
-		if n <= 0 { n = 1 }
+		if n <= 0 {
+			n = float64(prev.online)
+		}
+		if n <= 0 {
+			n = 1
+		}
 		if dSys > 0 {
 			cpuPct = dCPU / dSys * n * 100.0
 		}
@@ -283,26 +332,38 @@ func (m *Monitor) containerStats(client *http.Client, host, cid string) (cpuPct,
 	if st.MemoryStats.Limit > 0 {
 		memPct = float64(st.MemoryStats.Usage) / float64(st.MemoryStats.Limit) * 100.0
 	}
-	if cpuPct < 0 { cpuPct = 0 }
-	if cpuPct > 100 { cpuPct = math.Round(cpuPct*10) / 10 } else { cpuPct = math.Round(cpuPct*10) / 10 }
+	if cpuPct < 0 {
+		cpuPct = 0
+	}
+	if cpuPct > 100 {
+		cpuPct = math.Round(cpuPct*10) / 10
+	} else {
+		cpuPct = math.Round(cpuPct*10) / 10
+	}
 	memPct = math.Round(memPct*10) / 10
 	return cpuPct, memPct, nil
 }
 
 type cpuStats struct {
-	cpuTotal uint64
-	sysCPU   uint64
-	online   uint
+	cpuTotal  uint64
+	sysCPU    uint64
+	online    uint
 	timestamp time.Time
 }
 
 func TestHost(host string) (string, error) {
 	client := dockerClient(host)
 	resp, err := client.Get(dockerURL(host, "/version"))
-	if err != nil { return "", fmt.Errorf("连接失败: %w", err) }
+	if err != nil {
+		return "", fmt.Errorf("连接失败: %w", err)
+	}
 	defer resp.Body.Close()
-	if resp.StatusCode != 200 { return "", fmt.Errorf("HTTP %s", resp.Status) }
-	var v struct{ Version string `json:"Version"` }
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("HTTP %s", resp.Status)
+	}
+	var v struct {
+		Version string `json:"Version"`
+	}
 	json.NewDecoder(resp.Body).Decode(&v)
 	return v.Version, nil
 }
@@ -310,13 +371,18 @@ func TestHost(host string) (string, error) {
 func DockerAvailable() (string, error) {
 	cmd := exec.Command("docker", "version", "--format", "{{.Server.Version}}")
 	out, err := cmd.Output()
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	return strings.TrimSpace(string(out)), nil
 }
 
 func (m *Monitor) Stop() {
 	m.mu.Lock()
-	if m.enable { close(m.stop); m.enable = false }
+	if m.enable {
+		close(m.stop)
+		m.enable = false
+	}
 	m.mu.Unlock()
 	m.wg.Wait()
 }

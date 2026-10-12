@@ -26,8 +26,9 @@ var (
 
 // ReplayProtection 防重放中间件
 // 要求请求头携带：
-//   X-Timestamp: Unix秒时间戳
-//   X-Nonce:     随机字符串（一次性）
+//
+//	X-Timestamp: Unix秒时间戳
+//	X-Nonce:     随机字符串（一次性）
 //
 // 校验规则：
 //  1. 时间戳与服务器时间差超过 ReplayWindow 秒 → 拒绝

@@ -131,7 +131,7 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		response.OK(c, gin.H{
 			"id": user.ID, "username": user.Username, "email": user.Email,
 			"employee_no": user.EmployeeNo, "role": user.Role, "status": user.Status,
-			"node_scope": user.NodeScope,
+			"node_scope":      user.NodeScope,
 			"must_change_pwd": user.MustChangePwd, "last_login_at": user.LastLoginAt,
 		})
 	})
@@ -166,9 +166,9 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		}
 		salt, _ := crypto.GenerateSalt()
 		a.DB.Model(&user).Updates(map[string]any{
-			"password_hash":    crypto.PasswordHash(req.NewPassword, salt),
-			"salt":             salt,
-			"must_change_pwd": false,
+			"password_hash":      crypto.PasswordHash(req.NewPassword, salt),
+			"salt":               salt,
+			"must_change_pwd":    false,
 			"last_pwd_change_at": time.Now(),
 		})
 		// 使该用户旧会话失效

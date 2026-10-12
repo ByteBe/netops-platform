@@ -3,6 +3,7 @@ export default {
   email: 'Email Config', settings: 'System Settings', audit: 'Audit Logs',
   aiName: 'AI Name', provider: 'Provider', apiKey: 'API Key', apiBase: 'API Base',
   model: 'Model', enabled: 'Enabled', chat: 'AI Chat', mcpAgent: 'Agent Name',
+  detectModel: 'Detect Models',
   serverAddr: 'Server Address', endpoint: 'Endpoint', emailEnable: 'Email Enabled',
   smtpHost: 'SMTP Host', smtpPort: 'SMTP Port', smtpUser: 'Account',
   smtpPass: 'Auth Code', fromName: 'From Name', auditUser: 'User',

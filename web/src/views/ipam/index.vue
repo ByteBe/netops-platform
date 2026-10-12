@@ -69,6 +69,9 @@ const bindForm = reactive({
 const testOut = ref('')
 const arpDialog = ref(false)
 const arpDeviceId = ref(0)
+const bindPickDialog = ref(false)
+const bindPickId = ref<number | undefined>(undefined)
+let bindPickItem: IPItem | null = null
 
 async function loadSubnets() {
   subnets.value = await getEnc<Subnet[]>('/ipam/subnets')
@@ -158,7 +161,7 @@ async function unuse(item: IPItem) {
   await loadIps()
 }
 
-async function bind(item: IPItem) {
+function bind(item: IPItem) {
   if (!bindingEnable.value) {
     ElMessage.warning(t('ipam.bindingNotEnabled'))
     return
@@ -167,14 +170,25 @@ async function bind(item: IPItem) {
     ElMessage.warning(t('ipam.addSwitchFirst'))
     return
   }
-  const { value } = await ElMessageBox.prompt(t('ipam.selectSwitch'), t('ipam.bindDelivery'), {
-    inputValue: String(bindDevices.value[0].id),
-    inputPlaceholder: bindDevices.value.map((d) => `${d.id}:${d.name}`).join('，'),
-    confirmButtonText: t('common.confirm'),
-    cancelButtonText: t('common.cancel')
-  })
-  await postEnc(`/ipam/records/${item.record_id}/bind`, { bind_device_id: Number(value) })
-  ElMessage.success(t('common.success'))
+  bindPickItem = item
+  bindPickId.value = bindDevices.value[0]?.id
+  bindPickDialog.value = true
+}
+
+async function confirmBind() {
+  if (!bindPickItem || !bindPickId.value) return
+  bindPickDialog.value = false
+  const r = await postEnc<{ ok: boolean; bind_status: string; bind_log: string }>(
+    `/ipam/records/${bindPickItem.record_id}/bind`,
+    { bind_device_id: Number(bindPickId.value) }
+  )
+  if (r.bind_status === 'ok') {
+    ElMessage.success(t('common.success'))
+    await ElMessageBox.alert(r.bind_log || '命令已下发', t('ipam.bindDelivery'), { type: 'success' })
+  } else {
+    await ElMessageBox.alert(r.bind_log || t('common.failed'), t('common.tip'), { type: 'error' })
+  }
+  bindPickItem = null
   await loadIps()
 }
 
@@ -380,6 +394,21 @@ onMounted(async () => {
       <template #footer>
         <el-button @click="arpDialog = false">{{ t('common.cancel') }}</el-button>
         <el-button type="primary" @click="confirmImportArp">{{ t('common.confirm') }}</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 地址绑定下发选择交换机 -->
+    <el-dialog v-model="bindPickDialog" :title="t('ipam.bindDelivery')" width="460px">
+      <el-form label-width="110px">
+        <el-form-item :label="t('ipam.selectSwitchLabel')">
+          <el-select v-model="bindPickId" style="width:100%">
+            <el-option v-for="d in bindDevices" :key="d.id" :label="`${d.name} (${d.ip})`" :value="d.id" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="bindPickDialog = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="confirmBind">{{ t('common.confirm') }}</el-button>
       </template>
     </el-dialog>
 

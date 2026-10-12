@@ -1,4 +1,4 @@
-﻿// Package builtin 内置时序引擎（本地 SQLite 文件存储，零依赖、跨平台）
+// Package builtin 内置时序引擎（本地 SQLite 文件存储，零依赖、跨平台）
 // 生产环境建议使用 TDengine / InfluxDB
 package builtin
 
@@ -20,19 +20,19 @@ import (
 )
 
 type point struct {
-	ID     uint    `gorm:"primaryKey"`
-	Metric string  `gorm:"index:idx_metric_ts;size:64"`
-	Field  string  `gorm:"size:64"`
-	Tags   string  `gorm:"size:512"`
+	ID     uint   `gorm:"primaryKey"`
+	Metric string `gorm:"index:idx_metric_ts;size:64"`
+	Field  string `gorm:"size:64"`
+	Tags   string `gorm:"size:512"`
 	Value  float64
-	TS     int64   `gorm:"index:idx_metric_ts"` // UnixMilli
+	TS     int64 `gorm:"index:idx_metric_ts"` // UnixMilli
 }
 
 // Engine 内置时序引擎
 type Engine struct {
-	db       *gorm.DB
-	mu       sync.Mutex
-	dir      string
+	db          *gorm.DB
+	mu          sync.Mutex
+	dir         string
 	lastCleanup time.Time
 }
 

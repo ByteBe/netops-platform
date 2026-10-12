@@ -9,6 +9,7 @@ export default {
   emptyHint: '暂无 BGP 邻居。请先到「设备监控」纳管路由器，填写 SSH 账号密码并开启"启用BGP监控"。',
   testBtn: '测试采集',
   pickDevice: '选择设备',
+  noEnabledDevice: '暂无已启用 BGP 监控的设备',
   testOk: '连接成功，发现 {n} 个邻居',
   testFail: '测试失败，查看后端日志'
 }

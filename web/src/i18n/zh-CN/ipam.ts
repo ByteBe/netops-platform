@@ -9,7 +9,7 @@ export default {
   releaseConfirm: '确定释放地址',
   bindingNotEnabled: '地址绑定功能未开启，请先在「绑定配置」中开启',
   addSwitchFirst: '请先添加下发配置的交换机（SSH）',
-  selectSwitch: '选择下发配置的交换机（输入设备ID）',
+  selectSwitch: '选择下发配置的交换机',
   bindDelivery: '地址绑定下发',
   sshTestOk: 'SSH连接测试成功',
   sshTestFail: 'SSH连接测试失败',

@@ -307,7 +307,9 @@ func renderContainerSection(a *core.App, stats map[string]int) string {
 	abnormalCount := map[string]int{}
 	for _, c := range containers {
 		k := c.Host
-		if k == "" { k = "本机" }
+		if k == "" {
+			k = "本机"
+		}
 		containerCount[k]++
 		if c.State != "running" {
 			abnormalCount[k]++
@@ -318,10 +320,16 @@ func renderContainerSection(a *core.App, stats map[string]int) string {
 		stats["total"]++
 		online := false
 		key := h.Address
-		if key == "" || key == "本机" || strings.HasPrefix(key, "unix://") { key = "本机" }
-		if v, ok := dockerStatus[key]; ok { online = v }
+		if key == "" || key == "本机" || strings.HasPrefix(key, "unix://") {
+			key = "本机"
+		}
+		if v, ok := dockerStatus[key]; ok {
+			online = v
+		}
 		if !online {
-			if v, ok := dockerStatus[h.Address]; ok { online = v }
+			if v, ok := dockerStatus[h.Address]; ok {
+				online = v
+			}
 		}
 		status, color := "离线", "#f5222d"
 		if online {
@@ -339,7 +347,9 @@ func renderContainerSection(a *core.App, stats map[string]int) string {
 	for _, k := range clusters {
 		stats["total"]++
 		online := false
-		if v, ok := k8sStatus[k.Name]; ok { online = v }
+		if v, ok := k8sStatus[k.Name]; ok {
+			online = v
+		}
 		status, color := "离线", "#f5222d"
 		if online {
 			status, color = "在线", "#52c41a"
@@ -408,8 +418,8 @@ func renderHTML(title string, start, end time.Time, linkS, devS, dbS, containerS
 	var sb strings.Builder
 	reportTpl.Execute(&sb, map[string]any{
 		"Title": title, "Start": start.Format("2006-01-02 15:04"), "End": end.Format("2006-01-02 15:04"),
-		"Now":           time.Now().Format("2006-01-02 15:04:05"),
-		"LinkSection":   template.HTML(linkS), "DevSection": template.HTML(devS), "DBSection": template.HTML(dbS), "ContainerSection": template.HTML(containerS), "NodeSection": template.HTML(nodeS),
+		"Now":         time.Now().Format("2006-01-02 15:04:05"),
+		"LinkSection": template.HTML(linkS), "DevSection": template.HTML(devS), "DBSection": template.HTML(dbS), "ContainerSection": template.HTML(containerS), "NodeSection": template.HTML(nodeS),
 		"Total": stats["total"], "Up": stats["up"], "Down": stats["down"], "Warn": stats["warn"],
 	})
 	return sb.String()

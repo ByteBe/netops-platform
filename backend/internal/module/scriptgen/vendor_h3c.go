@@ -37,7 +37,9 @@ func buildH3c(code string, m map[string]string) []string {
 		net := p(m, "net", "0.0.0.0")
 		mask := p(m, "netmask", "255.255.255.0")
 		vpnLine := ""
-		if p(m, "enable_vpn", "") == "on" && p(m, "vpn", "") != "" { vpnLine = fmt.Sprintf(" vpn-instance %s", p(m, "vpn", "")) }
+		if p(m, "enable_vpn", "") == "on" && p(m, "vpn", "") != "" {
+			vpnLine = fmt.Sprintf(" vpn-instance %s", p(m, "vpn", ""))
+		}
 		return []string{
 			fmt.Sprintf("ospf%s %s router-id %s", vpnLine, p(m, "process", "1"), p(m, "rid", "1.1.1.1")),
 			fmt.Sprintf(" area 0.0.0.%s", p(m, "area", "0")),
@@ -45,7 +47,9 @@ func buildH3c(code string, m map[string]string) []string {
 		}
 	case "router_static", "sw_static":
 		vpnPre := ""
-		if vpn := p(m, "vpn", ""); vpn != "" { vpnPre = fmt.Sprintf(" vpn-instance %s", vpn) }
+		if vpn := p(m, "vpn", ""); vpn != "" {
+			vpnPre = fmt.Sprintf(" vpn-instance %s", vpn)
+		}
 		return []string{fmt.Sprintf("ip route-static%s %s %s %s", vpnPre, p(m, "dest", "0.0.0.0"), p(m, "mask", "0"), p(m, "nh", ""))}
 	case "com_ssh":
 		user, pass, vty := p(m, "user", "admin"), p(m, "pass", ""), p(m, "vty", "0 63")
@@ -75,7 +79,9 @@ func buildH3c(code string, m map[string]string) []string {
 	case "sw_vlan":
 		vlans := p(m, "vlan", "")
 		lines := []string{}
-		if vlans != "" { lines = append(lines, "vlan "+vlans) }
+		if vlans != "" {
+			lines = append(lines, "vlan "+vlans)
+		}
 		if vif := p(m, "vlanif", ""); vif != "" && p(m, "ip", "") != "" {
 			lines = append(lines, fmt.Sprintf("interface Vlan-interface%s", vif), fmt.Sprintf(" ip address %s", p(m, "ip", "")))
 		}

@@ -32,8 +32,11 @@ backend/logs/
 *.log
 
 # 跨平台编译产物
-backend/netops-server-windows-amd64.exe
 backend/netops-server-linux-amd64
+backend/netops-server-linux-arm64
+backend/netops-server-windows-amd64.exe
+backend/netops-server-linux
+backend/netops-server.exe
 
 backend/netops-platform.exe
 backend/netops-platform-linux
@@ -48,3 +51,7 @@ backend/logs/
 
 package/
 
+# 临时脚本与本地审查产物
+backend/tmp_*.py
+backend/*-review.exe
+*.tmp

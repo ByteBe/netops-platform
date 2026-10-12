@@ -17,9 +17,12 @@ func buildHuawei(code string, m map[string]string) []string {
 		srcWild := wildOf(src)
 		entry := "advanced"
 		switch acltype {
-		case "基础": entry = "basic"
-		case "二层": entry = "mac"
-		case "自定义": entry = "user-defined"
+		case "基础":
+			entry = "basic"
+		case "二层":
+			entry = "mac"
+		case "自定义":
+			entry = "user-defined"
 		}
 		if acltype == "二层" {
 			srcMac := p(m, "srcmac", "0000-0000-0000")
@@ -50,7 +53,9 @@ func buildHuawei(code string, m map[string]string) []string {
 		net := p(m, "net", "0.0.0.0")
 		mask := p(m, "netmask", "255.255.255.0")
 		vpnLine := ""
-		if p(m, "enable_vpn", "") == "on" && p(m, "vpn", "") != "" { vpnLine = fmt.Sprintf(" vpn-instance %s", p(m, "vpn", "")) }
+		if p(m, "enable_vpn", "") == "on" && p(m, "vpn", "") != "" {
+			vpnLine = fmt.Sprintf(" vpn-instance %s", p(m, "vpn", ""))
+		}
 		return []string{
 			fmt.Sprintf("ospf%s %s router-id %s", vpnLine, p(m, "process", "1"), p(m, "rid", "1.1.1.1")),
 			fmt.Sprintf(" area %s", p(m, "area", "0")),
@@ -58,7 +63,9 @@ func buildHuawei(code string, m map[string]string) []string {
 		}
 	case "router_static", "sw_static":
 		vpnPre := ""
-		if p(m, "enable_vpn", "") == "on" && p(m, "vpn", "") != "" { vpnPre = fmt.Sprintf(" vpn-instance %s", p(m, "vpn", "")) }
+		if p(m, "enable_vpn", "") == "on" && p(m, "vpn", "") != "" {
+			vpnPre = fmt.Sprintf(" vpn-instance %s", p(m, "vpn", ""))
+		}
 		return []string{fmt.Sprintf("ip route-static%s %s %s %s", vpnPre, p(m, "dest", "0.0.0.0"), p(m, "mask", "0"), p(m, "nh", ""))}
 	case "com_ssh":
 		user, pass, bits, vty := p(m, "user", "admin"), p(m, "pass", ""), p(m, "rsabits", "2048"), p(m, "vty", "0 4")
@@ -97,11 +104,13 @@ func buildHuawei(code string, m map[string]string) []string {
 		return buildHuaweiBgp(m)
 	case "router_isis":
 		vpnLine := ""
-		if p(m, "enable_vpn", "") == "on" && p(m, "vpn", "") != "" { vpnLine = fmt.Sprintf(" vpn-instance %s", p(m, "vpn", "")) }
+		if p(m, "enable_vpn", "") == "on" && p(m, "vpn", "") != "" {
+			vpnLine = fmt.Sprintf(" vpn-instance %s", p(m, "vpn", ""))
+		}
 		return []string{
 			fmt.Sprintf("isis%s %s", vpnLine, p(m, "pid", "1")),
 			fmt.Sprintf(" network-entity %s", p(m, "net", "49.0001.0000.0000.0001.00")),
-			fmt.Sprintf(" router-id %s", p(m, "router_id", p(m,"rid","1.1.1.1"))),
+			fmt.Sprintf(" router-id %s", p(m, "router_id", p(m, "rid", "1.1.1.1"))),
 			fmt.Sprintf(" is-level %s", p(m, "level", "level-2")),
 		}
 	case "mpls_vpn":
@@ -133,7 +142,7 @@ func buildHuawei(code string, m map[string]string) []string {
 		return lines
 	case "router_policy":
 		return []string{
-			fmt.Sprintf("traffic classifier c1 operator or", ),
+			fmt.Sprintf("traffic classifier c1 operator or"),
 			fmt.Sprintf(" if-match acl %s", p(m, "acl", "3000")),
 			"traffic behavior b1",
 			fmt.Sprintf(" redirect ip-nexthop %s", p(m, "nh", "")),

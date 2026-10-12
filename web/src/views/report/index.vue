@@ -142,7 +142,6 @@ async function quickGen(kind: string) {
           </template>
         </el-table-column>
       </el-table>
-      <div v-if="!records.length" class="np-empty">{{ t('common.noData') }}</div>
     </div>
 
     <el-dialog v-model="genDialog" :title="t('report.generate')" width="520px">

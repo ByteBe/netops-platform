@@ -3,6 +3,7 @@ package user
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -104,12 +105,8 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			return
 		}
 		updates := map[string]any{}
-		if req.EmployeeNo != "" {
-			updates["employee_no"] = req.EmployeeNo
-		}
-		if req.Email != "" {
-			updates["email"] = req.Email
-		}
+		updates["employee_no"] = strings.TrimSpace(req.EmployeeNo)
+		updates["email"] = strings.TrimSpace(req.Email)
 		if req.Role != "" {
 			updates["role"] = req.Role
 		}
@@ -119,9 +116,7 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		if req.Status != "" {
 			updates["status"] = req.Status
 		}
-		if len(updates) > 0 {
-			a.DB.Model(&u).Updates(updates)
-		}
+		a.DB.Model(&u).Updates(updates)
 		response.OK(c, gin.H{"ok": true})
 	})
 

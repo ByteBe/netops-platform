@@ -1,10 +1,12 @@
-﻿// Package system 系统管理：AI接入 / MCP配置 / 邮箱 / 系统参数 / 数据备份
+// Package system 系统管理：AI接入 / MCP配置 / 邮箱 / 系统参数 / 数据备份
 package system
 
 import (
 	"archive/zip"
+	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -143,6 +145,49 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			{"value": "custom", "label": "自定义(OpenAI兼容)", "base_url": ""},
 		})
 	})
+	// 自动识别 OpenAI 兼容接口可用模型
+	g.POST("/ai/models", func(c *gin.Context) {
+		var req struct {
+			BaseURL string `json:"base_url"`
+			APIKey  string `json:"api_key"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.BaseURL) == "" {
+			response.Bad(c, "请先填写 API 地址")
+			return
+		}
+		u := strings.TrimRight(strings.TrimSpace(req.BaseURL), "/") + "/models"
+		httpReq, _ := http.NewRequest(http.MethodGet, u, nil)
+		if req.APIKey != "" {
+			httpReq.Header.Set("Authorization", "Bearer "+req.APIKey)
+		}
+		resp, err := (&http.Client{}).Do(httpReq)
+		if err != nil {
+			response.Fail(c, 400, response.CodeBadRequest, "获取模型失败: "+err.Error())
+			return
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode >= 400 {
+			response.Fail(c, 400, response.CodeBadRequest, fmt.Sprintf("接口返回 %d: %s", resp.StatusCode, string(body)))
+			return
+		}
+		var parsed struct {
+			Data []struct {
+				ID string `json:"id"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(body, &parsed); err != nil {
+			response.Fail(c, 400, response.CodeBadRequest, "模型列表解析失败")
+			return
+		}
+		ids := make([]string, 0, len(parsed.Data))
+		for _, m := range parsed.Data {
+			if m.ID != "" {
+				ids = append(ids, m.ID)
+			}
+		}
+		response.OK(c, ids)
+	})
 
 	// ===== MCP 配置（服务器地址+接口形式接入主流 Agent） =====
 	g.GET("/mcp/agents", func(c *gin.Context) {
@@ -207,8 +252,16 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 	})
 	// 本系统 MCP 端点信息（Agent 接入本系统用）
 	g.GET("/mcp/info", func(c *gin.Context) {
+		scheme := c.GetHeader("X-Forwarded-Proto")
+		if scheme == "" {
+			if c.Request.TLS != nil {
+				scheme = "https"
+			} else {
+				scheme = "http"
+			}
+		}
 		response.OK(c, gin.H{
-			"server":         "http://<本机地址>:" + strconv.Itoa(a.Cfg.Server.Port),
+			"server":         scheme + "://" + c.Request.Host,
 			"tools_endpoint": "/mcp/tools",
 			"call_endpoint":  "/mcp/call",
 			"tools":          mcpToolNames(a),
@@ -322,35 +375,42 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 	g.GET("/security", func(c *gin.Context) {
 		get := func(key, def string) string {
 			var s model.SystemSetting
-			if err := a.DB.Where("`key`=?", key).First(&s).Error; err != nil { return def }
+			if err := a.DB.Where("`key`=?", key).First(&s).Error; err != nil {
+				return def
+			}
 			return s.Value
 		}
 		getInt := func(key string, def int) int {
 			v := get(key, "")
-			if v == "" { return def }
+			if v == "" {
+				return def
+			}
 			n, _ := strconv.Atoi(v)
 			return n
 		}
 		response.OK(c, gin.H{
 			"tls_cert": get("tls_cert", ""), "tls_key": get("tls_key", ""),
-			"pwd_max_days": getInt("pwd_max_days", 90),
-			"login_max_fail": getInt("login_max_fail", 5),
-			"login_lock_min": getInt("login_lock_min", 15),
+			"pwd_max_days":         getInt("pwd_max_days", 90),
+			"login_max_fail":       getInt("login_max_fail", 5),
+			"login_lock_min":       getInt("login_lock_min", 15),
 			"audit_retention_days": getInt("audit_retention_days", 180),
 			"max_session_per_user": getInt("max_session_per_user", 1),
 		})
 	})
 	g.PUT("/security", middleware.RequireRole("admin"), func(c *gin.Context) {
 		var req struct {
-			TLSCert string `json:"tls_cert"`
-			TLSKey string `json:"tls_key"`
-			PwdMaxDays int `json:"pwd_max_days"`
-			LoginMaxFail int `json:"login_max_fail"`
-			LoginLockMin int `json:"login_lock_min"`
-			AuditRetentionDays int `json:"audit_retention_days"`
-			MaxSessionPerUser int `json:"max_session_per_user"`
+			TLSCert            string `json:"tls_cert"`
+			TLSKey             string `json:"tls_key"`
+			PwdMaxDays         int    `json:"pwd_max_days"`
+			LoginMaxFail       int    `json:"login_max_fail"`
+			LoginLockMin       int    `json:"login_lock_min"`
+			AuditRetentionDays int    `json:"audit_retention_days"`
+			MaxSessionPerUser  int    `json:"max_session_per_user"`
 		}
-		if err := c.ShouldBindJSON(&req); err != nil { response.Bad(c, "参数错误"); return }
+		if err := c.ShouldBindJSON(&req); err != nil {
+			response.Bad(c, "参数错误")
+			return
+		}
 		upd := func(key, val string) {
 			var s model.SystemSetting
 			if err := a.DB.Where("`key`=?", key).First(&s).Error; err != nil {
@@ -465,4 +525,3 @@ func containsAt(s string) bool {
 func init() {
 	modreg.RegisterProtected("system", RegisterProtected)
 }
-

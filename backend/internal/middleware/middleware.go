@@ -18,12 +18,12 @@ import (
 
 // ContextKey 上下文键
 const (
-	KeyUserID   = "uid"
-	KeyUsername = "username"
-	KeyRole     = "role"
+	KeyUserID    = "uid"
+	KeyUsername  = "username"
+	KeyRole      = "role"
 	KeyNodeScope = "node_scope"
-	KeyMustPwd  = "must_change"
-	KeySession  = "session_key"
+	KeyMustPwd   = "must_change"
+	KeySession   = "session_key"
 )
 
 // CORS 跨域（开发模式）

@@ -24,6 +24,7 @@ import (
 
 var arpIPRe = regexp.MustCompile(`\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b`)
 var arpMACRe = regexp.MustCompile(`\b([0-9a-fA-F]{4}[-.][0-9a-fA-F]{4}[-.][0-9a-fA-F]{4})\b`)
+var arpVLANRe = regexp.MustCompile(`\b(?:BAGG|XGE|GE|Vlan-interface|Vlan)\S*\s+(\d{1,4})\b`)
 
 func regexpMustCompile(s string) *regexp.Regexp { return regexp.MustCompile(s) }
 
@@ -237,8 +238,32 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 	// 删除登记（释放IP）
 	g.DELETE("/records/:id", func(c *gin.Context) {
 		id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
-		a.DB.Delete(&model.IPRecord{}, id)
-		response.OK(c, gin.H{"ok": true})
+		fmt.Printf("[ipam] release record id=%d\n", id)
+		var rec model.IPRecord
+		a.DB.First(&rec, id)
+		if rec.ID > 0 && rec.BindDeviceID > 0 {
+			var dev model.BindDevice
+			if err := a.DB.First(&dev, rec.BindDeviceID).Error; err == nil && dev.Enable {
+				vlan := rec.VLAN
+				if vlan == 0 {
+					var s model.Subnet
+					a.DB.First(&s, rec.SubnetID)
+					vlan = s.VLAN
+				}
+				undoCmd := fmt.Sprintf("undo arp %s", rec.IP)
+				if dev.Vendor == "huawei" {
+					undoCmd = fmt.Sprintf("undo arp static %s", rec.IP)
+					if vlan > 0 {
+						undoCmd += fmt.Sprintf(" vid %d", vlan)
+					}
+				}
+				cmds := []string{"system-view", undoCmd, "quit", "save force"}
+				sshsvc.Exec(sshsvc.Target{Host: dev.IP, Port: dev.SSHPort, User: dev.SSHUser,
+					AuthType: dev.AuthType, Credential: dev.Credential}, cmds)
+			}
+		}
+		res := a.DB.Unscoped().Where("id = ?", id).Delete(&model.IPRecord{})
+		response.OK(c, gin.H{"ok": true, "deleted": res.RowsAffected})
 	})
 
 	// ===== 下发绑定命令（指定设备） =====
@@ -364,26 +389,26 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			ipSet[ip] = true
 		}
 		// 批量取出已有记录，避免逐行查询
-		existing := map[string]string{}
+		existing := map[string]bool{}
 		var oldRecs []model.IPRecord
 		a.DB.Where("subnet_id = ?", id).Find(&oldRecs)
 		for _, r := range oldRecs {
-			existing[r.IP] = r.MAC
+			existing[r.IP] = true
 		}
 		imported, skipped := 0, 0
 		var toCreate []model.IPRecord
-		for ip, mac := range arpMap {
+		for ip, item := range arpMap {
 			if !ipSet[ip] {
 				continue
 			}
-			if _, ok := existing[ip]; ok {
+			if existing[ip] {
 				a.DB.Model(&model.IPRecord{}).Where("subnet_id = ? AND ip = ?", id, ip).
-					Update("mac", mac)
+					Updates(map[string]any{"mac": item.MAC, "vlan": item.VLAN})
 				skipped++
 				continue
 			}
 			toCreate = append(toCreate, model.IPRecord{SubnetID: uint(id), IP: ip, OwnerName: "ARP自动发现",
-				MAC: mac, Office: "", Remark: "从交换机" + d.Name + "ARP表自动读取"})
+				MAC: item.MAC, VLAN: item.VLAN, Office: "", Remark: "从交换机" + d.Name + "ARP表自动读取"})
 		}
 		if len(toCreate) > 0 {
 			a.DB.CreateInBatches(toCreate, 100)
@@ -411,6 +436,7 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 
 // doBind 下发地址绑定命令（华为/华三：arp static + 静态MAC绑定）
 func doBind(a *core.App, rec *model.IPRecord, s *model.Subnet) {
+	fmt.Printf("[ipam] bind start record=%d ip=%s mac=%s subnet=%d vlan=%d device=%d\n", rec.ID, rec.IP, rec.MAC, rec.SubnetID, s.VLAN, rec.BindDeviceID)
 	var dev model.BindDevice
 	if err := a.DB.First(&dev, rec.BindDeviceID).Error; err != nil {
 		rec.BindStatus = "fail"
@@ -431,22 +457,45 @@ func doBind(a *core.App, rec *model.IPRecord, s *model.Subnet) {
 		a.DB.Model(rec).Updates(map[string]any{"bind_status": rec.BindStatus, "bind_log": rec.BindLog})
 		return
 	}
-	// 生成绑定命令（华为/华三兼容）
-	commands := []string{
-		"system-view",
-		fmt.Sprintf("arp static %s %s", rec.IP, mac),
-		"return",
+	// 按厂商生成绑定命令；华三/华为静态 ARP 带 VLAN 时可明确绑定到对应广播域
+	vlan := rec.VLAN
+	if vlan == 0 {
+		vlan = s.VLAN
+	}
+	arpCmd := fmt.Sprintf("arp static %s %s", rec.IP, mac)
+	if vlan > 0 {
+		arpCmd += fmt.Sprintf(" vid %d", vlan)
+	}
+	commands := []string{"system-view", arpCmd, "quit"}
+	if dev.Vendor == "h3c" {
+		commands = append(commands, "save force")
+	} else if dev.Vendor == "huawei" {
+		commands = append(commands, "save force")
 	}
 	out, err := sshsvc.Exec(sshsvc.Target{Host: dev.IP, Port: dev.SSHPort, User: dev.SSHUser,
 		AuthType: dev.AuthType, Credential: dev.Credential}, commands)
 	if err != nil {
 		rec.BindStatus = "fail"
 		rec.BindLog = err.Error()
+	} else if hasBindError(out) {
+		rec.BindStatus = "fail"
+		rec.BindLog = out
 	} else {
 		rec.BindStatus = "ok"
 		rec.BindLog = out
 	}
-	a.DB.Model(rec).Updates(map[string]any{"bind_status": rec.BindStatus, "bind_log": rec.BindLog})
+	a.DB.Model(rec).Updates(map[string]any{"bind_status": rec.BindStatus, "bind_log": rec.BindLog, "bind_device_id": rec.BindDeviceID})
+	fmt.Printf("[ipam] bind end record=%d status=%s log=%s\n", rec.ID, rec.BindStatus, strings.ReplaceAll(rec.BindLog, "\n", " "))
+}
+
+func hasBindError(out string) bool {
+	text := strings.ToLower(out)
+	for _, kw := range []string{"unrecognized", "wrong parameter", "incomplete", "ambiguous", "error:", "failed", "invalid", "wrong number"} {
+		if strings.Contains(text, kw) {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeMAC(mac string) string {
@@ -460,9 +509,15 @@ func normalizeMAC(mac string) string {
 	return mac[0:4] + "-" + mac[4:8] + "-" + mac[8:12]
 }
 
-// parseARP 解析华为/华三 display arp 输出，返回 map[ip]mac
-func parseARP(out string) map[string]string {
-	result := map[string]string{}
+// parseARP 解析华为/华三 display arp 输出，返回 IP -> MAC/VLAN
+func parseARP(out string) map[string]struct {
+	MAC  string
+	VLAN int
+} {
+	result := map[string]struct {
+		MAC  string
+		VLAN int
+	}{}
 	lines := strings.Split(out, "\n")
 	for _, line := range lines {
 		ip := arpIPRe.FindString(line)
@@ -473,7 +528,18 @@ func parseARP(out string) map[string]string {
 		if strings.Contains(line, "0000-0000-0000") {
 			continue
 		}
-		result[ip] = normalizeMAC(mac)
+		tokens := strings.Fields(line)
+		vlan := 0
+		for i, t := range tokens {
+			if strings.EqualFold(t, mac) && i+1 < len(tokens) {
+				fmt.Sscanf(tokens[i+1], "%d", &vlan)
+				break
+			}
+		}
+		result[ip] = struct {
+			MAC  string
+			VLAN int
+		}{MAC: normalizeMAC(mac), VLAN: vlan}
 	}
 	return result
 }

@@ -4,6 +4,7 @@ package sshsvc
 import (
 	"bytes"
 	"fmt"
+	"sync"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -200,60 +201,59 @@ func Exec(t Target, commands []string) (string, error) {
 		return "", fmt.Errorf("启动shell失败: %w", err)
 	}
 
+	var mu sync.Mutex
 	var output bytes.Buffer
-	time.Sleep(500 * time.Millisecond)
-	buf := make([]byte, 65536)
-	// 读取初始输出
-	readAll := func() {
+	done := make(chan struct{})
+	go func() {
+		buf := make([]byte, 65536)
 		for {
 			n, err := stdout.Read(buf)
 			if n > 0 {
+				mu.Lock()
 				output.Write(buf[:n])
+				mu.Unlock()
 			}
-			if err != nil || n < len(buf) {
-				break
+			if err != nil {
+				close(done)
+				return
+			}
+		}
+	}()
+	readSnapshot := func() string {
+		mu.Lock()
+		defer mu.Unlock()
+		return output.String()
+	}
+	waitQuiet := func(max time.Duration) {
+		deadline := time.Now().Add(max)
+		for time.Now().Before(deadline) {
+			time.Sleep(250 * time.Millisecond)
+			if bytes.Contains(output.Bytes(), []byte("-- More")) {
+				stdin.Write([]byte(" "))
 			}
 		}
 	}
-	readAll()
+	_ = readSnapshot
 
 	// 关闭分页（H3C/华为）
 	stdin.Write([]byte("screen-length disable\n"))
-	time.Sleep(300 * time.Millisecond)
-	readAll()
+	waitQuiet(500 * time.Millisecond)
 
 	for _, cmd := range commands {
-		output.WriteString(fmt.Sprintf("\n$ %s\n", cmd))
 		stdin.Write([]byte(cmd + "\n"))
-		// 持续读取直到没有新数据
-		emptyRounds := 0
-		for i := 0; i < 15; i++ {
-			before := output.Len()
-			time.Sleep(300 * time.Millisecond)
-			readAll()
-			after := output.Len()
-			// 检查是否有 --More-- 分页需要按空格
-			if bytes.Contains(output.Bytes(), []byte("-- More")) {
-				stdin.Write([]byte(" "))
-				time.Sleep(300 * time.Millisecond)
-				readAll()
-				emptyRounds = 0
-				continue
-			}
-			if after == before {
-				emptyRounds++
-				if emptyRounds >= 3 {
-					break // 连续0.9秒无新数据，认为输出完成
-				}
-			} else {
-				emptyRounds = 0
-			}
-		}
+		waitQuiet(2500 * time.Millisecond)
 	}
 
 	stdin.Write([]byte("quit\n"))
-	time.Sleep(500 * time.Millisecond)
+	waitQuiet(500 * time.Millisecond)
+	stdin.Close()
 	session.Close()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+	}
 
+	mu.Lock()
+	defer mu.Unlock()
 	return output.String(), nil
 }

@@ -190,10 +190,10 @@ func (e *Engine) Query(q tsdb.Query) ([]tsdb.Series, error) {
 	var ir struct {
 		Results []struct {
 			Series []struct {
-				Name    string          `json:"name"`
+				Name    string            `json:"name"`
 				Tags    map[string]string `json:"tags"`
-				Columns []string        `json:"columns"`
-				Values  [][]interface{} `json:"values"`
+				Columns []string          `json:"columns"`
+				Values  [][]interface{}   `json:"values"`
 			} `json:"series"`
 			Error string `json:"error"`
 		} `json:"results"`

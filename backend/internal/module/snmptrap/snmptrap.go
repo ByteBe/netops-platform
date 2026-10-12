@@ -6,8 +6,8 @@ import (
 	"net"
 	"strings"
 
-	"github.com/gosnmp/gosnmp"
 	"github.com/gin-gonic/gin"
+	"github.com/gosnmp/gosnmp"
 
 	"netops/internal/core"
 	"netops/internal/modreg"

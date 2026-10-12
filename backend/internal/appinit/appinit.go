@@ -1,4 +1,4 @@
-﻿// Package appinit 运行时初始化逻辑（数据库/时序库/种子数据/MCP能力）
+// Package appinit 运行时初始化逻辑（数据库/时序库/种子数据/MCP能力）
 // 独立于 module 包，避免 bootstrap ↔ module 的 import 循环
 package appinit
 
@@ -16,6 +16,7 @@ import (
 	"netops/internal/collector/snmp"
 	"netops/internal/common/crypto"
 	"netops/internal/common/logger"
+	"netops/internal/common/secstore"
 	"netops/internal/config"
 	"netops/internal/core"
 	"netops/internal/model"
@@ -77,6 +78,7 @@ func InitStorage(a *core.App, cfg *config.Config) error {
 	if err := db.AutoMigrate(AllModels()...); err != nil {
 		return fmt.Errorf("数据库迁移失败: %w", err)
 	}
+	migratePlaintextSecrets(db)
 	a.DB = db
 	SeedData(db)
 	return nil
@@ -110,6 +112,51 @@ func OpenTSDB(cfg *config.TSDB) (tsdb.Engine, error) {
 	}
 }
 
+// migratePlaintextSecrets 将历史明文敏感字段一次性升级为 enc: 密文
+func migratePlaintextSecrets(db *gorm.DB) {
+	pairs := []struct{ table, column string }{
+		{"monitor_devices", "community"},
+		{"monitor_devices", "auth_pass"},
+		{"monitor_devices", "priv_pass"},
+		{"monitor_devices", "ssh_pass"},
+		{"db_instances", "password"},
+		{"email_configs", "password"},
+		{"bind_devices", "credential"},
+		{"ai_configs", "api_key"},
+		{"mcp_agents", "auth_token"},
+		{"k8s_clusters", "token"},
+		{"nodes", "token"},
+		{"config_backup_devices", "credential"},
+		{"notify_configs", "token"},
+	}
+	for _, p := range pairs {
+		if !db.Migrator().HasTable(p.table) {
+			continue
+		}
+		type row struct {
+			ID    uint
+			Value string
+		}
+		var rows []row
+		db.Table(p.table).
+			Select("id, " + p.column + " as value").
+			Where(p.column + " IS NOT NULL").
+			Where(p.column + " <> ''").
+			Where(p.column + " NOT LIKE 'enc:%'").
+			Find(&rows)
+		for _, r := range rows {
+			sealed := secstore.Seal(r.Value)
+			if sealed == "" || sealed == r.Value {
+				continue
+			}
+			db.Table(p.table).Where("id = ?", r.ID).Update(p.column, sealed)
+		}
+		if len(rows) > 0 {
+			logger.Infof("[secstore] 已迁移 %s.%s 明文字段 %d 条", p.table, p.column, len(rows))
+		}
+	}
+}
+
 // SeedData 种子数据（脚本模板/默认分组/系统设置/默认管理员）
 func SeedData(db *gorm.DB) {
 	var userCnt int64
@@ -134,7 +181,7 @@ func SeedData(db *gorm.DB) {
 		"ipam_binding_enable": "true",
 		"docker_enable":       "false",
 		"docker_interval":     "30",
-		"docker_hosts":      "",
+		"docker_hosts":        "",
 		"k8s_enable":          "false",
 		"k8s_api_server":      "",
 		"k8s_token":           "",
@@ -193,12 +240,14 @@ func SyncManagers(a *core.App) {
 	}
 	a.DBProbe.Sync(dbs)
 
-		// 从数据库读取已启用的Docker主机列表
+	// 从数据库读取已启用的Docker主机列表
 	dockerAddrs := []string{}
 	var dockerHosts []model.DockerHost
 	a.DB.Where("enabled = ?", true).Find(&dockerHosts)
 	for _, h := range dockerHosts {
-		if h.Address != "" { dockerAddrs = append(dockerAddrs, h.Address) }
+		if h.Address != "" {
+			dockerAddrs = append(dockerAddrs, h.Address)
+		}
 	}
 	dockerHostsJSON, _ := json.Marshal(dockerAddrs)
 	dockerEnable := SettingBool(a.DB, "docker_enable")
@@ -213,9 +262,15 @@ func SyncManagers(a *core.App) {
 	// K8s多集群配置
 	var k8sClusters []model.K8sCluster
 	a.DB.Where("enabled = ?", true).Find(&k8sClusters)
-	type kcInfo struct { Name string; APIServer string; Token string }
+	type kcInfo struct {
+		Name      string
+		APIServer string
+		Token     string
+	}
 	k8sArr := []kcInfo{}
-	for _, cl := range k8sClusters { k8sArr = append(k8sArr, kcInfo{Name: cl.Name, APIServer: cl.APIServer, Token: cl.Token}) }
+	for _, cl := range k8sClusters {
+		k8sArr = append(k8sArr, kcInfo{Name: cl.Name, APIServer: cl.APIServer, Token: cl.Token})
+	}
 	k8sJSON, _ := json.Marshal(k8sArr)
 	a.K8sM.SetConfigJSON(SettingBool(a.DB, "k8s_enable"), SettingInt(a.DB, "k8s_interval", 60), string(k8sJSON))
 
@@ -299,4 +354,3 @@ func SettingInt(db *gorm.DB, key string, def int) int {
 	}
 	return n
 }
-

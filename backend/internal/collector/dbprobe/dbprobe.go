@@ -5,20 +5,20 @@ package dbprobe
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"netops/internal/common/logger"
-	"database/sql"
-	"fmt"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	_ "gitee.com/chunanyong/dm"
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "github.com/sijms/go-ora/v2"
-	_ "gitee.com/chunanyong/dm"
 
 	"netops/internal/notify"
 	"netops/internal/tsdb"

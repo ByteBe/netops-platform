@@ -131,7 +131,7 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		tags := map[string]string{"device_id": strconv.FormatUint(uint64(r.DeviceID), 10), "if_name": r.Interface}
 		in, _ := a.TSDB.Query(tsdb.Query{Metric: "if_in", Tags: tags, Start: start, End: end, Bucket: time.Minute * 5, Agg: "avg"})
 		out, _ := a.TSDB.Query(tsdb.Query{Metric: "if_out", Tags: tags, Start: start, End: end, Bucket: time.Minute * 5, Agg: "avg"})
-		response.OK(c, gin.H{"in": seriesPoints(in), "out": seriesPoints(out), "rule": r})
+		response.OK(c, gin.H{"in": matchSeries(in, r.Interface), "out": matchSeries(out, r.Interface), "rule": r})
 	})
 
 	// 接口列表（从设备快照）
@@ -157,11 +157,16 @@ func pct(bps, limitMbps float64) float64 {
 	return bps / (limitMbps * 1e6) * 100
 }
 
-func seriesPoints(series []tsdb.Series) [][2]float64 {
-	if len(series) == 0 {
-		return [][2]float64{}
+func matchSeries(series []tsdb.Series, ifName string) [][2]float64 {
+	for _, s := range series {
+		if s.Tags["if_name"] == ifName || s.Tags["if_index"] == ifName {
+			return s.Points
+		}
 	}
-	return series[0].Points
+	if len(series) > 0 {
+		return series[0].Points
+	}
+	return [][2]float64{}
 }
 
 // init 自动注册路由

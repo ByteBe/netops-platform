@@ -26,16 +26,16 @@ import (
 
 // Result 单次探测结果
 type Result struct {
-	TaskID   uint    `json:"task_id"`
-	Name     string  `json:"name"`
-	Target   string  `json:"target"`
-	Method   string  `json:"method"`
-	Up       bool    `json:"up"`
-	RT       float64 `json:"rt_ms"`   // 平均往返时间 ms，失败为0
-	Loss     float64 `json:"loss_pct"` // 丢包率 %
-	Message  string  `json:"message"`
-	TS       int64   `json:"ts"`
-	Color    string  `json:"color"`
+	TaskID  uint    `json:"task_id"`
+	Name    string  `json:"name"`
+	Target  string  `json:"target"`
+	Method  string  `json:"method"`
+	Up      bool    `json:"up"`
+	RT      float64 `json:"rt_ms"`    // 平均往返时间 ms，失败为0
+	Loss    float64 `json:"loss_pct"` // 丢包率 %
+	Message string  `json:"message"`
+	TS      int64   `json:"ts"`
+	Color   string  `json:"color"`
 }
 
 // Probe 探测执行器
@@ -90,7 +90,9 @@ func (CMDProbe) Run(target string, _ int, timeout time.Duration) (float64, float
 	rt := 0.0
 	if len(rts) > 0 {
 		sum := 0.0
-		for _, v := range rts { sum += v }
+		for _, v := range rts {
+			sum += v
+		}
 		rt = sum / float64(len(rts))
 	} else {
 		// 兜底：从汇总行提取平均
@@ -182,30 +184,30 @@ func NewProbe(method string) Probe {
 
 // Task 运行中的任务
 type Task struct {
-	ID        uint
-	Name      string
-	Target    string
-	Method    string
-	Port      int
-	Interval  int
-	Timeout   int
-	Color     string
-	Status    string // up/down/unknown
-	LastRT    float64
-	LastLoss  float64
-	LastTime  time.Time
-	mu        sync.RWMutex
-	stop      chan struct{}
+	ID       uint
+	Name     string
+	Target   string
+	Method   string
+	Port     int
+	Interval int
+	Timeout  int
+	Color    string
+	Status   string // up/down/unknown
+	LastRT   float64
+	LastLoss float64
+	LastTime time.Time
+	mu       sync.RWMutex
+	stop     chan struct{}
 }
 
 // Manager 链路检测管理器（多任务并行、常驻监控）
 type Manager struct {
-	mu     sync.RWMutex
-	tasks  map[uint]*Task
-	ts     tsdb.Engine
-	hub    *notify.Hub
+	mu      sync.RWMutex
+	tasks   map[uint]*Task
+	ts      tsdb.Engine
+	hub     *notify.Hub
 	stopAll chan struct{}
-	wg     sync.WaitGroup
+	wg      sync.WaitGroup
 }
 
 // NewManager 创建管理器

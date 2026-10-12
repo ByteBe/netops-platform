@@ -17,18 +17,18 @@ type Body struct {
 
 // 业务错误码
 const (
-	CodeOK                = 0
-	CodeBadRequest        = 40000
-	CodeUnauthorized      = 40100 // 未登录或凭证失效
-	CodeForbidden         = 40300 // 无权限
-	CodeMustChangePwd     = 40310 // 必须修改初始密码
-	CodeNotFound          = 40400
-	CodeConflict          = 40900
-	CodeServerError       = 50000
-	CodeCryptoError       = 40001 // 国密加解密失败
-	CodeNotInitialized    = 41000 // 系统未初始化
-	CodeWeakPassword      = 42201 // 密码强度不足
-	CodeValidationFailed  = 42200
+	CodeOK               = 0
+	CodeBadRequest       = 40000
+	CodeUnauthorized     = 40100 // 未登录或凭证失效
+	CodeForbidden        = 40300 // 无权限
+	CodeMustChangePwd    = 40310 // 必须修改初始密码
+	CodeNotFound         = 40400
+	CodeConflict         = 40900
+	CodeServerError      = 50000
+	CodeCryptoError      = 40001 // 国密加解密失败
+	CodeNotInitialized   = 41000 // 系统未初始化
+	CodeWeakPassword     = 42201 // 密码强度不足
+	CodeValidationFailed = 42200
 )
 
 // OK 成功响应

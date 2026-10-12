@@ -20,6 +20,14 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 	g.GET("/graph", func(c *gin.Context) {
 		var devices []model.TopoDevice
 		a.DB.Order("id asc").Find(&devices)
+		for i := range devices {
+			if devices[i].X == 0 && devices[i].Y == 0 {
+				angle := 2 * math.Pi * float64(devices[i].ID%12) / 12
+				devices[i].X = 180 * math.Cos(angle)
+				devices[i].Y = 110 * math.Sin(angle)
+				a.DB.Model(&devices[i]).Updates(map[string]any{"x": devices[i].X, "y": devices[i].Y})
+			}
+		}
 		var links []model.TopoLink
 		a.DB.Order("id asc").Find(&links)
 		nodes := make([]gin.H, 0, len(devices))
@@ -42,17 +50,36 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 	})
 	g.POST("/devices", func(c *gin.Context) {
 		var d model.TopoDevice
-		if err := c.ShouldBindJSON(&d); err != nil || d.Name == "" { response.Bad(c, "参数错误"); return }
-		if d.Vendor == "" { d.Vendor = "h3c" }
-		if d.Layer == "" { d.Layer = "access" }
-		if d.Status == "" { d.Status = "up" }
+		if err := c.ShouldBindJSON(&d); err != nil || d.Name == "" {
+			response.Bad(c, "参数错误")
+			return
+		}
+		if d.Vendor == "" {
+			d.Vendor = "h3c"
+		}
+		if d.Layer == "" {
+			d.Layer = "access"
+		}
+		if d.Status == "" {
+			d.Status = "up"
+		}
+		if d.X == 0 && d.Y == 0 {
+			var cnt int64
+			a.DB.Model(&model.TopoDevice{}).Count(&cnt)
+			angle := 2 * math.Pi * float64(cnt) / 12
+			d.X = 180 * math.Cos(angle)
+			d.Y = 110 * math.Sin(angle)
+		}
 		a.DB.Create(&d)
 		response.OK(c, d)
 	})
 	g.PUT("/devices/:id", func(c *gin.Context) {
 		id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
 		var d model.TopoDevice
-		if a.DB.First(&d, id).Error != nil { response.NotFound(c, "设备不存在"); return }
+		if a.DB.First(&d, id).Error != nil {
+			response.NotFound(c, "设备不存在")
+			return
+		}
 		var req model.TopoDevice
 		c.ShouldBindJSON(&req)
 		a.DB.Model(&d).Updates(map[string]any{"name": req.Name, "ip": req.IP, "vendor": req.Vendor, "type": req.Type, "layer": req.Layer, "status": req.Status, "icon": req.Icon, "x": req.X, "y": req.Y, "z": req.Z, "remark": req.Remark})
@@ -62,21 +89,36 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
 		var lids []uint
 		a.DB.Model(&model.TopoLink{}).Where("source_id=? OR target_id=?", id, id).Pluck("id", &lids)
-		if len(lids) > 0 { a.DB.Where("link_id IN ?", lids).Delete(&model.TopoLinkIP{}); a.DB.Delete(&model.TopoLink{}, lids) }
+		if len(lids) > 0 {
+			a.DB.Where("link_id IN ?", lids).Delete(&model.TopoLinkIP{})
+			a.DB.Delete(&model.TopoLink{}, lids)
+		}
 		a.DB.Delete(&model.TopoDevice{}, id)
 		response.OK(c, gin.H{"ok": true})
 	})
 
 	g.POST("/links", func(c *gin.Context) {
 		var req struct {
-			Name string `json:"name"`; SourceID uint `json:"source_id"`; TargetID uint `json:"target_id"`
-			Color string `json:"color"`; Bandwidth string `json:"bandwidth"`; Utilization float64 `json:"utilization"`
-			Status string `json:"status"`; IPs []string `json:"ips"`
+			Name        string   `json:"name"`
+			SourceID    uint     `json:"source_id"`
+			TargetID    uint     `json:"target_id"`
+			Color       string   `json:"color"`
+			Bandwidth   string   `json:"bandwidth"`
+			Utilization float64  `json:"utilization"`
+			Status      string   `json:"status"`
+			IPs         []string `json:"ips"`
 		}
-		if c.ShouldBindJSON(&req) != nil || req.SourceID == 0 || req.TargetID == 0 { response.Bad(c, "连线两端必填"); return }
+		if c.ShouldBindJSON(&req) != nil || req.SourceID == 0 || req.TargetID == 0 {
+			response.Bad(c, "连线两端必填")
+			return
+		}
 		l := model.TopoLink{Name: req.Name, SourceID: req.SourceID, TargetID: req.TargetID, Color: req.Color, Bandwidth: req.Bandwidth, Utilization: req.Utilization, Status: req.Status}
-		if l.Color == "" { l.Color = "#22c55e" }
-		if l.Status == "" { l.Status = "up" }
+		if l.Color == "" {
+			l.Color = "#22c55e"
+		}
+		if l.Status == "" {
+			l.Status = "up"
+		}
 		a.DB.Create(&l)
 		saveIPs(a, l.ID, req.IPs)
 		response.OK(c, l)
@@ -84,11 +126,19 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 	g.PUT("/links/:id", func(c *gin.Context) {
 		id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
 		var l model.TopoLink
-		if a.DB.First(&l, id).Error != nil { response.NotFound(c, "连线不存在"); return }
+		if a.DB.First(&l, id).Error != nil {
+			response.NotFound(c, "连线不存在")
+			return
+		}
 		var req struct {
-			Name string `json:"name"`; SourceID uint `json:"source_id"`; TargetID uint `json:"target_id"`
-			Color string `json:"color"`; Bandwidth string `json:"bandwidth"`; Utilization float64 `json:"utilization"`
-			Status string `json:"status"`; IPs []string `json:"ips"`
+			Name        string   `json:"name"`
+			SourceID    uint     `json:"source_id"`
+			TargetID    uint     `json:"target_id"`
+			Color       string   `json:"color"`
+			Bandwidth   string   `json:"bandwidth"`
+			Utilization float64  `json:"utilization"`
+			Status      string   `json:"status"`
+			IPs         []string `json:"ips"`
 		}
 		c.ShouldBindJSON(&req)
 		a.DB.Model(&l).Updates(map[string]any{"name": req.Name, "source_id": req.SourceID, "target_id": req.TargetID, "color": req.Color, "bandwidth": req.Bandwidth, "utilization": req.Utilization, "status": req.Status})
@@ -106,19 +156,26 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		var devs []model.TopoDevice
 		a.DB.Find(&devs)
 		n := len(devs)
-		if n == 0 { response.OK(c, gin.H{"updated": 0}); return }
+		if n == 0 {
+			response.OK(c, gin.H{"updated": 0})
+			return
+		}
 		for i, d := range devs {
 			angle := 2 * math.Pi * float64(i) / float64(n)
-			a.DB.Model(&d).Updates(map[string]any{"x": 500 + 260*math.Cos(angle), "y": 300 + 180*math.Sin(angle)})
+			a.DB.Model(&d).Updates(map[string]any{"x": 160 * math.Cos(angle), "y": 100 * math.Sin(angle)})
 		}
 		response.OK(c, gin.H{"updated": n})
 	})
 
 	g.POST("/upload", func(c *gin.Context) {
 		f, err := c.FormFile("file")
-		if err != nil { response.Bad(c, "未选择文件"); return }
+		if err != nil {
+			response.Bad(c, "未选择文件")
+			return
+		}
 		ext := filepath.Ext(f.Filename)
-		dir := filepath.Join("data", "uploads"); os.MkdirAll(dir, 0755)
+		dir := filepath.Join("data", "uploads")
+		os.MkdirAll(dir, 0755)
 		name := fmt.Sprintf("topo_%d%s", time.Now().UnixNano(), ext)
 		c.SaveUploadedFile(f, filepath.Join(dir, name))
 		response.OK(c, gin.H{"url": "/uploads/" + name})
@@ -127,7 +184,11 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 
 func saveIPs(a *core.App, linkID uint, ips []string) {
 	a.DB.Where("link_id=?", linkID).Delete(&model.TopoLinkIP{})
-	for _, ip := range ips { if ip != "" { a.DB.Create(&model.TopoLinkIP{LinkID: linkID, IP: ip}) } }
+	for _, ip := range ips {
+		if ip != "" {
+			a.DB.Create(&model.TopoLinkIP{LinkID: linkID, IP: ip})
+		}
+	}
 }
 
 func init() { modreg.RegisterProtected("topology", RegisterProtected) }

@@ -67,7 +67,9 @@ func buildHuaweiDhcp(m map[string]string) []string {
 	addr, mask := cidrMask(p(m, "net", ""))
 	pool := p(m, "pool", "pool1")
 	lines := []string{"dhcp enable", fmt.Sprintf("ip pool %s", pool), fmt.Sprintf(" network %s %s", addr, mask), fmt.Sprintf(" gateway-list %s", p(m, "gw", ""))}
-	if dns := p(m, "dns", ""); dns != "" { lines = append(lines, " dns-list "+dns) }
+	if dns := p(m, "dns", ""); dns != "" {
+		lines = append(lines, " dns-list "+dns)
+	}
 	return lines
 }
 
@@ -79,9 +81,15 @@ func buildHuaweiStp(m map[string]string) []string {
 		lines = append(lines, "stp region-configuration", fmt.Sprintf(" instance %s vlan %s", inst, p(m, "vlan", "")), " active region-configuration")
 	}
 	root := p(m, "root", "none")
-	if root == "primary" { lines = append(lines, fmt.Sprintf("stp instance %s root primary", inst)) }
-	if root == "secondary" { lines = append(lines, fmt.Sprintf("stp instance %s root secondary", inst)) }
-	if root == "none" && p(m, "pri", "") != "" { lines = append(lines, fmt.Sprintf("stp instance %s priority %s", inst, p(m, "pri", ""))) }
+	if root == "primary" {
+		lines = append(lines, fmt.Sprintf("stp instance %s root primary", inst))
+	}
+	if root == "secondary" {
+		lines = append(lines, fmt.Sprintf("stp instance %s root secondary", inst))
+	}
+	if root == "none" && p(m, "pri", "") != "" {
+		lines = append(lines, fmt.Sprintf("stp instance %s priority %s", inst, p(m, "pri", "")))
+	}
 	return append(lines, "stp enable")
 }
 
@@ -93,7 +101,9 @@ func buildHuaweiBgp(m map[string]string) []string {
 	lines := []string{fmt.Sprintf("bgp %s", asn), fmt.Sprintf(" router-id %s", rid)}
 	for _, pip := range peerIps {
 		lines = append(lines, fmt.Sprintf(" peer %s as-number %s", pip, peerAs))
-		if ci := p(m, "conn_int", ""); ci != "" { lines = append(lines, fmt.Sprintf(" peer %s connect-interface %s", pip, ci)) }
+		if ci := p(m, "conn_int", ""); ci != "" {
+			lines = append(lines, fmt.Sprintf(" peer %s connect-interface %s", pip, ci))
+		}
 	}
 	if p(m, "enable_net", "") == "on" {
 		lines = append(lines, " ipv4-family unicast", fmt.Sprintf("  network %s %s", p(m, "network", ""), p(m, "netmask", "255.255.255.0")))
@@ -114,11 +124,15 @@ func buildHuaweiBgp(m map[string]string) []string {
 		lines = append(lines, fmt.Sprintf(" ipv4-family vpn-instance %s", p(m, "vpn", "")))
 		for _, line := range strings.Split(p(m, "vpn_import", ""), "\n") {
 			line = strings.TrimSpace(line)
-			if line != "" && p(m, "enable_import", "") == "on" { lines = append(lines, "  import-route "+line) }
+			if line != "" && p(m, "enable_import", "") == "on" {
+				lines = append(lines, "  import-route "+line)
+			}
 		}
 		for _, line := range strings.Split(p(m, "vpn_export", ""), "\n") {
 			line = strings.TrimSpace(line)
-			if line != "" && p(m, "enable_export", "") == "on" { lines = append(lines, "  export-route "+line) }
+			if line != "" && p(m, "enable_export", "") == "on" {
+				lines = append(lines, "  export-route "+line)
+			}
 		}
 	}
 	return lines
@@ -128,7 +142,9 @@ func splitList(s string) []string {
 	out := []string{}
 	for _, x := range strings.Split(s, ",") {
 		x = strings.TrimSpace(x)
-		if x != "" { out = append(out, x) }
+		if x != "" {
+			out = append(out, x)
+		}
 	}
 	return out
 }

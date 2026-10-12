@@ -18,23 +18,23 @@ import (
 
 // OIDs
 const (
-	oidSysUpTime        = "1.3.6.1.2.1.1.3.0"
-	oidIfIndex          = "1.3.6.1.2.1.2.2.1.1"
-	oidIfDescr          = "1.3.6.1.2.1.2.2.1.2"
-	oidIfSpeed          = "1.3.6.1.2.1.2.2.1.5"
-	oidIfOperStatus     = "1.3.6.1.2.1.2.2.1.8"
-	oidIfInOctets       = "1.3.6.1.2.1.2.2.1.10"
-	oidIfOutOctets      = "1.3.6.1.2.1.2.2.1.16"
+	oidSysUpTime       = "1.3.6.1.2.1.1.3.0"
+	oidIfIndex         = "1.3.6.1.2.1.2.2.1.1"
+	oidIfDescr         = "1.3.6.1.2.1.2.2.1.2"
+	oidIfSpeed         = "1.3.6.1.2.1.2.2.1.5"
+	oidIfOperStatus    = "1.3.6.1.2.1.2.2.1.8"
+	oidIfInOctets      = "1.3.6.1.2.1.2.2.1.10"
+	oidIfOutOctets     = "1.3.6.1.2.1.2.2.1.16"
 	oidIfHCInOctets    = "1.3.6.1.2.1.31.1.1.1.6"
 	oidIfHCOutOctets   = "1.3.6.1.2.1.31.1.1.1.10"
 	oidIfHighSpeed     = "1.3.6.1.2.1.31.1.1.1.15"
-	oidHrProcessorLoad  = "1.3.6.1.2.1.25.3.3.1.2"
-	oidHrStorageIndex   = "1.3.6.1.2.1.25.2.3.1.1"
-	oidHrStorageType    = "1.3.6.1.2.1.25.2.3.1.2"
-	oidHrStorageSize    = "1.3.6.1.2.1.25.2.3.1.5"
-	oidHrStorageUsed    = "1.3.6.1.2.1.25.2.3.1.6"
-	oidHrStorageDescr   = "1.3.6.1.2.1.25.2.3.1.3"
-	hrStorageRam        = "1.3.6.1.2.1.25.2.1.2"
+	oidHrProcessorLoad = "1.3.6.1.2.1.25.3.3.1.2"
+	oidHrStorageIndex  = "1.3.6.1.2.1.25.2.3.1.1"
+	oidHrStorageType   = "1.3.6.1.2.1.25.2.3.1.2"
+	oidHrStorageSize   = "1.3.6.1.2.1.25.2.3.1.5"
+	oidHrStorageUsed   = "1.3.6.1.2.1.25.2.3.1.6"
+	oidHrStorageDescr  = "1.3.6.1.2.1.25.2.3.1.3"
+	hrStorageRam       = "1.3.6.1.2.1.25.2.1.2"
 	// UCD-SNMP-MIB 即时百分比（Linux snmpd 默认暴露）
 	oidUcdCpuUser    = "1.3.6.1.4.1.2021.11.0"
 	oidUcdCpuSystem  = "1.3.6.1.4.1.2021.11.1"
@@ -47,9 +47,9 @@ const (
 	oidHrMemAvail = "1.3.6.1.2.1.25.2.2.1.6.0"
 
 	// Cisco: CPU (cpmCPUTotal5minRev), Memory pool
-	oidCiscoCpu5min   = "1.3.6.1.4.1.9.9.109.1.1.1.1.8"
-	oidCiscoMemUsed   = "1.3.6.1.4.1.9.9.48.1.1.1.5"
-	oidCiscoMemFree   = "1.3.6.1.4.1.9.9.48.1.1.1.6"
+	oidCiscoCpu5min = "1.3.6.1.4.1.9.9.109.1.1.1.1.8"
+	oidCiscoMemUsed = "1.3.6.1.4.1.9.9.48.1.1.1.5"
+	oidCiscoMemFree = "1.3.6.1.4.1.9.9.48.1.1.1.6"
 
 	// Huawei: hwEntityCpuUsage, hwEntityMemUsage
 	oidHuaweiCpu = "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5"
@@ -83,36 +83,36 @@ type Device struct {
 
 // IfStats 接口统计（瞬时）
 type IfStats struct {
-	Index    string  `json:"index"`
-	Name     string  `json:"name"`
-	Speed    uint64  `json:"speed"`
-	Oper     string  `json:"oper"`
-	InBps    float64 `json:"in_bps"`
-	OutBps   float64 `json:"out_bps"`
-	InOctets uint64  `json:"in_octets"`
-	OutOctets uint64 `json:"out_octets"`
+	Index     string  `json:"index"`
+	Name      string  `json:"name"`
+	Speed     uint64  `json:"speed"`
+	Oper      string  `json:"oper"`
+	InBps     float64 `json:"in_bps"`
+	OutBps    float64 `json:"out_bps"`
+	InOctets  uint64  `json:"in_octets"`
+	OutOctets uint64  `json:"out_octets"`
 }
 
 // DeviceSnapshot 设备采集快照
 type DiskInfo struct {
-	Mount  string  `json:"mount"`
-	Total  uint64  `json:"total"`  // bytes
-	Used   uint64  `json:"used"`   // bytes
+	Mount   string  `json:"mount"`
+	Total   uint64  `json:"total"` // bytes
+	Used    uint64  `json:"used"`  // bytes
 	UsedPct float64 `json:"used_pct"`
 }
 
 type DeviceSnapshot struct {
-	DeviceID   uint      `json:"device_id"`
-	Name       string    `json:"name"`
-	IP         string    `json:"ip"`
-	Up         bool      `json:"up"`
-	CPU        float64   `json:"cpu"`     // %
-	MemUsed    float64   `json:"mem_used"` // %
-	Uptime     float64   `json:"uptime_s"`
-	Interfaces []IfStats `json:"interfaces"`
+	DeviceID   uint       `json:"device_id"`
+	Name       string     `json:"name"`
+	IP         string     `json:"ip"`
+	Up         bool       `json:"up"`
+	CPU        float64    `json:"cpu"`      // %
+	MemUsed    float64    `json:"mem_used"` // %
+	Uptime     float64    `json:"uptime_s"`
+	Interfaces []IfStats  `json:"interfaces"`
 	Disks      []DiskInfo `json:"disks"`
-	TS         time.Time `json:"ts"`
-	Message    string    `json:"message"`
+	TS         time.Time  `json:"ts"`
+	Message    string     `json:"message"`
 }
 
 // Manager SNMP 采集管理器
@@ -249,8 +249,8 @@ func (m *Manager) collect(d Device) {
 	}
 	for _, ifs := range snap.Interfaces {
 		rows = append(rows,
-			tsdb.Row{Metric: "if_in", Field: "value", Tags: map[string]string{"device_id": fmt.Sprint(d.ID), "if_index": ifs.Index, "if_name": ifs.Name}, Value: ifs.InBps, TS: now},
-			tsdb.Row{Metric: "if_out", Field: "value", Tags: map[string]string{"device_id": fmt.Sprint(d.ID), "if_index": ifs.Index, "if_name": ifs.Name}, Value: ifs.OutBps, TS: now},
+			tsdb.Row{Metric: "if_in", Field: "value", Tags: map[string]string{"device_id": fmt.Sprint(d.ID), "if_name": ifs.Name}, Value: ifs.InBps, TS: now},
+			tsdb.Row{Metric: "if_out", Field: "value", Tags: map[string]string{"device_id": fmt.Sprint(d.ID), "if_name": ifs.Name}, Value: ifs.OutBps, TS: now},
 		)
 	}
 	if m.ts != nil {
@@ -394,7 +394,7 @@ func (m *Manager) collectCPU(params *gosnmp.GoSNMP, d Device, snap *DeviceSnapsh
 				if val > 0 && val <= 100 {
 					sum += val
 					cnt++
-					}
+				}
 			}
 			if cnt > 0 {
 				snap.CPU = math.Round(sum/float64(cnt)*10) / 10
