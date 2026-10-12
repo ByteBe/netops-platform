@@ -393,16 +393,20 @@ type AlertRule struct {
 
 // AlertEvent 告警事件
 type AlertEvent struct {
-	ID        uint       `gorm:"primaryKey" json:"id"`
-	RuleID    uint       `gorm:"index" json:"rule_id"`
-	Metric    string     `gorm:"size:32" json:"metric"`
-	Target    string     `gorm:"size:128" json:"target"` // 设备/节点名
-	Value     float64    `gorm:"type:decimal(10,2)" json:"value"`
-	Level     string     `gorm:"size:16" json:"level"`
-	Message   string     `gorm:"size:512" json:"message"`
-	Acked     bool       `gorm:"default:false" json:"acked"`
-	AckedAt   *time.Time `json:"acked_at"`
-	CreatedAt time.Time  `json:"created_at"`
+	ID         uint       `gorm:"primaryKey" json:"id"`
+	RuleID     uint       `gorm:"index" json:"rule_id"`
+	Metric     string     `gorm:"size:32" json:"metric"`
+	Target     string     `gorm:"size:128;index" json:"target"` // 设备/节点名
+	Value      float64    `gorm:"type:decimal(10,2)" json:"value"`
+	Level      string     `gorm:"size:16" json:"level"`
+	Message    string     `gorm:"size:512" json:"message"`
+	GroupKey   string     `gorm:"size:191;index" json:"group_key"`
+	Count      int        `gorm:"default:1" json:"count"`
+	Suppressed bool       `gorm:"default:false" json:"suppressed"`
+	Escalated  bool       `gorm:"default:false" json:"escalated"`
+	Acked      bool       `gorm:"default:false" json:"acked"`
+	AckedAt    *time.Time `json:"acked_at"`
+	CreatedAt  time.Time  `json:"created_at"`
 }
 
 // NotifyConfig 通知渠道配置

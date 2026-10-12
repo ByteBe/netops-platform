@@ -16,5 +16,7 @@ export default {
   edit: 'Edit', del: 'Delete',
   cancel: 'Cancel', save: 'Save',
   link: 'Link',
-  info: 'Info', warning: 'Warning', critical: 'Critical'
+  info: 'Info', warning: 'Warning', critical: 'Critical',
+  channelName: 'Name', channelAddr: 'URL / Webhook', channelSecret: 'Signature / Secret',
+  addChannel: 'Add Channel', groupTip: 'Alerts from same device and metric are merged; unacknowledged alerts escalate after 10 minutes'
 }

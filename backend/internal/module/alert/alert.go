@@ -3,18 +3,23 @@ package alert
 
 import (
 	"bytes"
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"netops/internal/common/response"
 	"netops/internal/core"
 	"netops/internal/middleware"
 	"netops/internal/model"
 	"netops/internal/modreg"
+	"netops/internal/service/email"
 )
 
 func RegisterProtected(a *core.App, g *gin.RouterGroup) {
@@ -137,32 +142,66 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 	})
 }
 
-// Notify 发送通知（供其他模块调用）
+// Notify 发送通知（供其他模块调用），带告警收敛、同设备同指标抑制和未确认升级
 func Notify(app *core.App, level, target, msg string) {
-	// 记录事件
-	ev := model.AlertEvent{Level: level, Target: target, Message: msg, CreatedAt: time.Now()}
+	key := fmt.Sprintf("%s|%s|%s", level, target, msg)
+	sum := md5.Sum([]byte(key))
+	groupKey := hex.EncodeToString(sum[:])
+	var existing model.AlertEvent
+	cutoff := time.Now().Add(-5 * time.Minute)
+	err := app.DB.Where("group_key = ? AND acked = ? AND created_at > ?", groupKey, false, cutoff).First(&existing).Error
+	if err == nil {
+		app.DB.Model(&existing).Update("count", gorm.Expr("count + 1"))
+		shouldEscalate := existing.Count >= 3 && time.Since(existing.CreatedAt) >= 10*time.Minute && !existing.Escalated
+		if shouldEscalate {
+			app.DB.Model(&existing).Update("escalated", true)
+			sendNotify(app, "escalated", target, "ALARM ESCALATED: "+msg)
+		}
+		return
+	}
+	ev := model.AlertEvent{Level: level, Target: target, Message: msg, GroupKey: groupKey, Count: 1, CreatedAt: time.Now()}
 	app.DB.Create(&ev)
-	// 查渠道
+	sendNotify(app, level, target, msg)
+}
+
+func sendNotify(app *core.App, level, target, msg string) {
+	client := &http.Client{Timeout: 8 * time.Second}
 	var ncs []model.NotifyConfig
 	app.DB.Where("enabled = ?", true).Find(&ncs)
 	for _, nc := range ncs {
-		switch nc.Type {
-		case "webhook":
-			payload, _ := json.Marshal(map[string]string{"level": level, "target": target, "message": msg})
-			http.Post(nc.Config, "application/json", bytes.NewReader(payload))
-		case "dingtalk":
-			payload, _ := json.Marshal(map[string]any{"msgtype": "text", "text": map[string]string{"content": "[" + level + "] " + target + "\n" + msg}})
-			http.Post(nc.Config, "application/json", bytes.NewReader(payload))
-		case "wecom":
-			payload, _ := json.Marshal(map[string]any{"msgtype": "text", "text": map[string]string{"content": "[" + level + "] " + target + "\n" + msg}})
-			http.Post(nc.Config, "application/json", bytes.NewReader(payload))
-		case "feishu":
-			payload, _ := json.Marshal(map[string]any{"msg_type": "text", "content": map[string]string{"text": "[" + level + "] " + target + "\n" + msg}})
-			http.Post(nc.Config, "application/json", bytes.NewReader(payload))
-		case "sms":
-			// 短信网关（阿里云/腾讯云）占位，Config 存 API 地址
-			payload, _ := json.Marshal(map[string]string{"level": level, "target": target, "message": msg})
-			http.Post(nc.Config, "application/json", bytes.NewReader(payload))
+		url := nc.Config
+		if url == "" {
+			url = nc.Addr
+		}
+		if nc.Type == "email" {
+			var cfgs []model.EmailConfig
+			app.DB.Where("enable = ?", true).Find(&cfgs)
+			for _, cfg := range cfgs {
+				_ = email.Send(email.Config{Name: cfg.Name, SMTPHost: cfg.SMTPHost, SMTPPort: cfg.SMTPPort, User: cfg.User, Password: cfg.Password, UseSSL: cfg.UseSSL, Enable: true}, []string{nc.Addr}, "["+level+"] NetOps Alert "+target, msg)
+			}
+			continue
+		}
+		if url == "" {
+			continue
+		}
+		var out []byte
+		if nc.Type == "feishu" {
+			out, _ = json.Marshal(map[string]any{"msg_type": "text", "content": map[string]string{"text": "[" + level + "] " + target + "\n" + msg}})
+		} else {
+			out, _ = json.Marshal(map[string]any{"msgtype": "text", "text": map[string]string{"content": "[" + level + "] " + target + "\n" + msg}})
+		}
+		for i := 0; i < 3; i++ {
+			req, _ := http.NewRequest("POST", url, bytes.NewReader(out))
+			req.Header.Set("Content-Type", "application/json")
+			if nc.Token != "" {
+				req.Header.Set("X-Signature", nc.Token)
+			}
+			resp, err := client.Do(req)
+			if err == nil {
+				_ = resp.Body.Close()
+				break
+			}
+			time.Sleep(time.Second)
 		}
 	}
 }

@@ -16,5 +16,7 @@ export default {
   edit: '编辑', del: '删除',
   cancel: '取消', save: '保存',
   link: '链路',
-  info: '信息', warning: '警告', critical: '严重'
+  info: '信息', warning: '警告', critical: '严重',
+  channelName: '渠道名称', channelAddr: '地址/Webhook', channelSecret: '签名/密钥',
+  addChannel: '新增渠道', groupTip: '同设备同指标告警将自动合并，未确认超过 10 分钟自动升级'
 }

@@ -4,6 +4,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { getEnc, postEnc, putEnc, delEnc } from '@/utils/request'
+import { useAuthStore } from '@/stores/auth'
 
 const { t } = useI18n()
 
@@ -34,6 +35,8 @@ const devicesVisible = ref(false)
 const devicesLoading = ref(false)
 const currentGroup = ref<DeviceGroup | null>(null)
 const groupDevices = ref<GroupDevice[]>([])
+const selected = ref<GroupDevice[]>([])
+const importFile = ref<HTMLInputElement>()
 
 async function load() {
   groups.value = await getEnc<DeviceGroup[]>('/resource/groups')
@@ -79,6 +82,48 @@ async function autoAssign() {
   await load()
 }
 
+async function batchAction(action: string) {
+  if (!selected.value.length) { ElMessage.warning(t('resource.selectedRequired')); return }
+  const ids = selected.value.map(d => d.id)
+  if (action === 'test') {
+    const r = await postEnc<any[]>('/resource/devices/batch', { ids, action })
+    ElMessage.success(t('resource.testResult') + `: ${r.filter(x => x.up).length}/${r.length}`)
+    return
+  }
+  await postEnc('/resource/devices/batch', { ids, action })
+  ElMessage.success(t('common.success'))
+  if (currentGroup.value) await showDevices(currentGroup.value)
+}
+
+function triggerImport() { importFile.value?.click() }
+
+async function downloadTemplate() {
+  const auth = useAuthStore()
+  const resp = await fetch('/api/v1/resource/devices/template', {
+    headers: {
+      Authorization: `Bearer ${auth.token}`,
+      'X-Timestamp': String(Math.floor(Date.now() / 1000)),
+      'X-Nonce': Math.random().toString(36).substring(2, 15) + Date.now().toString(36)
+    }
+  })
+  const blob = await resp.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'device-template.csv'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+async function onImport(e: Event) {
+  const f = (e.target as HTMLInputElement).files?.[0]
+  if (!f) return
+  const fd = new FormData()
+  fd.append('file', f)
+  const r = await postEnc<{ created: number }>('/resource/devices/import', fd)
+  ElMessage.success(`${t('resource.importResult')}: ${r.created}`)
+  await load()
+}
+
 onMounted(load)
 </script>
 
@@ -90,6 +135,13 @@ onMounted(load)
       <el-button @click="autoAssign">
         <el-icon><MagicStick /></el-icon>{{ t('resource.autoAssign') }}
       </el-button>
+      <el-button @click="triggerImport">
+        <el-icon><Upload /></el-icon>{{ t('resource.importCsv') }}
+      </el-button>
+      <el-button @click="downloadTemplate">
+        <el-icon><Download /></el-icon>{{ t('resource.downloadTemplate') }}
+      </el-button>
+      <input ref="importFile" type="file" accept=".csv" style="display:none" @change="onImport" />
       <el-button type="primary" @click="openAdd">
         <el-icon><Plus /></el-icon>{{ t('common.add') }}
       </el-button>
@@ -136,8 +188,14 @@ onMounted(load)
       </template>
     </el-dialog>
 
-    <el-dialog v-model="devicesVisible" :title="`${t('resource.groupDevices')} - ${currentGroup?.name}`" width="720px">
-      <el-table :data="groupDevices" v-loading="devicesLoading" size="small" stripe>
+    <el-dialog v-model="devicesVisible" :title="`${t('resource.groupDevices')} - ${currentGroup?.name}`" width="820px">
+      <div style="margin-bottom:10px;display:flex;gap:8px">
+        <el-button size="small" @click="batchAction('enable')">{{ t('resource.batchEnable') }}</el-button>
+        <el-button size="small" @click="batchAction('disable')">{{ t('resource.batchDisable') }}</el-button>
+        <el-button size="small" type="success" @click="batchAction('test')">{{ t('resource.batchTest') }}</el-button>
+      </div>
+      <el-table :data="groupDevices" v-loading="devicesLoading" size="small" stripe @selection-change="(v:any)=>selected=v">
+        <el-table-column type="selection" width="40" />
         <el-table-column prop="name" :label="t('resource.name')" min-width="140" />
         <el-table-column prop="ip" :label="t('resource.ipAddr')" min-width="130" />
         <el-table-column :label="t('resource.type')" width="90">

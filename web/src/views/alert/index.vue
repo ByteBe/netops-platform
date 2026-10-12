@@ -5,15 +5,20 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { getEnc, postEnc, putEnc, delEnc } from '@/utils/request'
 const { t } = useI18n()
 interface Rule { id: number; name: string; metric: string; threshold: number; duration: number; level: string; channels: string; enabled: boolean }
-interface Event { id: number; metric: string; target: string; value: number; level: string; message: string; acked: boolean; created_at: string }
+interface Event { id: number; metric: string; target: string; value: number; level: string; message: string; acked: boolean; count?: number; suppressed?: boolean; escalated?: boolean; created_at: string }
+interface Notify { id: number; name: string; type: string; addr: string; token: string; enabled: boolean }
 const rules = ref<Rule[]>([])
 const events = ref<Event[]>([])
+const notifies = ref<Notify[]>([])
 const tab = ref('events')
 const dlg = ref(false)
+const nDlg = ref(false)
 const form = reactive({ id: 0, name: '', metric: 'cpu', threshold: 80, duration: 1, level: 'warning', channels: 'webhook', enabled: true })
+const nForm = reactive<Notify>({ id: 0, name: '', type: 'webhook', addr: '', token: '', enabled: true })
 async function loadRules() { rules.value = await getEnc<Rule[]>('/alert/rules') }
 async function loadEvents() { const r = await getEnc<{list:Event[]}>('/alert/events?page=1&size=100'); events.value = r.list || [] }
-onMounted(() => { loadRules(); loadEvents() })
+async function loadNotifies() { notifies.value = await getEnc<Notify[]>('/alert/notify') }
+onMounted(() => { loadRules(); loadEvents(); loadNotifies() })
 function open(r?: Rule) {
   if (r) Object.assign(form, r); else Object.assign(form, { id: 0, name: '', metric: 'cpu', threshold: 80, duration: 1, level: 'warning', channels: 'webhook', enabled: true })
   dlg.value = true
@@ -26,6 +31,13 @@ async function save() {
 async function remove(r: Rule) { await ElMessageBox.confirm(t('alert.deleteConfirm'), t('common.tip'), { type: 'warning' }); await delEnc(`/alert/rules/${r.id}`); loadRules() }
 async function ack(e: Event) { await postEnc(`/alert/events/${e.id}/ack`, {}); loadEvents() }
 function levelTag(l: string) { return l === 'critical' ? 'danger' : l === 'warning' ? 'warning' : 'info' }
+function openNotify() { Object.assign(nForm, { id: 0, name: '', type: 'webhook', addr: '', token: '', enabled: true }); nDlg.value = true }
+async function saveNotify() { await postEnc('/alert/notify', nForm); ElMessage.success(t('alert.saved')); nDlg.value = false; loadNotifies() }
+async function delNotify(n: Notify) {
+  await ElMessageBox.confirm(t('alert.deleteConfirm'), t('common.tip'), { type: 'warning' })
+  await delEnc('/alert/notify/' + n.id)
+  loadNotifies()
+}
 </script>
 <template>
   <div class="alert-page">
@@ -33,9 +45,11 @@ function levelTag(l: string) { return l === 'critical' ? 'danger' : l === 'warni
       <el-tabs v-model="tab" class="alert-tabs">
         <el-tab-pane :label="t('alert.events')" name="events" />
         <el-tab-pane :label="t('alert.rules')" name="rules" />
+        <el-tab-pane :label="t('alert.notify')" name="notify" />
       </el-tabs>
       <div class="spacer"></div>
       <el-button v-if="tab==='rules'" type="primary" @click="open()">{{ t('alert.newRule') }}</el-button>
+      <el-button v-if="tab==='notify'" type="primary" @click="openNotify()">{{ t('alert.addChannel') }}</el-button>
     </div>
     <div class="np-card">
       <el-table v-if="tab==='events'" :data="events" stripe>
@@ -60,7 +74,37 @@ function levelTag(l: string) { return l === 'critical' ? 'danger' : l === 'warni
           </template>
         </el-table-column>
       </el-table>
+      <el-table v-else-if="tab==='notify'" :data="notifies" stripe>
+        <el-table-column prop="name" :label="t('alert.channelName')" min-width="120" />
+        <el-table-column prop="type" :label="t('alert.channel')" width="100" />
+        <el-table-column prop="addr" :label="t('alert.channelAddr')" min-width="220" />
+        <el-table-column :label="t('alert.enabled')" width="80">
+          <template #default="{row}"><el-tag size="small" :type="row.enabled?'success':'info'">{{ row.enabled ? t('common.yes') : t('common.no') }}</el-tag></template>
+        </el-table-column>
+        <el-table-column :label="t('common.actions')" width="100">
+          <template #default="{row}"><el-button size="small" text type="danger" @click="delNotify(row)">{{ t('alert.del') }}</el-button></template>
+        </el-table-column>
+      </el-table>
+      <div v-if="tab==='notify'" style="margin-top:8px;color:#999;font-size:12px">{{ t('alert.groupTip') }}</div>
     </div>
+    <el-dialog v-model="nDlg" :title="t('alert.notify')" width="520px">
+      <el-form :model="nForm" label-width="100px">
+        <el-form-item :label="t('alert.channelName')"><el-input v-model="nForm.name" /></el-form-item>
+        <el-form-item :label="t('alert.channel')">
+          <el-select v-model="nForm.type">
+            <el-option :label="t('alert.email')" value="email" />
+            <el-option :label="t('alert.dingtalk')" value="dingtalk" />
+            <el-option :label="t('alert.wecom')" value="wecom" />
+            <el-option :label="t('alert.feishu')" value="feishu" />
+            <el-option label="Webhook" value="webhook" />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="t('alert.channelAddr')"><el-input v-model="nForm.addr" placeholder="Webhook URL / email address" /></el-form-item>
+        <el-form-item :label="t('alert.channelSecret')"><el-input v-model="nForm.token" placeholder="X-Signature token" /></el-form-item>
+        <el-form-item :label="t('alert.enabled')"><el-switch v-model="nForm.enabled" /></el-form-item>
+      </el-form>
+      <template #footer><el-button @click="nDlg=false">{{ t('alert.cancel') }}</el-button><el-button type="primary" @click="saveNotify">{{ t('alert.save') }}</el-button></template>
+    </el-dialog>
     <el-dialog v-model="dlg" :title="t('alert.rules')" width="520px">
       <el-form :model="form" label-width="90px" class="alert-form">
         <el-form-item :label="t('alert.ruleName')"><el-input v-model="form.name" /></el-form-item>

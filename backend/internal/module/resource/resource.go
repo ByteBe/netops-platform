@@ -2,7 +2,11 @@
 package resource
 
 import (
+	"encoding/csv"
+	"io"
+	"net"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -175,6 +179,110 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			}
 		}
 		response.OK(c, gin.H{"assigned": assigned})
+	})
+
+	// v2.1 设备批量管理：启用/禁用/分组/连通性测试
+	g.POST("/devices/batch", func(c *gin.Context) {
+		var req struct {
+			IDs     []uint `json:"ids"`
+			Action  string `json:"action"`
+			GroupID uint   `json:"group_id"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil || len(req.IDs) == 0 {
+			response.Bad(c, "选择设备后再执行批量操作")
+			return
+		}
+		tx := a.DB.Model(&model.MonitorDevice{}).Where("id IN ?", req.IDs)
+		switch req.Action {
+		case "enable":
+			tx.Update("enable", true)
+		case "disable":
+			tx.Update("enable", false)
+		case "group":
+			if req.GroupID == 0 {
+				response.Bad(c, "请选择目标分组")
+				return
+			}
+			tx.Update("group_id", req.GroupID)
+		case "test":
+			results := []gin.H{}
+			var devices []model.MonitorDevice
+			a.DB.Where("id IN ?", req.IDs).Find(&devices)
+			for _, d := range devices {
+				up := false
+				for _, port := range []int{d.SshPort, 161, 80, 443} {
+					if port == 0 {
+						continue
+					}
+					conn, err := net.DialTimeout("tcp", net.JoinHostPort(d.IP, strconv.Itoa(port)), 2*time.Second)
+					if err == nil {
+						conn.Close()
+						up = true
+						break
+					}
+				}
+				results = append(results, gin.H{"id": d.ID, "name": d.Name, "ip": d.IP, "up": up})
+			}
+			response.OK(c, results)
+			return
+		default:
+			response.Bad(c, "不支持的批量操作")
+			return
+		}
+		response.OK(c, gin.H{"updated": len(req.IDs), "action": req.Action})
+	})
+
+	// v2.1 下载 CSV 导入模板（带 BOM，Excel 直接打开不乱码）
+	g.GET("/devices/template", func(c *gin.Context) {
+		bom := []byte{0xEF, 0xBB, 0xBF}
+		body := "name,ip,type,vendor,group_id\n" +
+			"核心交换机,192.168.1.1,switch,h3c,1\n" +
+			"出口路由器,192.168.1.254,router,huawei,1\n" +
+			"数据库服务器,192.168.1.10,database,mysql,2\n"
+		c.Header("Content-Type", "text/csv; charset=utf-8")
+		c.Header("Content-Disposition", "attachment; filename=\"device-template.csv\"")
+		c.Data(200, "text/csv; charset=utf-8", append(bom, []byte(body)...))
+	})
+
+	// v2.1 CSV/Excel 导入（前端可将另存为 CSV 的 xlsx 上传；列名：name,ip,type,vendor,group_id）
+	g.POST("/devices/import", func(c *gin.Context) {
+		f, _, err := c.Request.FormFile("file")
+		if err != nil {
+			response.Bad(c, "请上传 CSV 文件")
+			return
+		}
+		defer f.Close()
+		r := csv.NewReader(f)
+		r.FieldsPerRecord = -1
+		rows, err := r.ReadAll()
+		if err != nil {
+			response.Bad(c, "CSV 解析失败")
+			return
+		}
+		created := 0
+		for i, row := range rows {
+			if i == 0 {
+				continue
+			}
+			if len(row) < 2 || row[0] == "" || row[1] == "" {
+				continue
+			}
+			d := model.MonitorDevice{Name: row[0], IP: row[1], Enable: true, Status: "unknown"}
+			if len(row) > 2 {
+				d.Type = row[2]
+			}
+			if len(row) > 3 {
+				d.Vendor = row[3]
+			}
+			if len(row) > 4 && row[4] != "" {
+				v, _ := strconv.ParseUint(row[4], 10, 64)
+				d.GroupID = uint(v)
+			}
+			a.DB.Where("ip = ?", d.IP).FirstOrCreate(&d)
+			created++
+		}
+		_ = io.EOF
+		response.OK(c, gin.H{"created": created})
 	})
 }
 

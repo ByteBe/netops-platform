@@ -14,5 +14,8 @@ export default {
   connections: 'Connections',
   empty: 'No devices in this group',
   switch: 'Switch', router: 'Router', firewall: 'Firewall',
-  server: 'Server', database: 'Database', other: 'Other'
+  server: 'Server', database: 'Database', other: 'Other',
+  batchEnable: 'Batch Enable', batchDisable: 'Batch Disable', batchTest: 'Connectivity Test', importCsv: 'Import CSV',
+  downloadTemplate: 'Download CSV Template',
+  selectedRequired: 'Please select devices first', importResult: 'Import completed', testResult: 'Test completed'
 }

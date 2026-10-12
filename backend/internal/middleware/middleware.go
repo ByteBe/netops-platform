@@ -130,7 +130,9 @@ func EncryptResponse(app *core.App) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !strings.HasPrefix(c.Request.URL.Path, "/api/") ||
 			strings.HasSuffix(c.Request.URL.Path, "/html") ||
-			strings.HasSuffix(c.Request.URL.Path, "/upload") {
+			strings.HasSuffix(c.Request.URL.Path, "/upload") ||
+			strings.HasSuffix(c.Request.URL.Path, "/template") ||
+			strings.HasSuffix(c.Request.URL.Path, "/pdf") {
 			c.Next()
 			return
 		}

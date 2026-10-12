@@ -14,5 +14,8 @@ export default {
   connections: '连接数',
   empty: '该分组暂无设备',
   switch: '交换机', router: '路由器', firewall: '防火墙',
-  server: '服务器', database: '数据库', other: '其他'
+  server: '服务器', database: '数据库', other: '其他',
+  batchEnable: '批量启用', batchDisable: '批量禁用', batchTest: '连通测试', importCsv: '导入CSV',
+  downloadTemplate: '下载CSV模板',
+  selectedRequired: '请先勾选设备', importResult: '导入完成', testResult: '测试完成'
 }

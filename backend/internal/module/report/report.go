@@ -114,6 +114,19 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		c.String(200, rec.Content)
 	})
 
+	g.GET("/:id/pdf", func(c *gin.Context) {
+		id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+		var rec model.ReportRecord
+		if err := a.DB.First(&rec, id).Error; err != nil {
+			c.String(404, "报告不存在")
+			return
+		}
+		pdf := buildPDF(rec.Title, rec.Content)
+		c.Header("Content-Type", "application/pdf")
+		c.Header("Content-Disposition", fmt.Sprintf("inline; filename=\"report-%d.pdf\"", rec.ID))
+		c.Data(200, "application/pdf", pdf)
+	})
+
 	g.GET("/:id", func(c *gin.Context) {
 		id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
 		var rec model.ReportRecord
@@ -152,6 +165,8 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		a.DB.Delete(&model.ReportRecord{}, id)
 		response.OK(c, gin.H{"ok": true})
 	})
+
+	startReportScheduler(a)
 }
 
 func sendReportEmail(a *core.App, id uint, title, content string, to []string) error {
@@ -454,4 +469,131 @@ func renderNodeSection(a *core.App, stats map[string]int) string {
 
 func init() {
 	modreg.RegisterProtected("report", RegisterProtected)
+}
+
+// stripHTML 去掉 HTML 标签，提取纯文本行
+func stripHTML(html string) []string {
+	html = strings.ReplaceAll(html, "<br", "\n<br")
+	html = strings.ReplaceAll(html, "</tr>", "\n")
+	html = strings.ReplaceAll(html, "</div>", "\n")
+	html = strings.ReplaceAll(html, "</p>", "\n")
+	html = strings.ReplaceAll(html, "</h1>", "\n")
+	html = strings.ReplaceAll(html, "</h2>", "\n")
+	html = strings.ReplaceAll(html, "</h3>", "\n")
+	var sb strings.Builder
+	inTag := false
+	for _, r := range html {
+		switch r {
+		case '<':
+			inTag = true
+		case '>':
+			inTag = false
+		default:
+			if !inTag {
+				sb.WriteRune(r)
+			}
+		}
+	}
+	var lines []string
+	for _, l := range strings.Split(sb.String(), "\n") {
+		l = strings.TrimSpace(l)
+		l = strings.ReplaceAll(l, "&nbsp;", " ")
+		l = strings.ReplaceAll(l, "&amp;", "&")
+		l = strings.ReplaceAll(l, "&lt;", "<")
+		l = strings.ReplaceAll(l, "&gt;", ">")
+		if l != "" {
+			lines = append(lines, l)
+		}
+	}
+	return lines
+}
+
+// buildPDF 生成最小可用的二进制 PDF（Helvetica，纯文本行）
+func buildPDF(title, content string) []byte {
+	lines := stripHTML(content)
+	objs := []string{}
+	// obj1 catalog, obj2 pages, obj3 page, obj4 content
+	contentStream := "BT /F1 12 Tf 50 800 Td 16 TL\n(" + escapePDF(title) + ") Tj\n"
+	y := 780
+	for i, l := range lines {
+		if i > 40 {
+			break
+		}
+		if y < 50 {
+			break
+		}
+		contentStream += fmt.Sprintf("0 -16 Td (%s) Tj\n", escapePDF(truncate(l, 90)))
+		y -= 16
+	}
+	contentStream += "ET"
+	objs = append(objs, "<< /Type /Catalog /Pages 2 0 R >>")
+	objs = append(objs, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
+	objs = append(objs, "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>")
+	objs = append(objs, "<< /Length "+strconv.Itoa(len(contentStream))+" >>\nstream\n"+contentStream+"\nendstream")
+	objs = append(objs, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+	var out strings.Builder
+	out.WriteString("%PDF-1.4\n")
+	offsets := []int{}
+	for i, o := range objs {
+		offsets = append(offsets, out.Len())
+		out.WriteString(strconv.Itoa(i+1) + " 0 obj\n" + o + "\nendobj\n")
+	}
+	xrefPos := out.Len()
+	out.WriteString("xref\n0 " + strconv.Itoa(len(objs)+1) + "\n")
+	out.WriteString("0000000000 65535 f \n")
+	for _, off := range offsets {
+		out.WriteString(fmt.Sprintf("%010d 00000 n \n", off))
+	}
+	out.WriteString(fmt.Sprintf("trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, xrefPos))
+	return []byte(out.String())
+}
+
+func escapePDF(s string) string {
+	s = strings.ReplaceAll(s, "\\", "\\\\")
+	s = strings.ReplaceAll(s, "(", "\\(")
+	s = strings.ReplaceAll(s, ")", "\\)")
+	return s
+}
+
+func truncate(s string, n int) string {
+	r := []rune(s)
+	if len(r) > n {
+		return string(r[:n])
+	}
+	return s
+}
+
+// startReportScheduler 每天 01:00 检查是否需要生成周报/月报
+func startReportScheduler(a *core.App) {
+	go func() {
+		tk := time.NewTicker(time.Hour)
+		defer tk.Stop()
+		for now := range tk.C {
+			if now.Hour() != 1 {
+				continue
+			}
+			// 周一生成周报
+			if now.Weekday() == time.Monday {
+				generateAutoReport(a, "weekly")
+			}
+			// 每月 1 号生成月报
+			if now.Day() == 1 {
+				generateAutoReport(a, "monthly")
+			}
+		}
+	}()
+}
+
+func generateAutoReport(a *core.App, kind string) {
+	end := time.Now()
+	start := end.Add(-7 * 24 * time.Hour)
+	title := "自动巡检周报 " + end.Format("2006-01-02")
+	if kind == "monthly" {
+		start = end.Add(-30 * 24 * time.Hour)
+		title = "自动巡检月报 " + end.Format("2006-01")
+	}
+	content := renderHTML(title, start, end, renderLinkSection(a, start, end, map[string]int{}),
+		renderDevSection(a, start, end, map[string]int{}), renderDBSection(a, map[string]int{}), "", "", map[string]int{})
+	rec := model.ReportRecord{Title: title, StartAt: start, EndAt: end, Content: content, Creator: "system"}
+	a.DB.Create(&rec)
 }
