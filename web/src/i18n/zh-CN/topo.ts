@@ -15,5 +15,18 @@ export default {
   iconTip: '支持 jpg/png/svg/vsdx（留空使用默认图标）',
   clear: '清除',
   selectSource: '选择源设备', selectTarget: '选择目标设备',
-  ipsPlaceholder: '多个IP用逗号分隔'
+  ipsPlaceholder: '多个IP用逗号分隔',
+  normal: '正常', highLoad: '高负载', fault: '故障',
+  searchPlaceholder: '搜索设备名/IP',
+  all: '全部', core: '核心', access: '接入', refresh: '刷新',
+  layerStats: '设备层级', details: '详情',
+  name: '名称', ip: 'IP', vendor: '厂商', layer: '层级', status: '状态',
+  source: '源', target: '目标', modify: '修改', delete: '删除', deleteLink: '删除链路',
+  clickNodeOrLink: '点击节点或链路查看',
+  deviceTitle: '设备', linkTitle: '链路',
+  cancel: '取消', save: '保存',
+  vendorH3c: 'H3C', vendorHuawei: '华为', vendorCisco: '思科',
+  deviceTypeVuln: '漏洞扫描', deviceTypeAudit: '日志审计', deviceTypeBastion: '堡垒机', deviceTypeWan: '广域网', deviceTypeAC: 'AC',
+  fillNameIp: '请填写名称和IP', selectBothEndpoints: '请选择两端设备',
+  linkSaved: '链路已保存', deleted: '已删除'
 }

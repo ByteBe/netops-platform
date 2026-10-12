@@ -15,5 +15,18 @@ export default {
   iconTip: 'jpg/png/svg/vsdx (leave empty for default icon)',
   clear: 'Clear',
   selectSource: 'Select source device', selectTarget: 'Select target device',
-  ipsPlaceholder: 'Multiple IPs separated by comma'
+  ipsPlaceholder: 'Multiple IPs separated by comma',
+  normal: 'Normal', highLoad: 'High Load', fault: 'Fault',
+  searchPlaceholder: 'Search device name/IP',
+  all: 'All', core: 'Core', access: 'Access', refresh: 'Refresh',
+  layerStats: 'Device Layers', details: 'Details',
+  name: 'Name', ip: 'IP', vendor: 'Vendor', layer: 'Layer', status: 'Status',
+  source: 'Source', target: 'Target', modify: 'Modify', delete: 'Delete', deleteLink: 'Delete Link',
+  clickNodeOrLink: 'Click a node or link to inspect',
+  deviceTitle: 'Device', linkTitle: 'Link',
+  cancel: 'Cancel', save: 'Save',
+  vendorH3c: 'H3C', vendorHuawei: 'Huawei', vendorCisco: 'Cisco',
+  deviceTypeVuln: 'Vulnerability Scanner', deviceTypeAudit: 'Log Audit', deviceTypeBastion: 'Bastion Host', deviceTypeWan: 'WAN', deviceTypeAC: 'AC',
+  fillNameIp: 'Please enter device name and IP', selectBothEndpoints: 'Please select both endpoints',
+  linkSaved: 'Link saved', deleted: 'Deleted'
 }
