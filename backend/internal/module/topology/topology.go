@@ -22,9 +22,7 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		a.DB.Order("id asc").Find(&devices)
 		for i := range devices {
 			if devices[i].X == 0 && devices[i].Y == 0 {
-				angle := 2 * math.Pi * float64(devices[i].ID%12) / 12
-				devices[i].X = 180 * math.Cos(angle)
-				devices[i].Y = 110 * math.Sin(angle)
+				devices[i].X, devices[i].Y = autoPosition(float64(devices[i].ID))
 				a.DB.Model(&devices[i]).Updates(map[string]any{"x": devices[i].X, "y": devices[i].Y})
 			}
 		}
@@ -66,9 +64,7 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		if d.X == 0 && d.Y == 0 {
 			var cnt int64
 			a.DB.Model(&model.TopoDevice{}).Count(&cnt)
-			angle := 2 * math.Pi * float64(cnt) / 12
-			d.X = 180 * math.Cos(angle)
-			d.Y = 110 * math.Sin(angle)
+			d.X, d.Y = autoPosition(float64(cnt + 1))
 		}
 		a.DB.Create(&d)
 		response.OK(c, d)
@@ -189,6 +185,11 @@ func saveIPs(a *core.App, linkID uint, ips []string) {
 			a.DB.Create(&model.TopoLinkIP{LinkID: linkID, IP: ip})
 		}
 	}
+}
+
+func autoPosition(seed float64) (float64, float64) {
+	angle := 2 * math.Pi * float64(int64(seed)%12) / 12
+	return 220 + 180*math.Cos(angle), 180 + 110*math.Sin(angle)
 }
 
 func init() { modreg.RegisterProtected("topology", RegisterProtected) }

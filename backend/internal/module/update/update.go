@@ -333,20 +333,43 @@ func rollback(dir string) error {
 	}
 	exePath := filepath.Join(dir, exeName)
 	exeBak := exePath + ".bak"
-	if _, err := os.Stat(exeBak); err != nil {
+	if _, err := os.Stat(exeBak); err == nil {
+		os.Remove(exePath)
+		if err := os.Rename(exeBak, exePath); err != nil {
+			return err
+		}
+		web := filepath.Join(dir, "web")
+		webBak := web + ".bak"
+		if _, err := os.Stat(webBak); err == nil {
+			os.RemoveAll(web)
+			os.Rename(webBak, web)
+		}
+		appendUpdateLog(dir, time.Now().Format("20060102-150405")+" rolled back")
+		return nil
+	}
+
+	entries, err := os.ReadDir(filepath.Join(dir, "backups"))
+	if err != nil || len(entries) == 0 {
 		return fmt.Errorf("没有可回滚的备份")
 	}
+	latest := entries[len(entries)-1]
+	backupDir := filepath.Join(dir, "backups", latest.Name())
+	oldExe := filepath.Join(backupDir, exeName)
+	if _, err := os.Stat(oldExe); err != nil {
+		return fmt.Errorf("备份目录中未找到可回滚程序")
+	}
 	os.Remove(exePath)
-	if err := os.Rename(exeBak, exePath); err != nil {
+	if err := copyFile(oldExe, exePath); err != nil {
 		return err
 	}
-	web := filepath.Join(dir, "web")
-	webBak := web + ".bak"
-	if _, err := os.Stat(webBak); err == nil {
-		os.RemoveAll(web)
-		os.Rename(webBak, web)
+	os.Chmod(exePath, 0755)
+	if webDir := filepath.Join(backupDir, "web"); webDir != "" {
+		if _, err := os.Stat(webDir); err == nil {
+			os.RemoveAll(filepath.Join(dir, "web"))
+			_ = copyDir(webDir, filepath.Join(dir, "web"))
+		}
 	}
-	appendUpdateLog(dir, time.Now().Format("20060102-150405")+" rolled back")
+	appendUpdateLog(dir, time.Now().Format("20060102-150405")+" rolled back from "+latest.Name())
 	return nil
 }
 

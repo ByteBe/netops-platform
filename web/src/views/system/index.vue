@@ -306,7 +306,7 @@ onMounted(() => { loadMCP(); loadEmails(); loadAudits(); loadSec(); loadVersion(
           </el-descriptions>
           <el-divider />
           <el-button :loading="checking" @click="checkUpdate">{{ t('system.checkUpdate') }}</el-button>
-          <el-button type="warning" style="margin-left:10px" @click="doRollback">回滚上一版本</el-button>
+          <el-button type="warning" style="margin-left:10px" @click="doRollback">{{ t('system.rollbackUpdate') }}</el-button>
           <div v-if="latest" style="margin-top:12px;padding:12px;background:#f0f9ff;border-radius:6px">
             <div>{{ t('system.latestVer') }}: <b>{{ latest.latest }}</b></div>
             <el-button v-if="latest.has_update" type="primary" style="margin-top:10px" :loading="upgrading" @click="doOnline">{{ t('system.upgradeNow') }}</el-button>

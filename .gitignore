@@ -55,3 +55,12 @@ package/
 backend/tmp_*.py
 backend/*-review.exe
 *.tmp
+/check_remote.py
+/deploy_remote.py
+/deploy_backend.py
+/remove_icon_bg.py
+/restore_remote_data.py
+/upload_icons.py
+/upload_web.py
+/backend/netops-linux-amd64
+/backend/netops-linux-arm64
