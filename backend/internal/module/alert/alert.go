@@ -210,58 +210,76 @@ func init() {
 	modreg.RegisterProtected("alert", RegisterProtected)
 }
 
-// StartEvaluator 启动阈值告警评估 goroutine（CPU/内存）
+// StartEvaluator 启动阈值告警评估 goroutine（CPU/内存/链路/节点）
 func StartEvaluator(app *core.App) {
-	// key: deviceID|metric -> 超过阈值开始时间
 	overSince := map[string]time.Time{}
 	go func() {
 		t := time.NewTicker(30 * time.Second)
 		defer t.Stop()
 		for range t.C {
-			if app.DB == nil || app.SnmpMgr == nil {
+			if app.DB == nil {
 				continue
 			}
+			// CPU/内存阈值告警
 			var rules []model.AlertRule
 			app.DB.Where("enabled = ? AND metric IN ?", true, []string{"cpu", "mem"}).Find(&rules)
-			if len(rules) == 0 {
-				continue
-			}
-			var devices []model.MonitorDevice
-			app.DB.Where("enable = ?", true).Find(&devices)
-			seen := map[string]bool{}
-			for _, d := range devices {
-				snap, ok := app.SnmpMgr.DeviceSnapshotByID(d.ID)
-				if !ok || !snap.Up {
-					continue // 离线/未采集不触发，避免误报
-				}
-				for _, r := range rules {
-					val := snap.CPU
-					if r.Metric == "mem" {
-						val = snap.MemUsed
-					}
-					// 设备不支持该指标时采集值为 0，跳过避免误报
-					if val <= 0 {
+			if len(rules) > 0 && app.SnmpMgr != nil {
+				var devices []model.MonitorDevice
+				app.DB.Where("enable = ?", true).Find(&devices)
+				seen := map[string]bool{}
+				for _, d := range devices {
+					snap, ok := app.SnmpMgr.DeviceSnapshotByID(d.ID)
+					if !ok || !snap.Up {
 						continue
 					}
-					key := fmt.Sprintf("%d|%s", d.ID, r.Metric)
-					seen[key] = true
-					if val >= r.Threshold {
+					for _, r := range rules {
+						val := snap.CPU
+						if r.Metric == "mem" {
+							val = snap.MemUsed
+						}
+						if val <= 0 {
+							continue
+						}
+						key := fmt.Sprintf("%d|%s", d.ID, r.Metric)
+						seen[key] = true
+						if val >= r.Threshold {
+							if _, exists := overSince[key]; !exists {
+								overSince[key] = time.Now()
+							}
+							if time.Since(overSince[key]) >= time.Duration(r.Duration)*time.Minute {
+								Notify(app, r.Level, d.Name, fmt.Sprintf("%s %.1f%% 超过阈值 %.1f%%", r.Metric, val, r.Threshold))
+								delete(overSince, key)
+							}
+						} else {
+							delete(overSince, key)
+						}
+					}
+				}
+				for k := range overSince {
+					if !seen[k] {
+						delete(overSince, k)
+					}
+				}
+			}
+			// 节点离线告警
+			var nodeRules []model.AlertRule
+			app.DB.Where("enabled = ? AND metric = ?", true, "node").Find(&nodeRules)
+			if len(nodeRules) > 0 {
+				var nodes []model.Node
+				app.DB.Find(&nodes)
+				for _, n := range nodes {
+					key := fmt.Sprintf("node-%d", n.ID)
+					if n.Status != "online" {
 						if _, exists := overSince[key]; !exists {
 							overSince[key] = time.Now()
 						}
-						if time.Since(overSince[key]) >= time.Duration(r.Duration)*time.Minute {
-							Notify(app, r.Level, d.Name, fmt.Sprintf("%s %.1f%% 超过阈值 %.1f%%", r.Metric, val, r.Threshold))
+						if time.Since(overSince[key]) >= time.Duration(nodeRules[0].Duration)*time.Minute {
+							Notify(app, nodeRules[0].Level, n.Name, "节点离线")
 							delete(overSince, key)
 						}
 					} else {
 						delete(overSince, key)
 					}
-				}
-			}
-			// 清理已删除设备的陈旧 key
-			for k := range overSince {
-				if !seen[k] {
-					delete(overSince, k)
 				}
 			}
 		}
