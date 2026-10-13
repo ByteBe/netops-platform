@@ -22,8 +22,8 @@ import (
 	"netops/internal/modreg"
 )
 
-var buildVersion = "v2.1.2"
-var buildTime = "2026-10-12"
+var buildVersion = "v2.1.4"
+var buildTime = "2026-10-13"
 
 const maxUpdateSize = 500 * 1024 * 1024
 

@@ -207,6 +207,14 @@ func nextColor(a *core.App) string {
 func parseRange(c *gin.Context) (time.Time, time.Time) {
 	end := time.Now()
 	start := end.Add(-24 * time.Hour)
+	if h := c.Query("hours"); h != "" {
+		if v, err := strconv.Atoi(h); err == nil && v > 0 {
+			if v > 168 {
+				v = 168
+			}
+			start = end.Add(-time.Duration(v) * time.Hour)
+		}
+	}
 	if s := c.Query("start"); s != "" {
 		if t, err := time.ParseInLocation("2006-01-02 15:04:05", s, time.Local); err == nil {
 			start = t

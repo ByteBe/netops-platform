@@ -106,7 +106,11 @@ func collect(a *core.App) {
 }
 
 func pollDevice(d model.MonitorDevice) ([]Peer, error) {
-	log.Printf("[bgpmon] poll device=%s ip=%s user=%s passLen=%d port=%d vendor=%s", d.Name, d.IP, d.SshUser, len(d.SshPass), d.SshPort, d.Vendor)
+	return pollDeviceDeep(d, true)
+}
+
+func pollDeviceDeep(d model.MonitorDevice, deep bool) ([]Peer, error) {
+	log.Printf("[bgpmon] poll device=%s ip=%s user=%s passLen=%d port=%d vendor=%s deep=%v", d.Name, d.IP, d.SshUser, len(d.SshPass), d.SshPort, d.Vendor, deep)
 	vendor := strings.ToLower(d.Vendor)
 	cmd := "display bgp peer vpnv4"
 	if strings.Contains(vendor, "cisco") || strings.Contains(vendor, "思科") {
@@ -122,8 +126,10 @@ func pollDevice(d model.MonitorDevice) ([]Peer, error) {
 	}
 	log.Printf("[bgpmon] device=%s raw output (%d bytes):\n%s", d.IP, len(out), out)
 	ps := parsePeers(out, d)
-	for i := range ps {
-		ps[i].OutIface = lookupOutIface(d, ps[i].PeerIP)
+	if deep {
+		for i := range ps {
+			ps[i].OutIface = lookupOutIface(d, ps[i].PeerIP)
+		}
 	}
 	return ps, nil
 }
@@ -301,7 +307,7 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		if d.SshPort == 0 {
 			d.SshPort = 22
 		}
-		ps, err := pollDevice(d)
+		ps, err := pollDeviceDeep(d, false)
 		if err != nil {
 			response.OK(c, gin.H{"ok": false, "error": err.Error()})
 			return

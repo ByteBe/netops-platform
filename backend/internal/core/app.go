@@ -17,6 +17,7 @@ import (
 	"netops/internal/common/crypto"
 	"netops/internal/common/session"
 	"netops/internal/config"
+	"netops/internal/model"
 	"netops/internal/notify"
 	"netops/internal/service/mcp"
 	"netops/internal/tsdb"
@@ -81,6 +82,14 @@ func (a *App) EnsureCrypto() error {
 func (a *App) InitRuntime() {
 	a.PingMgr = ping.NewManager(a.TSDB, a.Hub)
 	a.SnmpMgr = snmp.NewManager(a.TSDB, a.Hub)
+	a.SnmpMgr.OnLog = func(deviceID uint, name, ip, typ string, success bool, durMs int64, msg string) {
+		if err := a.DB.Create(&model.TaskLog{
+			DeviceID: deviceID, DeviceName: name, IP: ip, Type: typ,
+			Success: success, DurationMs: durMs, Message: msg, CreatedAt: time.Now(),
+		}).Error; err != nil {
+			fmt.Printf("[tasklog] write failed device=%s: %v\n", name, err)
+		}
+	}
 	a.DockerM = docker.NewMonitor(a.TSDB, a.Hub)
 	a.K8sM = k8s.NewMonitor(a.TSDB, a.Hub)
 	a.DBProbe = dbprobe.NewManager(a.TSDB, a.Hub)

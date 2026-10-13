@@ -106,6 +106,10 @@ http.interceptors.request.use((config) => {
 http.interceptors.response.use(
   (resp: AxiosResponse) => {
     const auth = useAuthStore()
+    // blob/文件下载响应直接放行，不做 JSON 解密和 code 校验
+    if (resp.config?.responseType === 'blob') {
+      return resp
+    }
     let body: ApiResult
     // 响应只要是加密信封（{enc: base64}）就用会话密钥解密，与请求头 X-Enc 无关
     // （后端对所有有会话的响应统一加密，包括 GET 无 body 请求）

@@ -10,6 +10,7 @@ import (
 	"netops/internal/collector/snmp"
 	"netops/internal/common/response"
 	"netops/internal/core"
+	"netops/internal/middleware"
 	"netops/internal/model"
 	"netops/internal/modreg"
 	"netops/internal/tsdb"
@@ -20,12 +21,17 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 	// 设备列表（支持按分组过滤）
 	g.GET("/devices", func(c *gin.Context) {
 		q := a.DB.Model(&model.MonitorDevice{})
-		// 多租户：本节点为分部/末端时（有父节点），admin 也只看本节点；总部 admin 看全部
+		// 多租户：本节点为分部/末端时（有父节点），admin 也只看本节点及下级；总部 admin 看全部
 		role, _ := c.Get("role")
-		var selfNode model.Node
-		a.DB.Where("node_uuid != ''").First(&selfNode)
-		if role != "admin" || selfNode.ParentUUID != "" {
-			q = q.Where("node_uuid = ?", "")
+		scope, _ := c.Get("node_scope")
+		selfNodeScope, _ := scope.(string)
+		if role != "admin" || selfNodeScope != "all" {
+			uuids := middleware.VisibleNodeUUIDs(a, selfNodeScope)
+			if uuids == nil {
+				q = q.Where("node_uuid = ?", "")
+			} else {
+				q = q.Where("node_uuid IN ?", uuids)
+			}
 		}
 		if gid := c.Query("group_id"); gid != "" && gid != "0" {
 			q = q.Where("group_id = ?", gid)
@@ -191,6 +197,17 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			{"value": "firewall", "label": "防火墙"},
 			{"value": "other", "label": "其他"},
 		})
+	})
+
+	// 采集任务日志（最近 200 条，支持按设备过滤）
+	g.GET("/task-logs", func(c *gin.Context) {
+		q := a.DB.Model(&model.TaskLog{}).Order("id desc").Limit(200)
+		if id := c.Query("device_id"); id != "" {
+			q = q.Where("device_id = ?", id)
+		}
+		var list []model.TaskLog
+		q.Find(&list)
+		response.OK(c, list)
 	})
 }
 

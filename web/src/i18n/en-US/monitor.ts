@@ -5,6 +5,7 @@ export default {
   port: 'Port', interval: 'Interval(s)', cpu: 'CPU Usage', mem: 'Memory Usage',
   uptime: 'Uptime', interfaces: 'Interfaces', addDevice: 'Add Device',
   editDevice: 'Edit Device', snapshot: 'Snapshot', history: 'History',
+  lastNHours: 'Last {n} hours',
   ipRequired: 'Please enter IP address',
   testSuccess: 'Connection OK', testFail: 'Connection failed',
   days: 'days',

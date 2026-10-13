@@ -22,5 +22,6 @@ export default {
   channelsPlaceholder: '选择通知渠道（可多选）',
   email: '邮件', dingtalk: '钉钉', wecom: '企业微信', feishu: '飞书', sms: '短信',
   emailPlaceholder: '多个邮箱用逗号分隔',
-  exportPDF: '导出 PDF', close: '关闭'
+  exportPDF: '导出 PDF', close: '关闭',
+  downloadPdf: '下载 PDF', popupBlocked: '浏览器拦截了弹窗，请允许弹窗后重试', done: 'PDF 已下载', generating: '正在生成 PDF...'
 }

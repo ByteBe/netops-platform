@@ -2,7 +2,7 @@ import paramiko, os, sys
 host='82.156.100.53'
 user='root'
 pwd='TSsbs@123..'
-local=r'E:\IDEA\dist\netops-platform-linux-amd64.zip'
+local=r'E:\IDEA\netops-platform\package\netops-linux-amd64.zip'
 remote='/opt/netops-platform-linux-amd64.zip'
 ssh=paramiko.SSHClient()
 ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())

@@ -24,9 +24,10 @@ import k8s from './zh-CN/k8s'
 import dbmigrate from './zh-CN/dbmigrate'
 import setup from './zh-CN/setup'
 import bgp from './zh-CN/bgp'
+import tasklog from './zh-CN/tasklog'
 
 export default {
   app, nav, common, login, dashboard, link, topo, monitor, container,
   report, alert, resource, subnet, node, dbmon, script, ipam, traffic,
-  system, profile, theme, lang, k8s, dbmigrate, setup, bgp
+  system, profile, theme, lang, k8s, dbmigrate, setup, bgp, tasklog
 }

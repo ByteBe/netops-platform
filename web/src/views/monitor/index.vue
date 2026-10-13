@@ -72,6 +72,7 @@ const displayIfArr = computed<string[]>({
 const histVisible = ref(false)
 const histDevice = ref<MonitorDevice | null>(null)
 const histChartRef = ref<HTMLDivElement>()
+const histHours = ref(6)
 let histChart: echarts.ECharts | null = null
 
 let ws: WSClient | null = null
@@ -171,11 +172,17 @@ async function testSsh() {
 async function showHistory(d: MonitorDevice) {
   histDevice.value = d
   histVisible.value = true
+  histHours.value = 6
+  await loadHistory()
+}
+
+async function loadHistory() {
+  if (!histDevice.value) return
   await nextTick()
   const h = await getEnc<{
     cpu: number[][]
     mem: number[][]
-  }>(`/monitor/devices/${d.id}/history?hours=6`)
+  }>(`/monitor/devices/${histDevice.value.id}/history?hours=${histHours.value}`)
   histChart ??= echarts.init(histChartRef.value as HTMLDivElement)
   histChart.setOption({
     backgroundColor: 'transparent',
@@ -334,6 +341,7 @@ onBeforeUnmount(() => {
             <el-option label="Linux" value="linux" />
           </el-select>
         </el-form-item>
+        <template v-if="form.type !== 'server' && form.type !== 'db'">
         <el-form-item :label="t('monitor.snmpVersion')">
           <el-select v-model="form.snmp_version" style="width: 120px">
             <el-option label="v1" value="1" />
@@ -372,6 +380,7 @@ onBeforeUnmount(() => {
         <el-form-item :label="t('monitor.port')">
           <el-input-number v-model="form.port" :min="1" :max="65535" />
         </el-form-item>
+        </template>
         <el-form-item :label="t('monitor.interval')">
           <el-input-number v-model="form.interval" :min="10" :max="3600" />
         </el-form-item>
@@ -413,6 +422,15 @@ onBeforeUnmount(() => {
     </el-dialog>
 
     <el-dialog v-model="histVisible" :title="`${t('monitor.history')} - ${histDevice?.name}`" width="760px">
+      <div style="margin-bottom:8px">
+        <el-select v-model="histHours" size="small" style="width:140px" @change="loadHistory">
+          <el-option :label="$t('monitor.lastNHours', {n: 1})" :value="1" />
+          <el-option :label="$t('monitor.lastNHours', {n: 6})" :value="6" />
+          <el-option :label="$t('monitor.lastNHours', {n: 12})" :value="12" />
+          <el-option :label="$t('monitor.lastNHours', {n: 24})" :value="24" />
+          <el-option :label="$t('monitor.lastNHours', {n: 72})" :value="72" />
+        </el-select>
+      </div>
       <div ref="histChartRef" class="np-chart" style="height: 320px"></div>
     </el-dialog>
   </div>

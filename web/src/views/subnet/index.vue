@@ -260,20 +260,20 @@ calc()
   display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px;
 }
 .r-card {
-  background: #fff; border: 1px solid #e8ecf1; border-radius: 10px;
+  background: var(--np-card-bg); border: 1px solid var(--np-border); border-radius: 10px;
   padding: 18px; transition: all .2s; position: relative;
-  &:hover { box-shadow: 0 4px 16px rgba(0,0,0,.08); border-color: #2f6bff; }
-  &.highlight { border-left: 4px solid #2f6bff; }
-  .r-label { font-size: 12px; color: #94a3b8; margin-bottom: 6px; }
+  &:hover { box-shadow: 0 4px 16px rgba(0,0,0,.08); border-color: var(--np-primary); }
+  &.highlight { border-left: 4px solid var(--np-primary); }
+  .r-label { font-size: 12px; color: var(--np-text-2); margin-bottom: 6px; }
   .cp-btn { position: absolute; top: 12px; right: 12px; font-size: 12px; padding: 2px 8px; }
-  .r-value { font-size: 18px; font-weight: 700; color: #1e293b; font-family: 'Consolas', monospace; }
+  .r-value { font-size: 18px; font-weight: 700; color: var(--np-text-1); font-family: 'Consolas', monospace; }
   .r-value.sm { font-size: 14px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; line-height: 1.5; }
   .r-value.hl { color: #2f6bff; }
   .r-sub { font-size: 12px; color: #2f6bff; margin-top: 4px; }
   .tag { font-size: 11px; padding: 2px 8px; border-radius: 4px; background: #fef3c7; color: #b45309; &.blue { background: #dbeafe; color: #1d4ed8; } }
 }
 .section-card {
-  background: #fff; border: 1px solid #e8ecf1; border-radius: 10px;
+  background: var(--np-card-bg); border: 1px solid var(--np-border); border-radius: 10px;
   padding: 18px; margin-bottom: 16px;
   .section-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;
     h3 { font-size: 15px; font-weight: 600; }

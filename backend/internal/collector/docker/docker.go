@@ -168,6 +168,11 @@ func (m *Monitor) Collect() {
 	allContainers := []Container{}
 	for _, host := range hosts {
 		list, err := m.listContainers(host)
+		if err != nil {
+			// 失败后 2 秒重试一次，应对偶发抖动
+			time.Sleep(2 * time.Second)
+			list, err = m.listContainers(host)
+		}
 		m.mu.Lock()
 		if err != nil {
 			m.hostStatus[hostName(host)] = false

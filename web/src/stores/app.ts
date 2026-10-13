@@ -6,7 +6,7 @@ export const useAppStore = defineStore('app', {
   state: () => ({
     lang: localStorage.getItem('np-lang') || 'zh-CN',
     theme: (localStorage.getItem('np-theme') as 'light' | 'dark') || 'light',
-    collapsed: false
+    collapsed: localStorage.getItem('np-collapsed') === '1'
   }),
   actions: {
     applyTheme() {
@@ -24,9 +24,12 @@ export const useAppStore = defineStore('app', {
     setLang(lang: string) {
       this.lang = lang
       localStorage.setItem('np-lang', lang)
-      // 动态切换 vue-i18n 语言
       ;(i18n.global.locale as unknown as { value: string }).value = lang
       document.documentElement.lang = lang
+    },
+    toggleCollapsed() {
+      this.collapsed = !this.collapsed
+      localStorage.setItem('np-collapsed', this.collapsed ? '1' : '0')
     }
   }
 })

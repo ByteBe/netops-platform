@@ -26,7 +26,8 @@ const overrides: Record<string, NavMeta> = {
   dbmigrate: { title: 'nav.dbmigrate', icon: 'Coin' },
   distributed: { title: 'nav.distributed', icon: 'Share' },
   alert: { title: 'nav.alert', icon: 'Bell' },
-  bgpmon: { title: 'nav.bgp', icon: 'Connection' }
+  bgpmon: { title: 'nav.bgp', icon: 'Connection' },
+  tasklog: { title: 'nav.tasklog', icon: 'List' }
 }
 
 // 自动扫描 views 目录，收集所有模块名

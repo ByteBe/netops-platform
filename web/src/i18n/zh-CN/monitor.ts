@@ -5,6 +5,7 @@ export default {
   port: '端口', interval: '采集间隔(秒)', cpu: 'CPU使用率', mem: '内存使用率',
   uptime: '运行时长', interfaces: '接口流量', addDevice: '纳管设备',
   editDevice: '编辑设备', snapshot: '设备快照', history: '监控历史',
+  lastNHours: '最近 {n} 小时',
   ipRequired: '请填写IP地址',
   testSuccess: '连接成功', testFail: '连接失败',
   days: '天',

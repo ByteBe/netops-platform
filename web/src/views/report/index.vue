@@ -4,6 +4,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { getEnc, postEnc, delEnc } from '@/utils/request'
+import { useAuthStore } from '@/stores/auth'
 import { fmtTime } from '@/utils'
 
 const { t } = useI18n()
@@ -79,6 +80,12 @@ async function remove(r: ReportRecord) {
   await load()
 }
 
+const auth = useAuthStore()
+
+function downloadPdf(r: ReportRecord) {
+  window.open(`/api/v1/report/${r.id}/pdf?token=${encodeURIComponent(auth.token)}`, '_blank')
+}
+
 async function view(r: ReportRecord) {
   viewVisible.value = true
   viewContent.value = '<p style="color:#999">' + t('report.loading') + '</p>'
@@ -134,11 +141,14 @@ async function quickGen(kind: string) {
         <el-table-column prop="sent_to" :label="t('report.target')" min-width="180">
           <template #default="{ row }">{{ row.sent_to || '—' }}</template>
         </el-table-column>
-        <el-table-column :label="t('common.actions')" width="240" fixed="right">
+        <el-table-column :label="t('common.actions')" width="360">
           <template #default="{ row }">
-            <el-button size="small" text type="primary" @click="view(row)">{{ t('report.view') }}</el-button>
-            <el-button size="small" text type="success" @click="send(row)">{{ t('report.sendMail') }}</el-button>
-            <el-button size="small" text type="danger" @click="remove(row)">{{ t('common.delete') }}</el-button>
+            <span style="white-space:nowrap;display:inline-flex;align-items:center;gap:4px">
+              <el-button size="small" text type="primary" @click="view(row)">{{ t('report.view') }}</el-button>
+              <a :href="`/api/v1/report/${row.id}/pdf?token=${encodeURIComponent(auth.token)}`" target="_blank" rel="noopener" style="color:#e6a23c;font-size:13px;text-decoration:none;white-space:nowrap">{{ t('report.downloadPdf') }}</a>
+              <el-button size="small" text type="success" @click="send(row)">{{ t('report.sendMail') }}</el-button>
+              <el-button size="small" text type="danger" @click="remove(row)">{{ t('common.delete') }}</el-button>
+            </span>
           </template>
         </el-table-column>
       </el-table>

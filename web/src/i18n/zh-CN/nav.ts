@@ -18,6 +18,7 @@ export default {
   alert: '告警中心',
   dbmigrate: '数据库迁移',
   bgp: 'BGP/VPNv4监控',
+  tasklog: '采集任务日志',
   group_monitor: '网络监控',
   group_alert: '告警中心',
   group_asset: '资源与资产',

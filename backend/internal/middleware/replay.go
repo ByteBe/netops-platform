@@ -3,6 +3,7 @@ package middleware
 
 import (
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -37,8 +38,8 @@ var (
 func ReplayProtection() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		path := c.Request.URL.Path
-		// 仅静态资源不校验，所有API（含登录/初始化）都防重放
-		if !isAPI(path) {
+		// 静态资源、PDF下载（浏览器原生链接无自定义头）不校验
+		if !isAPI(path) || strings.HasSuffix(path, "/pdf") {
 			c.Next()
 			return
 		}

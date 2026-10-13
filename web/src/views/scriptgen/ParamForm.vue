@@ -73,7 +73,7 @@ function flushRules() {
           </el-form-item>
         </el-form>
         <template v-if="params.enable_prefix === 'on'">
-          <div style="display:grid;grid-template-columns:100px 120px 90px 110px 200px 80px;gap:10px;align-items:center;margin-bottom:10px;padding:10px;background:#fafbfc;border-radius:6px">
+          <div style="display:grid;grid-template-columns:100px 120px 90px 110px 200px 80px;gap:10px;align-items:center;margin-bottom:10px;padding:10px;background:var(--np-hover);border-radius:6px">
             <span style="font-size:14px;color:#303133;font-weight:500">{{ t('script.prefixName') }}</span>
             <el-input size="default" :model-value="params.prefix" placeholder="如TO-beijing" @update:model-value="(v:any)=>set('prefix',v)" />
             <el-input size="default" :model-value="params.pfx_index" :placeholder="t('script.seq')" @update:model-value="(v:any)=>set('pfx_index',String(v))" />
@@ -83,7 +83,7 @@ function flushRules() {
             <el-input size="default" :model-value="params.pfx_net" :placeholder="t('script.matchNet')" @update:model-value="(v:any)=>set('pfx_net',v)" />
             <el-input size="default" :model-value="params.pfx_masklen" :placeholder="t('script.mask')" @update:model-value="(v:any)=>set('pfx_masklen',String(v))" />
           </div>
-          <div v-for="(r,i) in rules" :key="i" style="display:grid;grid-template-columns:100px 120px 90px 110px 200px 80px 40px;gap:10px;align-items:center;margin-bottom:8px;padding:8px 10px;background:#f5f7fa;border-radius:6px">
+          <div v-for="(r,i) in rules" :key="i" style="display:grid;grid-template-columns:100px 120px 90px 110px 200px 80px 40px;gap:10px;align-items:center;margin-bottom:8px;padding:8px 10px;background:var(--np-hover);border-radius:6px">
             <span style="font-size:14px;color:#303133">{{ params.prefix || '' }}</span>
             <el-input size="default" v-model="r.idx" :placeholder="t('script.seq')" />
             <el-select size="default" v-model="r.act">

@@ -23,5 +23,6 @@ export default {
   channelsPlaceholder: 'Select notification channels (multi)',
   email: 'Email', dingtalk: 'DingTalk', wecom: 'WeCom', feishu: 'Feishu', sms: 'SMS',
   emailPlaceholder: 'Multiple emails separated by comma',
-  exportPDF: 'Export PDF', close: 'Close'
+  exportPDF: 'Export PDF', close: 'Close',
+  downloadPdf: 'Download PDF', popupBlocked: 'Popup blocked, please allow popups and retry', done: 'PDF downloaded', generating: 'Generating PDF...'
 }

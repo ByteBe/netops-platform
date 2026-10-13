@@ -24,8 +24,8 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		for _, r := range list {
 			item := gin.H{
 				"id": r.ID, "device_id": r.DeviceID, "interface": r.Interface,
-				"display_name": r.DisplayName, "line_rate": r.LineRate, "up_rate": r.UpRate,
-				"down_rate": r.DownRate, "color": r.Color, "enable": r.Enable, "remark": r.Remark,
+				"display_name": r.DisplayName, "line_rate": r.LineRate, "if_speed": r.IfSpeed,
+				"up_rate": r.UpRate, "down_rate": r.DownRate, "color": r.Color, "enable": r.Enable, "remark": r.Remark,
 			}
 			var dev model.MonitorDevice
 			if err := a.DB.First(&dev, r.DeviceID).Error; err == nil {
@@ -54,6 +54,9 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		if r.LineRate == 0 {
 			r.LineRate = 1000
 		}
+		if r.IfSpeed == 0 {
+			r.IfSpeed = 1000
+		}
 		if r.Color == "" {
 			r.Color = "#409EFF"
 		}
@@ -79,7 +82,8 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		}
 		a.DB.Model(&r).Updates(map[string]any{
 			"device_id": req.DeviceID, "interface": req.Interface, "display_name": req.DisplayName,
-			"line_rate": req.LineRate, "up_rate": req.UpRate, "down_rate": req.DownRate,
+			"line_rate": req.LineRate, "if_speed": req.IfSpeed,
+			"up_rate": req.UpRate, "down_rate": req.DownRate,
 			"color": req.Color, "enable": req.Enable, "remark": req.Remark,
 		})
 		response.OK(c, gin.H{"ok": true})
@@ -110,7 +114,7 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 				response.OK(c, gin.H{
 					"up": snap.Up, "in_bps": ifs.InBps, "out_bps": ifs.OutBps,
 					"in_pct": pct(ifs.InBps, r.DownRate), "out_pct": pct(ifs.OutBps, r.UpRate),
-					"line_rate": r.LineRate, "up_rate": r.UpRate, "down_rate": r.DownRate,
+					"line_rate": r.LineRate, "if_speed": r.IfSpeed, "up_rate": r.UpRate, "down_rate": r.DownRate,
 				})
 				return
 			}
@@ -127,7 +131,14 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			return
 		}
 		end := time.Now()
-		start := end.Add(-24 * time.Hour)
+		hours, _ := strconv.Atoi(c.DefaultQuery("hours", "24"))
+		if hours < 1 {
+			hours = 1
+		}
+		if hours > 168 {
+			hours = 168
+		}
+		start := end.Add(-time.Duration(hours) * time.Hour)
 		tags := map[string]string{"device_id": strconv.FormatUint(uint64(r.DeviceID), 10), "if_name": r.Interface}
 		in, _ := a.TSDB.Query(tsdb.Query{Metric: "if_in", Tags: tags, Start: start, End: end, Bucket: time.Minute * 5, Agg: "avg"})
 		out, _ := a.TSDB.Query(tsdb.Query{Metric: "if_out", Tags: tags, Start: start, End: end, Bucket: time.Minute * 5, Agg: "avg"})

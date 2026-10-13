@@ -50,6 +50,9 @@ func Auth(app *core.App) gin.HandlerFunc {
 		token := c.GetHeader("Authorization")
 		token = strings.TrimPrefix(token, "Bearer ")
 		if token == "" {
+			token = c.Query("token")
+		}
+		if token == "" {
 			response.Unauthorized(c, "未登录或凭证缺失")
 			c.Abort()
 			return
@@ -241,4 +244,31 @@ func ScopeNodeID(c *gin.Context) string {
 		return ""
 	}
 	return s
+}
+
+// VisibleNodeUUIDs 返回当前用户可见的所有节点 UUID（含本节点及所有下级）
+// scope 为 all 返回 nil 表示不过滤；否则返回本节点 + 递归子节点的 UUID 集合
+func VisibleNodeUUIDs(app *core.App, scope string) []string {
+	if scope == "" || scope == "all" {
+		return nil
+	}
+	seen := map[string]bool{scope: true}
+	queue := []string{scope}
+	for len(queue) > 0 {
+		parent := queue[0]
+		queue = queue[1:]
+		var kids []model.Node
+		app.DB.Where("parent_uuid = ?", parent).Find(&kids)
+		for _, k := range kids {
+			if !seen[k.NodeUUID] {
+				seen[k.NodeUUID] = true
+				queue = append(queue, k.NodeUUID)
+			}
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for u := range seen {
+		out = append(out, u)
+	}
+	return out
 }

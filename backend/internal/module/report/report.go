@@ -3,6 +3,10 @@ package report
 import (
 	"fmt"
 	"html/template"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -121,9 +125,13 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			c.String(404, "报告不存在")
 			return
 		}
-		pdf := buildPDF(rec.Title, rec.Content)
+		pdf, err := renderPDF(rec.Title, rec.Content)
+		if err != nil {
+			c.JSON(500, gin.H{"code": 40000, "message": "PDF生成失败: " + err.Error()})
+			return
+		}
 		c.Header("Content-Type", "application/pdf")
-		c.Header("Content-Disposition", fmt.Sprintf("inline; filename=\"report-%d.pdf\"", rec.ID))
+		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.pdf\"", sanitizeFilename(rec.Title)))
 		c.Data(200, "application/pdf", pdf)
 	})
 
@@ -204,7 +212,7 @@ func renderLinkSection(a *core.App, start, end time.Time, stats map[string]int) 
 	var tasks []model.LinkTask
 	a.DB.Find(&tasks)
 	var sb strings.Builder
-	sb.WriteString(`<div class="section"><h3>📡 链路检测汇总</h3><table><thead><tr><th>链路名称</th><th>目标地址</th><th>当前状态</th><th>平均时延</th><th>累计中断</th><th>可用率</th></tr></thead><tbody>`)
+	sb.WriteString(`<div class="section"><h3>【链路检测汇总】</h3><table><thead><tr><th>链路名称</th><th>目标地址</th><th>当前状态</th><th>平均时延</th><th>累计中断</th><th>可用率</th></tr></thead><tbody>`)
 	for _, t := range tasks {
 		stats["total"]++
 		tags := map[string]string{"task_id": strconv.FormatUint(uint64(t.ID), 10)}
@@ -255,7 +263,7 @@ func renderDevSection(a *core.App, start, end time.Time, stats map[string]int) s
 	var devices []model.MonitorDevice
 	a.DB.Where("type = ?", "server").Or("type = ?", "other").Find(&devices)
 	var sb strings.Builder
-	sb.WriteString(`<div class="section"><h3>🖥️ 服务器资源使用汇总</h3><table><thead><tr><th>设备</th><th>IP</th><th>状态</th><th>CPU(均值)</th><th>内存使用(均值)</th></tr></thead><tbody>`)
+	sb.WriteString(`<div class="section"><h3>【服务器资源使用汇总】</h3><table><thead><tr><th>设备</th><th>IP</th><th>状态</th><th>CPU(均值)</th><th>内存使用(均值)</th></tr></thead><tbody>`)
 	for _, d := range devices {
 		stats["total"]++
 		tags := map[string]string{"device_id": strconv.FormatUint(uint64(d.ID), 10)}
@@ -285,7 +293,7 @@ func renderDevSection(a *core.App, start, end time.Time, stats map[string]int) s
 
 func renderDBSection(a *core.App, stats map[string]int) string {
 	var sb strings.Builder
-	sb.WriteString(`<div class="section"><h3>🗄️ 数据库状态汇总</h3><table><thead><tr><th>实例</th><th>类型</th><th>状态</th><th>连接数</th><th>错误数</th></tr></thead><tbody>`)
+	sb.WriteString(`<div class="section"><h3>【数据库状态汇总】</h3><table><thead><tr><th>实例</th><th>类型</th><th>状态</th><th>连接数</th><th>错误数</th></tr></thead><tbody>`)
 	for _, s := range a.DBProbe.SnapshotAll() {
 		stats["total"]++
 		status, color := "异常", "#f5222d"
@@ -309,7 +317,7 @@ func renderContainerSection(a *core.App, stats map[string]int) string {
 	a.DB.Order("id asc").Find(&clusters)
 
 	var sb strings.Builder
-	sb.WriteString(`<div class="section"><h3>🐳 容器与 Kubernetes 汇总</h3><table><thead><tr><th>节点</th><th>IP/地址</th><th>类型</th><th>状态</th><th>容器/Pod 数</th><th>异常数</th></tr></thead><tbody>`)
+	sb.WriteString(`<div class="section"><h3>【容器与 Kubernetes 汇总】</h3><table><thead><tr><th>节点</th><th>IP/地址</th><th>类型</th><th>状态</th><th>容器/Pod 数</th><th>异常数</th></tr></thead><tbody>`)
 
 	if len(hosts) == 0 && len(clusters) == 0 {
 		sb.WriteString("<tr><td colspan='6' style='text-align:center;color:#999'>暂无 Docker/K8s 节点监控</td></tr>")
@@ -398,15 +406,15 @@ func avgOf(series []tsdb.Series) float64 {
 var reportTpl = template.Must(template.New("report").Parse(`<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>{{.Title}}</title>
 <style>
 *{box-sizing:border-box}
-body{font-family:"Microsoft YaHei","Segoe UI",Arial,sans-serif;margin:0;padding:32px;background:#f0f2f5;color:#2c3e50}
+body{font-family:"Noto Sans CJK SC","WenQuanYi Micro Hei","WenQuanYi Zen Hei","Microsoft YaHei",sans-serif;margin:0;padding:32px;background:#f0f2f5;color:#2c3e50;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .wrap{max-width:900px;margin:0 auto;background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.08);overflow:hidden}
-.header{background:linear-gradient(135deg,#1a73e8,#0d47a1);color:#fff;padding:28px 36px}
-.header h1{margin:0;font-size:22px;font-weight:600}
-.header .meta{margin-top:8px;font-size:13px;opacity:.85}
-.summary{display:flex;gap:16px;padding:20px 36px;background:#fafbfc;border-bottom:1px solid #eee}
-.summary .card{flex:1;text-align:center;padding:14px;border-radius:8px;background:#fff;border:1px solid #eee}
-.summary .num{font-size:28px;font-weight:700;line-height:1.2}
-.summary .lbl{font-size:12px;color:#888;margin-top:4px}
+.header{padding:28px 36px 16px 36px}
+.header h1{margin:0;font-size:22px;font-weight:700;color:#1a73e8}
+.header .meta{margin-top:6px;font-size:13px;color:#888}
+.summary{width:100%;border-collapse:collapse;margin:0 36px;width:calc(100% - 72px)}
+.summary td{width:25%;text-align:center;padding:18px 8px;border-bottom:1px solid #f0f0f0}
+.summary .num{font-size:26px;font-weight:700;line-height:1.2}
+.summary .lbl{font-size:12px;color:#999;margin-top:6px}
 .section{padding:20px 36px}
 h3{margin:0 0 14px;font-size:16px;color:#1a73e8;padding-bottom:8px;border-bottom:2px solid #e8f0fe}
 table{width:100%;border-collapse:collapse;font-size:13px}
@@ -419,12 +427,12 @@ tbody tr:hover{background:#f8faff}
 <h1>{{.Title}}</h1>
 <div class="meta">巡检周期：{{.Start}} 至 {{.End}} ｜ 生成时间：{{.Now}}</div>
 </div>
-<div class="summary">
-<div class="card"><div class="num" style="color:#1a73e8">{{.Total}}</div><div class="lbl">监控对象总数</div></div>
-<div class="card"><div class="num" style="color:#52c41a">{{.Up}}</div><div class="lbl">正常</div></div>
-<div class="card"><div class="num" style="color:#f5222d">{{.Down}}</div><div class="lbl">异常/离线</div></div>
-<div class="card"><div class="num" style="color:#faad14">{{.Warn}}</div><div class="lbl">告警</div></div>
-</div>
+<table class="summary"><tr>
+<td><div class="num" style="color:#1a73e8">{{.Total}}</div><div class="lbl">监控对象总数</div></td>
+<td><div class="num" style="color:#52c41a">{{.Up}}</div><div class="lbl">正常</div></td>
+<td><div class="num" style="color:#f5222d">{{.Down}}</div><div class="lbl">异常/离线</div></td>
+<td><div class="num" style="color:#faad14">{{.Warn}}</div><div class="lbl">告警</div></td>
+</tr></table>
 {{.LinkSection}}{{.DevSection}}{{.DBSection}}{{.ContainerSection}}{{.NodeSection}}
 <div class="footer">本报告由 NetOps 网络运维监控平台自动生成</div>
 </div></body></html>`))
@@ -506,6 +514,70 @@ func stripHTML(html string) []string {
 		}
 	}
 	return lines
+}
+
+// findWkhtmltopdf 查找 wkhtmltopdf：先在程序同目录，再在 PATH
+func findWkhtmltopdf() (string, error) {
+	name := "wkhtmltopdf"
+	if runtime.GOOS == "windows" {
+		name = "wkhtmltopdf.exe"
+	}
+	// 1. 程序同目录
+	if exePath, err := os.Executable(); err == nil {
+		candidate := filepath.Join(filepath.Dir(exePath), name)
+		if ifst, e := os.Stat(candidate); e == nil && !ifst.IsDir() {
+			return candidate, nil
+		}
+	}
+	// 2. 当前目录
+	if ifst, e := os.Stat(name); e == nil && !ifst.IsDir() {
+		return name, nil
+	}
+	// 3. PATH
+	if p, err := exec.LookPath(name); err == nil {
+		return p, nil
+	}
+	return "", fmt.Errorf("未找到 wkhtmltopdf，请安装后重试（Linux: apt/yum install wkhtmltopdf；Windows: 下载 wkhtmltopdf.exe 放到程序同目录）")
+}
+
+// renderPDF 调用 wkhtmltopdf 将报告 HTML 渲染为 PDF
+func renderPDF(title, htmlContent string) ([]byte, error) {
+	tmpDir := os.TempDir()
+	htmlFile := filepath.Join(tmpDir, fmt.Sprintf("report-%d.html", time.Now().UnixNano()))
+	pdfFile := filepath.Join(tmpDir, fmt.Sprintf("report-%d.pdf", time.Now().UnixNano()))
+	defer os.Remove(htmlFile)
+	defer os.Remove(pdfFile)
+	if err := os.WriteFile(htmlFile, []byte(htmlContent), 0644); err != nil {
+		return nil, err
+	}
+	bin, err := findWkhtmltopdf()
+	if err != nil {
+		return nil, err
+	}
+	cmd := exec.Command(bin,
+		"--quiet", "--disable-smart-shrinking",
+		"--margin-top", "15mm", "--margin-bottom", "15mm",
+		"--margin-left", "12mm", "--margin-right", "12mm",
+		"--encoding", "utf-8",
+		htmlFile, pdfFile)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("wkhtmltopdf: %v: %s", err, out)
+	}
+	return os.ReadFile(pdfFile)
+}
+
+func sanitizeFilename(s string) string {
+	s = strings.Map(func(r rune) rune {
+		switch r {
+		case '/', '\\', ':', '*', '?', '"', '<', '>', '|':
+			return '-'
+		}
+		return r
+	}, s)
+	if len(s) > 80 {
+		s = s[:80]
+	}
+	return s
 }
 
 // buildPDF 生成最小可用的二进制 PDF（Helvetica，纯文本行）

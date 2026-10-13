@@ -50,12 +50,16 @@ html.dark {
 
 // 通用卡片
 .np-card {
-  background: linear-gradient(180deg, rgba(255,255,255,.95), rgba(248,250,255,.9));
+  background: var(--np-card-bg);
   border: 1px solid var(--np-border);
   border-radius: $radius-md;
   box-shadow: var(--np-shadow);
   padding: 16px;
   backdrop-filter: blur(8px);
+}
+
+html.dark .np-card {
+  background: linear-gradient(180deg, rgba(30,41,59,.95), rgba(15,23,42,.9));
 }
 
 .np-card-title {
@@ -80,8 +84,8 @@ html.dark {
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
-  background: linear-gradient(180deg, #ffffff, #f8fbff);
-  border: 1px solid #e6eef8;
+  background: var(--np-card-bg);
+  border: 1px solid var(--np-border);
   border-radius: 12px;
   padding: 12px 16px;
   box-shadow: 0 6px 18px rgba(47, 107, 255, 0.08);
@@ -92,8 +96,43 @@ html.dark {
 
 .el-card {
   border-radius: 12px;
-  border-color: #e6eef8;
+  border-color: var(--np-border);
+  background: var(--np-card-bg);
+  color: var(--np-text-1);
   box-shadow: 0 8px 24px rgba(47, 107, 255, 0.08);
+}
+
+html.dark .el-table,
+html.dark .el-table tr,
+html.dark .el-table th.el-table__cell,
+html.dark .el-table td.el-table__cell {
+  background: #1e293b;
+  color: #e2e8f0;
+}
+html.dark .el-table--enable-row-hover .el-table__body tr:hover > td.el-table__cell {
+  background: #273549 !important;
+}
+html.dark .el-table__inner-wrapper::before {
+  background: #334155;
+}
+html.dark .el-dialog,
+html.dark .el-popper,
+html.dark .el-select-dropdown,
+html.dark .el-picker-panel {
+  background: #1e293b;
+  color: #e2e8f0;
+}
+html.dark .el-dialog__title,
+html.dark .el-dialog__body {
+  color: #e2e8f0;
+}
+html.dark .el-input__wrapper,
+html.dark .el-textarea__inner {
+  background: #0f172a;
+  box-shadow: 0 0 0 1px #334155 inset;
+}
+html.dark .el-input__inner {
+  color: #e2e8f0;
 }
 
 .np-table {
@@ -154,3 +193,34 @@ html.dark {
 
 // 空状态增强
 .np-empty-lg { text-align: center; color: var(--np-text-2); padding: 80px 0; font-size: 14px; }
+
+// === 布局稳定性：任何按钮点击/数据加载不引起页面跳动 ===
+html {
+  overflow-y: scroll; // 始终保留垂直滚动条宽度，避免内容高度变化时宽度跳动
+}
+.np-content {
+  overflow-y: auto;
+}
+// 表格统一最小高度，空数据和有数据时卡片高度一致
+.el-table {
+  --el-table-border-color: transparent;
+  --el-table-header-border-color: var(--np-border);
+}
+// 彻底移除所有列间竖线（含 fixed 列的 box-shadow 分隔线）
+.el-table th.el-table__cell,
+.el-table td.el-table__cell {
+  border-right: none !important;
+}
+.el-table .el-table__cell.is-fixed-right,
+.el-table .el-table__cell.is-fixed-left {
+  box-shadow: none !important;
+  border-right: none !important;
+}
+.el-table__inner-wrapper::before,
+.el-table__inner-wrapper::after {
+  background: var(--np-border) !important;
+}
+// 对话框打开时锁定 body，防止背景滚动条出现/消失导致宽度变化
+.el-popup-parent--hidden {
+  overflow: hidden !important;
+}

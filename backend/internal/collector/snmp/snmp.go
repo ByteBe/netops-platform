@@ -126,6 +126,7 @@ type Manager struct {
 	snap     map[uint]*DeviceSnapshot
 	ts       tsdb.Engine
 	hub      *notify.Hub
+	OnLog    func(deviceID uint, name, ip, typ string, success bool, durMs int64, msg string)
 	stopAll  chan struct{}
 	wg       sync.WaitGroup
 }
@@ -206,13 +207,12 @@ func (m *Manager) DeviceSnapshotByID(id uint) (DeviceSnapshot, bool) {
 
 func (m *Manager) collectLoop(d Device, stop chan struct{}) {
 	defer m.wg.Done()
-	interval := time.Duration(max(d.Interval, 10)) * time.Second
-	tick := time.NewTicker(interval)
-	defer tick.Stop()
+	base := time.Duration(max(d.Interval, 10)) * time.Second
 	m.collect(d)
-	// 启动后 3 秒补采一次，让登录后立即有速率
 	quick := time.NewTimer(3 * time.Second)
 	defer quick.Stop()
+	timer := time.NewTimer(base)
+	defer timer.Stop()
 	for {
 		select {
 		case <-m.stopAll:
@@ -221,17 +221,43 @@ func (m *Manager) collectLoop(d Device, stop chan struct{}) {
 			return
 		case <-quick.C:
 			m.collect(d)
-		case <-tick.C:
+		case <-timer.C:
+			m.mu.RLock()
+			snap, ok := m.snap[d.ID]
+			m.mu.RUnlock()
+			backoff := base
+			if !ok || !snap.Up {
+				// 失败退避：最长 5 分钟
+				backoff = base * 4
+				if backoff > 5*time.Minute {
+					backoff = 5 * time.Minute
+				}
+			}
 			m.collect(d)
+			timer.Reset(backoff)
 		}
 	}
 }
 
 func (m *Manager) collect(d Device) {
+	t0 := time.Now()
 	snap, err := m.collectOnce(d)
+	dur := time.Since(t0).Milliseconds()
+	success := err == nil
+	msg := ""
 	if err != nil {
 		fmt.Printf("[snmp] device=%s(%s) v=%s user=%s auth=%s priv=%s FAIL: %v\n", d.Name, d.IP, d.SNMPVersion, d.Username, d.AuthProto, d.PrivProto, err)
-		snap = &DeviceSnapshot{DeviceID: d.ID, Name: d.Name, IP: d.IP, Up: false, TS: time.Now(), Message: err.Error()}
+		msg = err.Error()
+		snap = &DeviceSnapshot{DeviceID: d.ID, Name: d.Name, IP: d.IP, Up: false, TS: time.Now(), Message: msg}
+	}
+	// 只在失败或状态变化（up<->down）时记日志，避免高频成功日志刷屏
+	m.mu.RLock()
+	prev, had := m.snap[d.ID]
+	prevUp := had && prev != nil && prev.Up
+	m.mu.RUnlock()
+	stateChanged := (!had) || prevUp != snap.Up
+	if m.OnLog != nil && (!success || stateChanged) {
+		m.OnLog(d.ID, d.Name, d.IP, "snmp", success, dur, msg)
 	}
 	m.mu.Lock()
 	m.snap[d.ID] = snap

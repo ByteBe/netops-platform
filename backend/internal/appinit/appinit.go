@@ -20,6 +20,7 @@ import (
 	"netops/internal/config"
 	"netops/internal/core"
 	"netops/internal/model"
+	"netops/internal/module/alert"
 	"netops/internal/module/distributed"
 	"netops/internal/service/mcp"
 	"netops/internal/storage"
@@ -40,7 +41,7 @@ func AllModels() []any {
 		&model.AIConfig{}, &model.MCPAgent{}, &model.EmailConfig{},
 		&model.ReportRecord{}, &model.SystemSetting{}, &model.DockerHost{}, &model.K8sCluster{},
 		&model.Node{}, &model.ConfigBackupDevice{}, &model.ConfigBackup{},
-		&model.AlertRule{}, &model.AlertEvent{}, &model.NotifyConfig{},
+		&model.AlertRule{}, &model.AlertEvent{}, &model.NotifyConfig{}, &model.TaskLog{},
 	}
 }
 
@@ -66,6 +67,7 @@ func InitRuntimeAndDB(a *core.App) error {
 		return err
 	}
 	a.InitRuntime()
+	alert.StartEvaluator(a)
 	InitMCPServer(a)
 	return nil
 }

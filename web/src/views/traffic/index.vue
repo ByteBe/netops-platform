@@ -22,6 +22,7 @@ interface TrafficRule {
   interface: string
   display_name: string
   line_rate: number
+  if_speed: number
   up_rate: number
   down_rate: number
   color: string
@@ -45,7 +46,7 @@ const dialogVisible = ref(false)
 const editingId = ref(0)
 const form = reactive({
   id: 0, device_id: 0, interface: '', display_name: '', line_rate: 1000,
-  up_rate: 1000, down_rate: 1000, color: '', enable: true, remark: ''
+  if_speed: 1000, up_rate: 1000, down_rate: 1000, color: '', enable: true, remark: ''
 })
 
 const ifs = ref<IfInfo[]>([])
@@ -55,6 +56,7 @@ const ifLoading = ref(false)
 const histVisible = ref(false)
 const histRule = ref<TrafficRule | null>(null)
 const histRef = ref<HTMLDivElement>()
+const histHours = ref(24)
 let histChart: echarts.ECharts | null = null
 
 let ws: WSClient | null = null
@@ -89,11 +91,18 @@ async function loadIfs() {
   }
 }
 
+function onInterfaceChange() {
+  const sel = ifs.value.find(i => i.name === form.interface)
+  if (sel && sel.speed > 0) {
+    form.if_speed = sel.speed
+  }
+}
+
 function openAdd() {
   editingId.value = 0
   Object.assign(form, {
     id: 0, device_id: 0, interface: '', display_name: '', line_rate: 1000,
-    up_rate: 1000, down_rate: 1000, color: pickColor(rules.value.length), enable: true, remark: ''
+    if_speed: 1000, up_rate: 1000, down_rate: 1000, color: pickColor(rules.value.length), enable: true, remark: ''
   })
   dialogVisible.value = true
   ifs.value = []
@@ -128,11 +137,17 @@ async function remove(r: TrafficRule) {
 async function showHistory(r: TrafficRule) {
   histRule.value = r
   histVisible.value = true
+  histHours.value = 24
+  await loadTrafficHistory()
+}
+
+async function loadTrafficHistory() {
+  if (!histRule.value) return
   await nextTick()
   const h = await getEnc<{
     in: number[][]
     out: number[][]
-  }>(`/traffic/rules/${r.id}/history`)
+  }>(`/traffic/rules/${histRule.value.id}/history?hours=${histHours.value}`)
   histChart ??= echarts.init(histRef.value as HTMLDivElement)
   histChart.setOption({
     backgroundColor: 'transparent',
@@ -228,7 +243,7 @@ onBeforeUnmount(() => {
           </el-select>
         </el-form-item>
         <el-form-item :label="t('traffic.interface')" required>
-          <el-select v-model="form.interface" filterable :loading="ifLoading" style="width: 100%">
+          <el-select v-model="form.interface" filterable :loading="ifLoading" style="width: 100%" @change="onInterfaceChange">
             <el-option v-for="i in ifs" :key="i.index" :label="`${i.name} (${i.oper})`" :value="i.name" />
           </el-select>
         </el-form-item>
@@ -237,6 +252,9 @@ onBeforeUnmount(() => {
         </el-form-item>
         <el-form-item :label="t('traffic.lineRate')">
           <el-input-number v-model="form.line_rate" :min="1" :max="1000000" />
+        </el-form-item>
+        <el-form-item :label="t('traffic.ifSpeed')">
+          <el-input-number v-model="form.if_speed" :min="1" :max="1000000" />
         </el-form-item>
         <el-form-item :label="t('traffic.upRate')">
           <el-input-number v-model="form.up_rate" :min="1" :max="1000000" />
@@ -258,6 +276,16 @@ onBeforeUnmount(() => {
     </el-dialog>
 
     <el-dialog v-model="histVisible" :title="`${t('traffic.history')} - ${histRule?.display_name}`" width="780px">
+      <div style="margin-bottom:8px">
+        <el-select v-model="histHours" size="small" style="width:140px" @change="loadTrafficHistory">
+          <el-option :label="$t('monitor.lastNHours', {n: 1})" :value="1" />
+          <el-option :label="$t('monitor.lastNHours', {n: 6})" :value="6" />
+          <el-option :label="$t('monitor.lastNHours', {n: 12})" :value="12" />
+          <el-option :label="$t('monitor.lastNHours', {n: 24})" :value="24" />
+          <el-option :label="$t('monitor.lastNHours', {n: 72})" :value="72" />
+          <el-option :label="$t('monitor.lastNHours', {n: 168})" :value="168" />
+        </el-select>
+      </div>
       <div ref="histRef" class="np-chart" style="height: 320px"></div>
     </el-dialog>
   </div>

@@ -34,6 +34,7 @@ const form = reactive<LinkTask>({
 const historyVisible = ref(false)
 const historyTask = ref<LinkTask | null>(null)
 const historyData = ref<{ name: string; color: string; points: [number, number | null][] } | null>(null)
+const histHours = ref(24)
 const chartRef = ref<HTMLDivElement>()
 let chart: echarts.ECharts | null = null
 let ws: WSClient | null = null
@@ -87,15 +88,19 @@ async function removeTask(row: LinkTask) {
 async function showHistory(row: LinkTask) {
   historyTask.value = row
   historyVisible.value = true
+  histHours.value = 24
+  await loadLinkHistory()
+}
+
+async function loadLinkHistory() {
+  const row = historyTask.value
+  if (!row) return
   await nextTick()
-  let points: [number, number | null][] = (rtHistoryGlobal[row.id] || []).slice()
+  let points: [number, number | null][] = []
   try {
-    const h = await getEnc<{ rt: [number, number][] }>(`/linkdetect/tasks/${row.id}/realtime`)
+    const h = await getEnc<{ rt: [number, number][] }>(`/linkdetect/tasks/${row.id}/history?hours=${histHours.value}`)
     if (h.rt && h.rt.length > 0) {
-      const merged = new Map<number, number | null>()
-      for (const p of points) merged.set(p[0], p[1])
-      for (const p of h.rt) merged.set(p[0], p[1] > 0 ? p[1] : null)
-      points = Array.from(merged.entries()).sort((a, b) => a[0] - b[0]) as [number, number | null][]
+      points = h.rt.map((p) => [p[0], p[1] > 0 ? p[1] : null] as [number, number | null])
     }
   } catch { }
   historyData.value = { name: row.name, color: row.color, points }
@@ -107,7 +112,7 @@ async function showHistory(row: LinkTask) {
     tooltip: { trigger: 'axis', valueFormatter: (v: number) => v == null ? '--' : v.toFixed(1) + ' ms' },
     grid: { left: 50, right: 16, top: 20, bottom: 60 },
     xAxis: { type: 'time' },
-    yAxis: { type: 'value', name: 'ms', min: 0 },
+    yAxis: { type: 'value', min: 0, axisLabel: { formatter: (v: number) => v + ' ms' } },
     dataZoom: [
       { type: 'inside', start: 0, end: 100, moveOnMouseMove: true, zoomOnMouseWheel: true, moveOnMouseWheel: false },
       { type: 'slider', start: 0, end: 100, height: 24, bottom: 10 }
@@ -168,7 +173,7 @@ function doRenderRealtime() {
     legend: { type: 'scroll', top: 0 },
     grid: { left: 60, right: 20, top: 40, bottom: 24 },
     xAxis: { type: 'time', min: axisStart, max: nowMs, axisLabel: { formatter: '{HH}:{mm}:{ss}' } },
-    yAxis: { type: 'value', name: 'ms', min: 0 },
+    yAxis: { type: 'value', min: 0, axisLabel: { formatter: (v: number) => v + ' ms' } },
     series: list.map((s) => ({
       name: s.name, type: 'line', showSymbol: false, smooth: false,
       lineStyle: { width: 2, color: s.color }, itemStyle: { color: s.color },
@@ -346,6 +351,16 @@ function taskColor(row: LinkTask) { return row.color || '#64748b' }
     </el-dialog>
 
     <el-dialog v-model="historyVisible" :title="`${t('link.history')} - ${historyTask?.name}`" width="760px">
+      <div style="margin-bottom:8px">
+        <el-select v-model="histHours" size="small" style="width:140px" @change="loadLinkHistory">
+          <el-option :label="$t('monitor.lastNHours', {n: 1})" :value="1" />
+          <el-option :label="$t('monitor.lastNHours', {n: 6})" :value="6" />
+          <el-option :label="$t('monitor.lastNHours', {n: 12})" :value="12" />
+          <el-option :label="$t('monitor.lastNHours', {n: 24})" :value="24" />
+          <el-option :label="$t('monitor.lastNHours', {n: 72})" :value="72" />
+          <el-option :label="$t('monitor.lastNHours', {n: 168})" :value="168" />
+        </el-select>
+      </div>
       <div ref="chartRef" class="np-chart" style="height: 400px"></div>
     </el-dialog>
   </div>

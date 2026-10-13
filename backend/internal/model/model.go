@@ -235,6 +235,7 @@ type TrafficRule struct {
 	Interface   string    `gorm:"size:128;not null" json:"interface"` // 接口名 ifIndex 或名称
 	DisplayName string    `gorm:"size:128" json:"display_name"`       // 显示名（专线名）
 	LineRate    float64   `gorm:"default:1000" json:"line_rate"`      // 专线大小 Mbps
+	IfSpeed     float64   `gorm:"default:1000" json:"if_speed"`        // 接口物理带宽 Mbps（SNMP 采集）
 	UpRate      float64   `gorm:"default:1000" json:"up_rate"`        // 上行速率 Mbps
 	DownRate    float64   `gorm:"default:1000" json:"down_rate"`      // 下行速率 Mbps
 	Color       string    `gorm:"size:16;default:#409EFF" json:"color"`
@@ -418,6 +419,19 @@ type NotifyConfig struct {
 	Token   string `gorm:"size:255" json:"token"`
 	Config  string `gorm:"type:text" json:"config"` // JSON配置
 	Enabled bool   `gorm:"default:true" json:"enabled"`
+}
+
+// TaskLog 采集任务日志：记录每次 SNMP/SSH/DB 采集的成功失败
+type TaskLog struct {
+	ID         uint      `gorm:"primaryKey" json:"id"`
+	DeviceID   uint      `gorm:"index" json:"device_id"`
+	DeviceName string    `gorm:"size:128" json:"device_name"`
+	IP         string    `gorm:"size:64" json:"ip"`
+	Type       string    `gorm:"size:32" json:"type"` // snmp/ssh/db/docker
+	Success    bool      `json:"success"`
+	DurationMs int64     `json:"duration_ms"`
+	Message    string    `gorm:"type:text" json:"message"`
+	CreatedAt  time.Time `gorm:"index" json:"created_at"`
 }
 
 func (m *MonitorDevice) BeforeSave(tx *gorm.DB) error {

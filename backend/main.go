@@ -33,7 +33,7 @@ func main() {
   ██║╚██╗██║██╔══╝     ██║       ██║  ██║██║   ██║██║  ██║██╔══╝
   ██║ ╚████║███████╗   ██║       ██████╔╝╚██████╔╝██████╔╝███████╗
   ╚═╝  ╚═══╝╚══════╝   ╚═╝       ╚═════╝  ╚═════╝ ╚═════╝ ╚══════╝
-  NetOps 网络运维监控平台 v2.1.2 | 告警收敛 · 批量管理 · 巡检PDF · 配置审计
+  NetOps 网络运维监控平台 v2.1.4 | 告警规则引擎 · 采集退避 · 任务日志
 `)
 
 	// 1. 加载配置（支持 --config 指定，缺省自动探测 ./config.yaml 与可执行文件同目录）
@@ -125,6 +125,9 @@ func main() {
 			if app.DB != nil {
 				cutoff := time.Now().Add(-180 * 24 * time.Hour)
 				app.DB.Where("created_at < ?", cutoff).Delete(&model.AuditLog{})
+				// 采集日志高频，保留 7 天
+				tlCutoff := time.Now().Add(-7 * 24 * time.Hour)
+				app.DB.Where("created_at < ?", tlCutoff).Delete(&model.TaskLog{})
 			}
 		}
 	}()

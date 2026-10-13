@@ -76,7 +76,7 @@ const userTitle = computed(() => authStore.user?.username || '')
     <div class="np-main">
       <header class="np-header">
         <div class="np-header-left">
-          <el-icon class="np-collapse-btn" @click="appStore.collapsed = !appStore.collapsed">
+          <el-icon class="np-collapse-btn" @click="appStore.toggleCollapsed()">
             <Expand v-if="appStore.collapsed" />
             <Fold v-else />
           </el-icon>
