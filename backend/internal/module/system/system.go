@@ -16,6 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"netops/internal/common/response"
+	"netops/internal/common/secstore"
 	"netops/internal/core"
 	"netops/internal/middleware"
 	"netops/internal/model"
@@ -67,11 +68,15 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			response.Bad(c, "参数错误")
 			return
 		}
-		a.DB.Model(&cfg).Updates(map[string]any{
+		updates := map[string]any{
 			"name": req.Name, "provider": req.Provider, "base_url": req.BaseURL,
-			"api_key": req.APIKey, "model": req.Model, "temperature": req.Temperature,
+			"model": req.Model, "temperature": req.Temperature,
 			"priority": req.Priority, "enable": req.Enable, "remark": req.Remark,
-		})
+		}
+		if req.APIKey != "" {
+			updates["api_key"] = secstore.Seal(req.APIKey)
+		}
+		a.DB.Model(&cfg).Updates(updates)
 		response.OK(c, gin.H{"ok": true})
 	})
 	g.DELETE("/ai/:id", middleware.RequireRole("admin"), func(c *gin.Context) {
@@ -305,6 +310,11 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			response.Bad(c, "参数错误")
 			return
 		}
+		if req.Password != "" {
+			req.Password = secstore.Seal(req.Password)
+		} else {
+			req.Password = cfg.Password
+		}
 		a.DB.Model(&cfg).Updates(map[string]any{
 			"name": req.Name, "smtp_host": req.SMTPHost, "smtp_port": req.SMTPPort,
 			"user": req.User, "password": req.Password, "use_ssl": req.UseSSL,
@@ -325,7 +335,17 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			response.NotFound(c, "邮箱配置不存在")
 			return
 		}
-		to := splitTo(cfg.DefaultTo)
+		var req struct {
+			To string `json:"to"`
+		}
+		_ = c.ShouldBindJSON(&req)
+		to := splitTo(req.To)
+		if len(to) == 0 {
+			to = splitTo(cfg.DefaultTo)
+		}
+		if len(to) == 0 {
+			to = []string{cfg.User}
+		}
 		if len(to) == 0 {
 			var users []model.User
 			a.DB.Where("email != ''").Limit(5).Find(&users)
@@ -339,7 +359,7 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		}
 		err := email.Send(email.Config{Name: cfg.Name, SMTPHost: cfg.SMTPHost, SMTPPort: cfg.SMTPPort,
 			User: cfg.User, Password: cfg.Password, UseSSL: cfg.UseSSL, Enable: true},
-			to, "NetOps 邮箱配置测试", "<h3>NetOps 平台邮箱配置测试成功</h3>")
+			to, "NetOps 告警通道测试", "<h3>NetOps 平台告警通道连通性测试</h3><p>这是一封测试邮件，用于验证 SMTP 配置是否正确。如收到此邮件，说明告警通知可正常送达。</p>")
 		if err != nil {
 			response.Fail(c, 400, response.CodeBadRequest, "邮件发送失败: "+err.Error())
 			return

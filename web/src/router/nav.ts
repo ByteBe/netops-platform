@@ -27,7 +27,9 @@ const overrides: Record<string, NavMeta> = {
   distributed: { title: 'nav.distributed', icon: 'Share' },
   alert: { title: 'nav.alert', icon: 'Bell' },
   bgpmon: { title: 'nav.bgp', icon: 'Connection' },
-  tasklog: { title: 'nav.tasklog', icon: 'List' }
+  tasklog: { title: 'nav.tasklog', icon: 'List' },
+  devicelog: { title: 'nav.devicelog', icon: 'Document' },
+  aiinspect: { title: 'nav.aiinspect', icon: 'MagicStick' }
 }
 
 // 自动扫描 views 目录，收集所有模块名

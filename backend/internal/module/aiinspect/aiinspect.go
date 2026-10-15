@@ -1,0 +1,131 @@
+// Package aiinspect AI 巡检：汇总系统状态/告警/日志/指标，调大模型生成巡检报告
+package aiinspect
+
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/gin-gonic/gin"
+
+	"netops/internal/common/response"
+	"netops/internal/core"
+	"netops/internal/model"
+	"netops/internal/modreg"
+	"netops/internal/service/ai"
+)
+
+func RegisterProtected(a *core.App, g *gin.RouterGroup) {
+	g.POST("/run", func(c *gin.Context) {
+		if a.DB == nil {
+			response.Fail(c, 500, 50000, "数据库未就绪")
+			return
+		}
+		// 1. 收集系统快照
+		snapshot := collectSnapshot(a)
+
+		// 2. 找启用的 AI 配置
+		var cfg model.AIConfig
+		if a.DB.Where("enable = ?", true).Order("priority desc").First(&cfg).Error != nil {
+			response.Fail(c, 400, 40000, "未配置启用的 AI，请先在系统设置中配置")
+			return
+		}
+
+		// 3. 构造 prompt
+		prompt := buildPrompt(snapshot)
+
+		// 4. 调 AI
+		provider := ai.Provider{
+			Name: cfg.Name, BaseURL: cfg.BaseURL, APIKey: cfg.APIKey,
+			Model: cfg.Model, Temperature: cfg.Temperature,
+		}
+		result, err := ai.Chat(provider, []ai.Message{
+			{Role: "system", Content: "你是资深网络运维专家，根据提供的系统数据生成简洁专业的中文巡检报告，包含：总体评价、发现的问题、风险点、建议措施。用 Markdown 格式。"},
+			{Role: "user", Content: prompt},
+		})
+		if err != nil {
+			response.Fail(c, 500, 50000, "AI调用失败: "+err.Error())
+			return
+		}
+		// 5. 保存历史
+		snapJSON, _ := json.Marshal(snapshot)
+		a.DB.Create(&model.AIInspectReport{Report: result, Snapshot: string(snapJSON), CreatedAt: time.Now()})
+
+		response.OK(c, gin.H{"report": result, "snapshot": snapshot, "time": time.Now().Format("2006-01-02 15:04:05")})
+	})
+
+	// 历史列表
+	g.GET("/list", func(c *gin.Context) {
+		var rows []model.AIInspectReport
+		a.DB.Order("created_at desc").Limit(50).Find(&rows)
+		type item struct {
+			ID        uint      `json:"id"`
+			CreatedAt time.Time `json:"created_at"`
+			Report    string    `json:"report"`
+			Snapshot  string    `json:"snapshot"`
+		}
+		out := []item{}
+		for _, r := range rows {
+			out = append(out, item{ID: r.ID, CreatedAt: r.CreatedAt, Report: r.Report, Snapshot: r.Snapshot})
+		}
+		response.OK(c, out)
+	})
+
+	// 删除历史
+	g.DELETE("/:id", func(c *gin.Context) {
+		a.DB.Delete(&model.AIInspectReport{}, c.Param("id"))
+		response.OK(c, gin.H{"ok": true})
+	})
+}
+
+type Snapshot struct {
+	DeviceTotal   int64 `json:"device_total"`
+	DeviceUp      int64 `json:"device_up"`
+	DeviceDown    int64 `json:"device_down"`
+	AlertActive   int64 `json:"alert_active"`
+	AlertToday    int64 `json:"alert_today"`
+	DockerTotal   int64 `json:"docker_total"`
+	DockerRunning int64 `json:"docker_running"`
+	LogError24h   int64 `json:"log_error_24h"`
+	LogWarn24h    int64 `json:"log_warn_24h"`
+	TopDevices    []string `json:"top_devices"`
+}
+
+func collectSnapshot(a *core.App) Snapshot {
+	var s Snapshot
+	a.DB.Model(&model.MonitorDevice{}).Count(&s.DeviceTotal)
+	a.DB.Model(&model.MonitorDevice{}).Where("status = ?", "up").Count(&s.DeviceUp)
+	a.DB.Model(&model.MonitorDevice{}).Where("status = ?", "down").Count(&s.DeviceDown)
+	a.DB.Model(&model.AlertEvent{}).Where("status = ?", "active").Count(&s.AlertActive)
+	today := time.Now().Format("2006-01-02")
+	a.DB.Model(&model.AlertEvent{}).Where("DATE(created_at) = ?", today).Count(&s.AlertToday)
+	a.DB.Model(&model.DeviceLog{}).Where("created_at > ? AND level = ?", time.Now().Add(-24*time.Hour), "critical").Count(&s.LogError24h)
+	a.DB.Model(&model.DeviceLog{}).Where("created_at > ? AND level = ?", time.Now().Add(-24*time.Hour), "warning").Count(&s.LogWarn24h)
+
+	// 列出 down 的设备
+	var downDevs []model.MonitorDevice
+	a.DB.Where("status = ?", "down").Limit(10).Find(&downDevs)
+	for _, d := range downDevs {
+		s.TopDevices = append(s.TopDevices, fmt.Sprintf("%s(%s)", d.Name, d.IP))
+	}
+	return s
+}
+
+func buildPrompt(s Snapshot) string {
+	var b strings.Builder
+	b.WriteString("## 系统巡检数据\n\n")
+	fmt.Fprintf(&b, "- 设备总数：%d，在线：%d，离线：%d\n", s.DeviceTotal, s.DeviceUp, s.DeviceDown)
+	fmt.Fprintf(&b, "- 活跃告警：%d，今日告警：%d\n", s.AlertActive, s.AlertToday)
+	fmt.Fprintf(&b, "- 24h 严重日志：%d 条，警告日志：%d 条\n", s.LogError24h, s.LogWarn24h)
+	if len(s.TopDevices) > 0 {
+		b.WriteString("\n### 离线设备：\n")
+		for _, d := range s.TopDevices {
+			b.WriteString("- " + d + "\n")
+		}
+	}
+	b.WriteString("\n请根据以上数据生成巡检报告。")
+	return b.String()
+}
+
+func init() { modreg.RegisterProtected("aiinspect", RegisterProtected) }

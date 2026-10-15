@@ -249,6 +249,8 @@ func (m *Manager) collect(d Device) {
 		fmt.Printf("[snmp] device=%s(%s) v=%s user=%s auth=%s priv=%s FAIL: %v\n", d.Name, d.IP, d.SNMPVersion, d.Username, d.AuthProto, d.PrivProto, err)
 		msg = err.Error()
 		snap = &DeviceSnapshot{DeviceID: d.ID, Name: d.Name, IP: d.IP, Up: false, TS: time.Now(), Message: msg}
+	} else {
+		msg = "采集成功"
 	}
 	// 只在失败或状态变化（up<->down）时记日志，避免高频成功日志刷屏
 	m.mu.RLock()

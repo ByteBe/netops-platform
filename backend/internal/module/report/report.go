@@ -664,8 +664,19 @@ func generateAutoReport(a *core.App, kind string) {
 		start = end.Add(-30 * 24 * time.Hour)
 		title = "自动巡检月报 " + end.Format("2006-01")
 	}
-	content := renderHTML(title, start, end, renderLinkSection(a, start, end, map[string]int{}),
-		renderDevSection(a, start, end, map[string]int{}), renderDBSection(a, map[string]int{}), "", "", map[string]int{})
+	// 避免重复生成：当天已生成则跳过
+	var cnt int64
+	a.DB.Model(&model.ReportRecord{}).Where("title = ? AND DATE(created_at) = ?", title, end.Format("2006-01-02")).Count(&cnt)
+	if cnt > 0 {
+		return
+	}
+	stats := map[string]int{}
+	linkS := renderLinkSection(a, start, end, stats)
+	devS := renderDevSection(a, start, end, stats)
+	dbS := renderDBSection(a, stats)
+	containerS := renderContainerSection(a, stats)
+	nodeS := renderNodeSection(a, stats)
+	content := renderHTML(title, start, end, linkS, devS, dbS, containerS, nodeS, stats)
 	rec := model.ReportRecord{Title: title, StartAt: start, EndAt: end, Content: content, Creator: "system"}
 	a.DB.Create(&rec)
 }

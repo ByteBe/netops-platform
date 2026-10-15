@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -24,13 +25,13 @@ import (
 
 func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 	// 规则列表
-	g.GET("/alert/rules", func(c *gin.Context) {
+	g.GET("/rules", func(c *gin.Context) {
 		var list []model.AlertRule
 		a.DB.Order("id desc").Find(&list)
 		response.OK(c, list)
 	})
 	// 新建规则
-	g.POST("/alert/rules", middleware.RequireRole("admin"), func(c *gin.Context) {
+	g.POST("/rules", middleware.RequireRole("admin"), func(c *gin.Context) {
 		var r model.AlertRule
 		if err := c.ShouldBindJSON(&r); err != nil {
 			response.Bad(c, "参数错误")
@@ -40,7 +41,7 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		response.OK(c, r)
 	})
 	// 更新规则
-	g.PUT("/alert/rules/:id", middleware.RequireRole("admin"), func(c *gin.Context) {
+	g.PUT("/rules/:id", middleware.RequireRole("admin"), func(c *gin.Context) {
 		id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
 		var r model.AlertRule
 		if err := a.DB.First(&r, id).Error; err != nil {
@@ -52,14 +53,14 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		response.OK(c, r)
 	})
 	// 删除规则
-	g.DELETE("/alert/rules/:id", middleware.RequireRole("admin"), func(c *gin.Context) {
+	g.DELETE("/rules/:id", middleware.RequireRole("admin"), func(c *gin.Context) {
 		id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
 		a.DB.Delete(&model.AlertRule{}, id)
 		response.OK(c, gin.H{"ok": true})
 	})
 
 	// 事件列表
-	g.GET("/alert/events", func(c *gin.Context) {
+	g.GET("/events", func(c *gin.Context) {
 		page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 		size, _ := strconv.Atoi(c.DefaultQuery("size", "20"))
 		level := c.Query("level")
@@ -82,43 +83,20 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		response.OK(c, gin.H{"total": total, "list": list})
 	})
 	// 确认告警
-	g.POST("/alert/events/:id/ack", func(c *gin.Context) {
+	g.POST("/events/:id/ack", func(c *gin.Context) {
 		id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
 		now := time.Now()
 		a.DB.Model(&model.AlertEvent{}).Where("id = ?", id).Updates(map[string]any{"acked": true, "acked_at": now})
 		response.OK(c, gin.H{"ok": true})
 	})
 
-	// 通知渠道配置
-	g.GET("/alert/notifiers", func(c *gin.Context) {
-		var list []model.NotifyConfig
-		a.DB.Find(&list)
-		response.OK(c, list)
-	})
-	g.PUT("/alert/notifiers/:type", middleware.RequireRole("admin"), func(c *gin.Context) {
-		t := c.Param("type")
-		var req struct {
-			Config  string `json:"config"`
-			Enabled bool   `json:"enabled"`
-		}
-		c.ShouldBindJSON(&req)
-		var nc model.NotifyConfig
-		if err := a.DB.Where("type = ?", t).First(&nc).Error; err != nil {
-			nc = model.NotifyConfig{Type: t, Config: req.Config, Enabled: req.Enabled}
-			a.DB.Create(&nc)
-		} else {
-			a.DB.Model(&nc).Updates(map[string]any{"config": req.Config, "enabled": req.Enabled})
-		}
-		response.OK(c, nc)
-	})
-
 	// 通知渠道 CRUD
-	g.GET("/alert/notify", func(c *gin.Context) {
+	g.GET("/notify", func(c *gin.Context) {
 		var list []model.NotifyConfig
 		a.DB.Order("id desc").Find(&list)
 		response.OK(c, list)
 	})
-	g.POST("/alert/notify", middleware.RequireRole("admin"), func(c *gin.Context) {
+	g.POST("/notify", middleware.RequireRole("admin"), func(c *gin.Context) {
 		var req struct {
 			Name    string `json:"name"`
 			Type    string `json:"type"`
@@ -136,7 +114,7 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		a.DB.Create(&nc)
 		response.OK(c, nc)
 	})
-	g.DELETE("/alert/notify/:id", middleware.RequireRole("admin"), func(c *gin.Context) {
+	g.DELETE("/notify/:id", middleware.RequireRole("admin"), func(c *gin.Context) {
 		a.DB.Delete(&model.NotifyConfig{}, c.Param("id"))
 		response.OK(c, nil)
 	})
@@ -267,7 +245,9 @@ func StartEvaluator(app *core.App) {
 			if len(nodeRules) > 0 {
 				var nodes []model.Node
 				app.DB.Find(&nodes)
+				nodeSeen := map[uint]bool{}
 				for _, n := range nodes {
+					nodeSeen[n.ID] = true
 					key := fmt.Sprintf("node-%d", n.ID)
 					if n.Status != "online" {
 						if _, exists := overSince[key]; !exists {
@@ -279,6 +259,16 @@ func StartEvaluator(app *core.App) {
 						}
 					} else {
 						delete(overSince, key)
+					}
+				}
+				// 清理已删除节点的陈旧 key
+				for k := range overSince {
+					var nid uint
+					if strings.HasPrefix(k, "node-") {
+						fmt.Sscanf(k, "node-%d", &nid)
+						if !nodeSeen[nid] {
+							delete(overSince, k)
+						}
 					}
 				}
 			}

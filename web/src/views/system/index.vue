@@ -86,7 +86,21 @@ async function removeEmail(e: EmailConfig) {
   await ElMessageBox.confirm(t('common.confirmDelete'), t('common.tip'), { type: 'warning' })
   await delEnc(`/system/email/${e.id}`); ElMessage.success(t('common.success')); await loadEmails()
 }
-async function testEmail(e: EmailConfig) { await postEnc(`/system/email/${e.id}/test`, {}); ElMessage.success(t('system.testSent')) }
+async function testEmail(e: EmailConfig) {
+  try {
+    const to = await ElMessageBox.prompt('请输入收件人邮箱', '发送测试邮件', {
+      inputValue: e.default_to || e.user,
+      confirmButtonText: '发送',
+      cancelButtonText: '取消',
+      inputPattern: /^[^@]+@[^@]+$/,
+      inputErrorMessage: '邮箱格式不正确'
+    })
+    await postEnc(`/system/email/${e.id}/test`, { to: to.value })
+    ElMessage.success('测试邮件已发送，请查收')
+  } catch (err: any) {
+    if (err !== 'cancel' && err?.message) ElMessage.error(err.message)
+  }
+}
 function webhookPlaceholder() {
   switch (emailForm.type) {
     case 'dingtalk': return 'https://oapi.dingtalk.com/robot/send?access_token=xxx'

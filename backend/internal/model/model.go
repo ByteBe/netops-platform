@@ -434,6 +434,18 @@ type TaskLog struct {
 	CreatedAt  time.Time `gorm:"index" json:"created_at"`
 }
 
+// DeviceLog 设备日志（syslog/docker/k8s/ssh）
+type DeviceLog struct {
+	ID         uint      `gorm:"primaryKey" json:"id"`
+	Source     string    `gorm:"size:32;index" json:"source"` // syslog/docker/k8s/ssh
+	DeviceName string    `gorm:"size:128;index" json:"device_name"`
+	IP         string    `gorm:"size:64" json:"ip"`
+	Level      string    `gorm:"size:16;index" json:"level"` // info/warning/error/critical
+	Facility   string    `gorm:"size:32" json:"facility"`
+	Message    string    `gorm:"type:text" json:"message"`
+	CreatedAt  time.Time `gorm:"index" json:"created_at"`
+}
+
 func (m *MonitorDevice) BeforeSave(tx *gorm.DB) error {
 	m.Community = secstore.Seal(m.Community)
 	m.AuthPass = secstore.Seal(m.AuthPass)
@@ -499,3 +511,11 @@ func (m *ConfigBackupDevice) AfterFind(tx *gorm.DB) error {
 
 func (m *NotifyConfig) BeforeSave(tx *gorm.DB) error { m.Token = secstore.Seal(m.Token); return nil }
 func (m *NotifyConfig) AfterFind(tx *gorm.DB) error  { m.Token = secstore.Open(m.Token); return nil }
+
+// AIInspectReport AI 巡检历史报告
+type AIInspectReport struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	Report    string    `gorm:"type:mediumtext" json:"report"`
+	Snapshot  string    `gorm:"type:text" json:"snapshot"`
+	CreatedAt time.Time `json:"created_at"`
+}

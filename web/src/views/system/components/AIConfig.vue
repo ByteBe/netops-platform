@@ -44,7 +44,14 @@ async function remove(a: AIConfig) {
 }
 const reply = ref('')
 const replyVisible = ref(false)
-async function test(a: AIConfig) { const r = await postEnc<any>(`/system/ai/${a.id}/test`, {}); reply.value = r.reply; replyVisible.value = true }
+async function test(a: AIConfig) {
+  try {
+    const r = await postEnc<any>(`/system/ai/${a.id}/test`, {})
+    reply.value = r.reply; replyVisible.value = true
+  } catch (e: any) {
+    ElMessage.error(e?.message || '测试失败')
+  }
+}
 </script>
 <template>
   <div>
@@ -74,7 +81,7 @@ async function test(a: AIConfig) { const r = await postEnc<any>(`/system/ai/${a.
           <el-select v-model="form.provider" @change="onProvider"><el-option v-for="p in providers" :key="p.value" :label="p.label" :value="p.value" /></el-select>
         </el-form-item>
         <el-form-item :label="t('system.apiBase')"><el-input v-model="form.base_url" /></el-form-item>
-        <el-form-item :label="t('system.apiKey')"><el-input v-model="form.api_key" /></el-form-item>
+        <el-form-item :label="t('system.apiKey')"><el-input v-model="form.api_key" type="password" show-password /></el-form-item>
         <el-form-item :label="t('system.model')">
           <el-select v-model="form.model" filterable allow-create :loading="loadingModels" :placeholder="t('system.model')" style="width: 420px">
             <el-option v-for="m in modelOptions" :key="m" :label="m" :value="m" />

@@ -42,6 +42,8 @@ func AllModels() []any {
 		&model.ReportRecord{}, &model.SystemSetting{}, &model.DockerHost{}, &model.K8sCluster{},
 		&model.Node{}, &model.ConfigBackupDevice{}, &model.ConfigBackup{},
 		&model.AlertRule{}, &model.AlertEvent{}, &model.NotifyConfig{}, &model.TaskLog{},
+		&model.DeviceLog{},
+		&model.AIInspectReport{},
 	}
 }
 

@@ -25,9 +25,10 @@ import dbmigrate from './en-US/dbmigrate'
 import setup from './en-US/setup'
 import bgp from './en-US/bgp'
 import tasklog from './en-US/tasklog'
+import devicelog from './en-US/devicelog'
 
 export default {
   app, nav, common, login, dashboard, link, topo, monitor, container,
   report, alert, resource, subnet, node, dbmon, script, ipam, traffic,
-  system, profile, theme, lang, k8s, dbmigrate, setup, bgp, tasklog
+  system, profile, theme, lang, k8s, dbmigrate, setup, bgp, tasklog, devicelog
 }

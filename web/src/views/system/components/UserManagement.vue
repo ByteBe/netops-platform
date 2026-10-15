@@ -4,12 +4,12 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { getEnc, postEnc, putEnc, delEnc } from '@/utils/request'
 const { t } = useI18n()
-interface SysUser { id: number; username: string; employee_no: string; email: string; role: string; node_scope: string; status: string }
+interface SysUser { id: number; username: string; employee_no: string; role: string; node_scope: string; status: string }
 interface Node { id: number; name: string; node_id: string }
 const users = ref<SysUser[]>([])
 const nodes = ref<Node[]>([])
 const dlg = ref(false)
-const form = reactive({ id: 0, username: '', employee_no: '', email: '', role: 'operator', node_scope: 'all', status: 'active', password: '' })
+const form = reactive({ id: 0, username: '', employee_no: '', role: 'operator', node_scope: 'all', status: 'active', password: '' })
 async function load() {
   const r = await getEnc<{list: SysUser[]}>('/user/users')
   users.value = r.list || []
@@ -17,13 +17,13 @@ async function load() {
 }
 onMounted(load)
 function open(u?: SysUser) {
-  if (u) Object.assign(form, { id: u.id, username: u.username, employee_no: u.employee_no, email: u.email, role: u.role, node_scope: u.node_scope || 'all', status: u.status, password: '' })
-  else Object.assign(form, { id: 0, username: '', employee_no: '', email: '', role: 'operator', node_scope: 'all', status: 'active', password: '' })
+  if (u) Object.assign(form, { id: u.id, username: u.username, employee_no: u.employee_no, role: u.role, node_scope: u.node_scope || 'all', status: u.status, password: '' })
+  else Object.assign(form, { id: 0, username: '', employee_no: '', role: 'operator', node_scope: 'all', status: 'active', password: '' })
   dlg.value = true
 }
 async function save() {
-  if (!form.username || !form.email) return ElMessage.warning(t('common.tip'))
-  if (form.id) await putEnc(`/user/users/${form.id}`, { employee_no: form.employee_no, email: form.email, role: form.role, node_scope: form.node_scope, status: form.status })
+  if (!form.username) return ElMessage.warning(t('common.tip'))
+  if (form.id) await putEnc(`/user/users/${form.id}`, { employee_no: form.employee_no, role: form.role, node_scope: form.node_scope, status: form.status })
   else await postEnc('/user/users', form)
   ElMessage.success(t('common.success')); dlg.value = false; await load()
 }
@@ -44,7 +44,6 @@ function scopeLabel(s: string) { return s === 'all' ? t('system.allNodes') : (no
       <el-table :data="users" stripe class="np-table">
         <el-table-column prop="username" :label="t('system.username')" min-width="120" />
         <el-table-column prop="employee_no" :label="t('system.empNo')" width="120" />
-        <el-table-column prop="email" :label="t('system.emailCol')" min-width="180" />
         <el-table-column prop="role" :label="t('system.roleName')" width="90" />
         <el-table-column :label="t('system.dataScope')" min-width="140"><template #default="{row}">{{ scopeLabel(row.node_scope) }}</template></el-table-column>
         <el-table-column prop="status" :label="t('common.status')" width="90" />
@@ -61,7 +60,6 @@ function scopeLabel(s: string) { return s === 'all' ? t('system.allNodes') : (no
       <el-form :model="form" label-width="90px">
         <el-form-item :label="t('system.username')"><el-input v-model="form.username" :disabled="!!form.id" /></el-form-item>
         <el-form-item :label="t('system.empNo')"><el-input v-model="form.employee_no" /></el-form-item>
-        <el-form-item :label="t('system.emailCol')"><el-input v-model="form.email" /></el-form-item>
         <el-form-item :label="t('system.roleName')">
           <el-select v-model="form.role"><el-option :label="t('system.admin')" value="admin" /><el-option :label="t('system.opRole')" value="operator" /></el-select>
         </el-form-item>

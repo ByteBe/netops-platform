@@ -19,6 +19,8 @@ import (
 	"netops/internal/bootstrap"
 	"netops/internal/config"
 	"netops/internal/model"
+	_ "netops/internal/module/aiinspect"
+	"netops/internal/module/devicelog"
 	"netops/internal/router"
 
 	"github.com/gin-gonic/gin"
@@ -33,7 +35,7 @@ func main() {
   ██║╚██╗██║██╔══╝     ██║       ██║  ██║██║   ██║██║  ██║██╔══╝
   ██║ ╚████║███████╗   ██║       ██████╔╝╚██████╔╝██████╔╝███████╗
   ╚═╝  ╚═══╝╚══════╝   ╚═╝       ╚═════╝  ╚═════╝ ╚═════╝ ╚══════╝
-  NetOps 网络运维监控平台 v2.1.4 | 告警规则引擎 · 采集退避 · 任务日志
+  NetOps 网络运维监控平台 v2.1.8 | AI巡检 · 日志中心 · 告警通知
 `)
 
 	// 1. 加载配置（支持 --config 指定，缺省自动探测 ./config.yaml 与可执行文件同目录）
@@ -132,7 +134,10 @@ func main() {
 		}
 	}()
 
-	// 7. 优雅退出
+	// 7. 启动 syslog UDP 接收
+	devicelog.StartSyslogReceiver(app)
+
+	// 8. 优雅退出
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit

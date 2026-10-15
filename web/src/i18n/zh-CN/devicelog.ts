@@ -1,0 +1,19 @@
+export default {
+  title: '日志中心',
+  tabDevice: '设备日志',
+  tabTask: '采集任务日志',
+  refresh: '刷新',
+  clear: '清空日志',
+  clearConfirm: '确定清空所有设备日志？',
+  time: '时间',
+  source: '来源',
+  level: '级别',
+  device: '设备',
+  facility: '设施',
+  message: '日志内容',
+  devicePh: '设备名/IP',
+  keywordPh: '搜索关键词',
+  status: '状态',
+  type: '类型',
+  duration: '耗时'
+}

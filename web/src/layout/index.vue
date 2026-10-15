@@ -20,7 +20,7 @@ const groups: { titleKey: string; items: string[] }[] = [
   { titleKey: 'group_alert', items: ['alert'] },
   { titleKey: 'group_asset', items: ['resource', 'ipam', 'subnet'] },
   { titleKey: 'group_infra', items: ['container', 'k8s', 'dbmonitor'] },
-  { titleKey: 'group_ops', items: ['report', 'scriptgen'] },
+  { titleKey: 'group_ops', items: ['report', 'scriptgen', 'devicelog', 'aiinspect'] },
   { titleKey: 'group_system', items: ['system', 'distributed', 'dbmigrate'] }
 ]
 const menus = computed(() => {
