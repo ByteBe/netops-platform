@@ -44,6 +44,9 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 					item["uptime"] = s.Uptime
 					item["log_file"] = s.LogFile
 					item["message"] = s.Message
+					item["cpu_percent"] = s.CpuPercent
+					item["mem_used"] = s.MemUsed
+					item["mem_total"] = s.MemTotal
 					break
 				}
 			}

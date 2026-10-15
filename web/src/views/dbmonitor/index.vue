@@ -38,6 +38,9 @@ interface DBSnap {
   uptime_s: number
   log_pos: string
   message: string
+  cpu_percent: number
+  mem_used: number
+  mem_total: number
   ts: string
 }
 
@@ -86,7 +89,8 @@ async function load() {
           size_bytes: d.data_size || 0, table_count: d.table_count || 0,
           tx_rate: d.tx_per_sec || 0, deadlocks: d.deadlocks || 0,
           error_count: d.errors || 0, uptime_s: d.uptime || 0,
-          log_pos: '', message: d.message || '', ts: ''
+          log_pos: '', message: d.message || '', ts: '',
+          cpu_percent: d.cpu_percent || 0, mem_used: d.mem_used || 0, mem_total: d.mem_total || 0
         }
       }
     }
@@ -212,10 +216,10 @@ onBeforeUnmount(() => {
             <div class="np-db-m"><span class="np-db-label">{{ t('dbmon.connections') }}</span><span>{{ snaps[d.id]?.conns ?? '--' }} / {{ snaps[d.id]?.max_conns ?? '--' }}</span></div>
             <div class="np-db-m"><span class="np-db-label">{{ t('dbmon.capacity') }}</span><span>{{ snaps[d.id] ? fmtBytes(snaps[d.id].size_bytes) : '--' }}</span></div>
             <div class="np-db-m"><span class="np-db-label">{{ t('dbmon.tables') }}</span><span>{{ snaps[d.id]?.table_count ?? '--' }}</span></div>
-            <div class="np-db-m"><span class="np-db-label">{{ t('dbmon.txRate') }}</span><span>{{ snaps[d.id]?.tx_rate ?? '--' }}/s</span></div>
-            <div class="np-db-m"><span class="np-db-label">{{ t('dbmon.deadlocks') }}</span><span :style="{ color: (snaps[d.id]?.deadlocks || 0) > 0 ? '#ef4444' : '' }">{{ snaps[d.id]?.deadlocks ?? '--' }}</span></div>
-            <div class="np-db-m"><span class="np-db-label">{{ t('dbmon.errors') }}</span><span :style="{ color: (snaps[d.id]?.error_count || 0) > 0 ? '#ef4444' : '' }">{{ snaps[d.id]?.error_count ?? '--' }}</span></div>
-            <div class="np-db-m"><span class="np-db-label">{{ t('dbmon.uptime') }}</span><span>{{ fmtDuration(snaps[d.id]?.uptime_s || 0) }}</span></div>
+            <div class="np-db-m"><span class="np-db-label">存活状态</span><span :style="{ color: snaps[d.id]?.up ? '#22c55e' : '#ef4444' }">{{ snaps[d.id]?.up ? '运行中' : '离线' }}</span></div>
+            <div class="np-db-m"><span class="np-db-label">CPU 使用率</span><span>{{ snaps[d.id] && snaps[d.id].cpu_percent > 0 ? snaps[d.id].cpu_percent.toFixed(1) + '%' : '--' }}</span></div>
+            <div class="np-db-m"><span class="np-db-label">内存使用</span><span>{{ snaps[d.id] && snaps[d.id].mem_used > 0 ? fmtBytes(snaps[d.id].mem_used) : '--' }}</span></div>
+            <div class="np-db-m"><span class="np-db-label">运行时长</span><span>{{ fmtDuration(snaps[d.id]?.uptime_s || 0) }}</span></div>
           </div>
           <div class="np-db-msg" v-if="snaps[d.id]?.message">{{ snaps[d.id]!.message }}</div>
         </div>

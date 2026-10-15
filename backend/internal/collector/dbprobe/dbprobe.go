@@ -9,7 +9,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"netops/internal/common/logger"
+	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
@@ -23,6 +24,77 @@ import (
 	"netops/internal/notify"
 	"netops/internal/tsdb"
 )
+
+var cpuMu sync.Mutex
+var prevCPUTime = map[uint]int64{}
+var prevCPUIdle = map[uint]int64{}
+var tdHTTPClient = &http.Client{Timeout: 10 * time.Second}
+
+func hostStats(id uint, host string) (cpuPct float64, memUsed, memTotal float64, diskUsed float64, uptime float64) {
+	if host != "127.0.0.1" && host != "localhost" && host != "0.0.0.0" {
+		return 0, 0, 0, 0, 0
+	}
+	// CPU
+	if data, err := os.ReadFile("/proc/stat"); err == nil {
+		fields := strings.Fields(strings.SplitN(string(data), "\n", 2)[0])
+		var total, idle int64
+		for i := 1; i < len(fields); i++ {
+			v, _ := strconv.ParseInt(fields[i], 10, 64)
+			total += v
+			if i == 4 {
+				idle = v
+			}
+		}
+		cpuMu.Lock()
+		if prev, ok := prevCPUTime[id]; ok && total > prev {
+			dTotal := float64(total - prev)
+			dIdle := float64(idle - prevCPUIdle[id])
+			if dTotal > 0 {
+				cpuPct = (1 - dIdle/dTotal) * 100
+			}
+		}
+		prevCPUTime[id] = total
+		prevCPUIdle[id] = idle
+		cpuMu.Unlock()
+	}
+	// Mem
+	if data, err := os.ReadFile("/proc/meminfo"); err == nil {
+		for _, line := range strings.Split(string(data), "\n") {
+			if strings.HasPrefix(line, "MemTotal:") {
+				v := strings.Fields(line)
+				if n, err := strconv.ParseFloat(v[1], 64); err == nil {
+					memTotal = n * 1024
+				}
+			}
+			if strings.HasPrefix(line, "MemAvailable:") {
+				v := strings.Fields(line)
+				if n, err := strconv.ParseFloat(v[1], 64); err == nil && memTotal > 0 {
+					memUsed = memTotal - n*1024
+				}
+			}
+		}
+	}
+	// Disk
+	if out, err := exec.Command("df", "-B1", "/").Output(); err == nil {
+		lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+		if len(lines) >= 2 {
+			fields := strings.Fields(lines[1])
+			if len(fields) >= 3 {
+				if n, err := strconv.ParseFloat(fields[2], 64); err == nil {
+					diskUsed = n
+				}
+			}
+		}
+	}
+	// Uptime
+	if data, err := os.ReadFile("/proc/uptime"); err == nil {
+		fields := strings.Fields(string(data))
+		if n, err := strconv.ParseFloat(fields[0], 64); err == nil {
+			uptime = n
+		}
+	}
+	return
+}
 
 // Instance 监控实例配置
 type Instance struct {
@@ -54,6 +126,9 @@ type Snapshot struct {
 	Uptime     float64   `json:"uptime_s"`
 	LogFile    string    `json:"log_file"`
 	Message    string    `json:"message"`
+	CpuPercent float64   `json:"cpu_percent"`
+	MemUsed    float64   `json:"mem_used"` // 字节
+	MemTotal   float64   `json:"mem_total"`
 	TS         time.Time `json:"ts"`
 }
 
@@ -63,6 +138,7 @@ type Manager struct {
 	insts    map[uint]*Instance
 	runs     map[uint]chan struct{}
 	snap     map[uint]*Snapshot
+	pools    map[uint]*sql.DB // 复用连接池
 	prevTx   map[uint]float64
 	prevErr  map[uint]float64
 	prevTime map[uint]time.Time
@@ -78,6 +154,7 @@ func NewManager(ts tsdb.Engine, hub *notify.Hub) *Manager {
 		insts:    map[uint]*Instance{},
 		runs:     map[uint]chan struct{}{},
 		snap:     map[uint]*Snapshot{},
+		pools:    map[uint]*sql.DB{},
 		prevTx:   map[uint]float64{},
 		prevErr:  map[uint]float64{},
 		prevTime: map[uint]time.Time{},
@@ -99,6 +176,10 @@ func (m *Manager) Sync(insts []Instance) {
 		if _, ok := next[id]; !ok {
 			close(stop)
 			delete(m.runs, id)
+			if p, ok := m.pools[id]; ok {
+				p.Close()
+				delete(m.pools, id)
+			}
 		}
 	}
 	m.insts = next
@@ -153,7 +234,32 @@ func (m *Manager) loop(d Instance, stop chan struct{}) {
 }
 
 func (m *Manager) collect(d Instance) {
-	snap := m.probe(d)
+	m.mu.Lock()
+	var prev Snapshot
+	if p := m.snap[d.ID]; p != nil {
+		prev = *p
+	}
+	m.mu.Unlock()
+	snap := m.probe(d, prev)
+	// 字段合并：新值为 0 或 -1（查询失败）时保留旧值，避免刷新丢失数据
+	if snap.Up {
+		keep := func(newVal, oldVal float64) float64 {
+			if newVal <= 0 {
+				return oldVal
+			}
+			return newVal
+		}
+		if snap.Version == "" {
+			snap.Version = prev.Version
+		}
+		snap.DataSize = keep(snap.DataSize, prev.DataSize)
+		snap.TableCount = keep(snap.TableCount, prev.TableCount)
+		snap.Conns = keep(snap.Conns, prev.Conns)
+		snap.Uptime = keep(snap.Uptime, prev.Uptime)
+		snap.CpuPercent = keep(snap.CpuPercent, prev.CpuPercent)
+		snap.MemUsed = keep(snap.MemUsed, prev.MemUsed)
+		snap.MemTotal = keep(snap.MemTotal, prev.MemTotal)
+	}
 	m.mu.Lock()
 	m.snap[d.ID] = &snap
 	m.mu.Unlock()
@@ -163,12 +269,20 @@ func (m *Manager) collect(d Instance) {
 	if snap.Up {
 		up = 1
 	}
+	tags := map[string]string{"db_id": fmt.Sprint(d.ID), "name": d.Name}
 	rows := []tsdb.Row{
-		{Metric: "db_avail", Field: "value", Tags: map[string]string{"db_id": fmt.Sprint(d.ID), "name": d.Name}, Value: up, TS: now},
-		{Metric: "db_conn", Field: "value", Tags: map[string]string{"db_id": fmt.Sprint(d.ID), "name": d.Name}, Value: snap.Conns, TS: now},
-		{Metric: "db_size", Field: "value", Tags: map[string]string{"db_id": fmt.Sprint(d.ID), "name": d.Name}, Value: snap.DataSize, TS: now},
-		{Metric: "db_tx", Field: "value", Tags: map[string]string{"db_id": fmt.Sprint(d.ID), "name": d.Name}, Value: snap.TxPerSec, TS: now},
-		{Metric: "db_err", Field: "value", Tags: map[string]string{"db_id": fmt.Sprint(d.ID), "name": d.Name}, Value: snap.Errors, TS: now},
+		{Metric: "db_avail", Field: "value", Tags: tags, Value: up, TS: now},
+		{Metric: "db_conn", Field: "value", Tags: tags, Value: snap.Conns, TS: now},
+		{Metric: "db_size", Field: "value", Tags: tags, Value: snap.DataSize, TS: now},
+		{Metric: "db_tx", Field: "value", Tags: tags, Value: snap.TxPerSec, TS: now},
+		{Metric: "db_err", Field: "value", Tags: tags, Value: snap.Errors, TS: now},
+	}
+	if snap.CpuPercent > 0 {
+		rows = append(rows, tsdb.Row{Metric: "db_cpu", Field: "value", Tags: tags, Value: snap.CpuPercent, TS: now})
+	}
+	if snap.MemUsed > 0 {
+		rows = append(rows, tsdb.Row{Metric: "db_mem", Field: "used", Tags: tags, Value: snap.MemUsed, TS: now})
+		rows = append(rows, tsdb.Row{Metric: "db_mem", Field: "total", Tags: tags, Value: snap.MemTotal, TS: now})
 	}
 	if m.ts != nil {
 		_ = m.ts.Write(rows)
@@ -179,61 +293,94 @@ func (m *Manager) collect(d Instance) {
 func (m *Manager) probeTDengine(d Instance, snap Snapshot) Snapshot {
 	dbn := d.DBName
 	if dbn == "" {
-		dbn = "data"
+		dbn = "log"
 	}
-	url := fmt.Sprintf("http://%s:%d/rest/sql/%s", d.Host, d.Port, dbn)
-	req, _ := http.NewRequest("POST", url, strings.NewReader("SELECT SERVER_STATUS()"))
-	req.SetBasicAuth(d.User, d.Password)
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		snap.Message = "连接失败: " + err.Error()
-		return snap
+	client := tdHTTPClient
+	tdQuery := func(sql string) (any, error) {
+		url := fmt.Sprintf("http://%s:%d/rest/sql/%s", d.Host, d.Port, dbn)
+		req, _ := http.NewRequest("POST", url, strings.NewReader(sql))
+		req.SetBasicAuth(d.User, d.Password)
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+		var body struct {
+			Code int             `json:"code"`
+			Desc string          `json:"desc"`
+			Data [][]interface{} `json:"data"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			return nil, err
+		}
+		if body.Code != 0 {
+			return nil, fmt.Errorf("%s", body.Desc)
+		}
+		if len(body.Data) > 0 && len(body.Data[0]) > 0 {
+			return body.Data[0][0], nil
+		}
+		return nil, nil
 	}
-	defer resp.Body.Close()
-	var body struct {
-		Code int             `json:"code"`
-		Desc string          `json:"desc"`
-		Data [][]interface{} `json:"data"`
-	}
-	_ = json.NewDecoder(resp.Body).Decode(&body)
-	if body.Code != 0 {
-		snap.Message = fmt.Sprintf("连接失败: %s", body.Desc)
-		return snap
+	if v, err := tdQuery("SELECT SERVER_VERSION()"); err == nil && v != nil {
+		snap.Version = fmt.Sprint(v)
 	}
 	snap.Up = true
 	snap.Status = "up"
-	if len(body.Data) > 0 && len(body.Data[0]) > 0 {
-		snap.Version = fmt.Sprint(body.Data[0][0])
-	}
 	snap.Conns = 1
-	snap.TableCount = 1
+	// 存储用量：disk_used（字节）
+	if v, err := tdQuery("SELECT COUNT(*) FROM information_schema.ins_tables"); err == nil && v != nil {
+		snap.TableCount, _ = strconv.ParseFloat(fmt.Sprint(v), 64)
+	}
+	// TDengine 数据目录大小
+	for _, dir := range []string{"/opt/tdengine/data", "/var/lib/taos"} {
+		if out, err := exec.Command("du", "-sb", dir).Output(); err == nil {
+			fields := strings.Fields(strings.TrimSpace(string(out)))
+			if n, err := strconv.ParseFloat(fields[0], 64); err == nil && n > 0 {
+				snap.DataSize = n
+				break
+			}
+		}
+	}
+	var diskUsed, uptime float64
+	snap.CpuPercent, snap.MemUsed, snap.MemTotal, diskUsed, uptime = hostStats(d.ID, d.Host)
+	if snap.Uptime == 0 {
+		snap.Uptime = uptime
+	}
+	_ = diskUsed
 	return snap
 }
 
 // probe 单实例采集
-func (m *Manager) probe(d Instance) Snapshot {
+func (m *Manager) probe(d Instance, prev Snapshot) Snapshot {
 	snap := Snapshot{InstanceID: d.ID, Name: d.Name, Type: d.Type, TS: time.Now()}
 	if strings.ToLower(d.Type) == "tdengine" {
 		return m.probeTDengine(d, snap)
 	}
 	dsn := buildDSN(d)
-	logger.Infof("[dbprobe] id=%d type=%s host=%s dbname=%q dsn=%s", d.ID, d.Type, d.Host, d.DBName, dsn)
 	if dsn == "" {
 		snap.Message = "不支持的数据库类型: " + d.Type
 		return snap
 	}
-	db, err := sql.Open(driverName(d.Type), dsn)
-	if err != nil {
-		snap.Message = err.Error()
-		return snap
+	// 复用连接池
+	m.mu.RLock()
+	db := m.pools[d.ID]
+	m.mu.RUnlock()
+	if db == nil {
+		var err error
+		db, err = sql.Open(driverName(d.Type), dsn)
+		if err != nil {
+			snap.Message = err.Error()
+			return snap
+		}
+		db.SetMaxIdleConns(2)
+		db.SetMaxOpenConns(3)
+		db.SetConnMaxLifetime(5 * time.Minute)
+		m.mu.Lock()
+		m.pools[d.ID] = db
+		m.mu.Unlock()
 	}
-	defer db.Close()
-	db.SetMaxIdleConns(1)
-	db.SetMaxOpenConns(2)
-	db.SetConnMaxLifetime(30 * time.Second)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	if err := db.PingContext(ctx); err != nil {
@@ -270,12 +417,13 @@ func (m *Manager) probe(d Instance) Snapshot {
 	if hasErr && errCnt >= prevE {
 		snap.Errors = errCnt - prevE
 	}
+	snap.CpuPercent, snap.MemUsed, snap.MemTotal, _, _ = hostStats(d.ID, d.Host)
 	return snap
 }
 
 // TestInstance 即时测试一个连接配置（不加入采集循环）
 func (m *Manager) TestInstance(d Instance) Snapshot {
-	snap := m.probe(d)
+	snap := m.probe(d, Snapshot{})
 	if d.ID > 0 {
 		m.mu.Lock()
 		m.snap[d.ID] = &snap
@@ -412,7 +560,7 @@ func sizeSQL(t string) string {
 	case "tdengine":
 		return "SELECT SUM(disk_total) FROM information_schema.ins_dnodes"
 	default:
-		return "SHOW GLOBAL STATUS LIKE 'Innodb_data_bytes'"
+		return "SELECT COALESCE(SUM(data_length+index_length),0) FROM information_schema.tables WHERE table_schema NOT IN ('mysql','sys','information_schema','performance_schema')"
 	}
 }
 
@@ -530,11 +678,23 @@ func num(db *sql.DB, ctx context.Context, query string) float64 {
 		}
 		return v
 	}
-	var v float64
+	var v interface{}
 	if err := db.QueryRowContext(ctx, query).Scan(&v); err != nil {
 		return -1
 	}
-	return v
+	switch n := v.(type) {
+	case int64:
+		return float64(n)
+	case float64:
+		return n
+	case []byte:
+		f, _ := strconv.ParseFloat(string(n), 64)
+		return f
+	case string:
+		f, _ := strconv.ParseFloat(n, 64)
+		return f
+	}
+	return -1
 }
 
 func firstNonEmpty(a, b string) string {
