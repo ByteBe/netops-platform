@@ -45,7 +45,7 @@ function dbLabel(k: string) {
 
 const dbForm = reactive({ type: 'sqlite', host: '127.0.0.1', port: 3306, user: '', password: '', database: 'netops', path: 'data/netops.db' })
 const tsdbForm = reactive({ type: 'builtin', host: '127.0.0.1', port: 6041, user: 'root', pass: 'taosdata', db: 'data', params: '' })
-const adminForm = reactive({ username: 'admin', password: '', email: '', employee_no: '' })
+const adminForm = reactive({ username: 'admin', password: '' })
 const dbTypesList = ref<string[]>([])
 const tsdbTypesList = ref<string[]>([])
 
@@ -239,8 +239,6 @@ onMounted(async () => {
         <el-form label-width="120px" label-position="left">
           <el-form-item :label="t('setup.adminUser')" required><el-input v-model="adminForm.username" /></el-form-item>
           <el-form-item :label="t('setup.initialPwd')" required><el-input v-model="adminForm.password" type="password" show-password /></el-form-item>
-          <el-form-item :label="t('setup.employeeNo')"><el-input v-model="adminForm.employee_no" /></el-form-item>
-          <el-form-item :label="t('setup.email')"><el-input v-model="adminForm.email" /></el-form-item>
         </el-form>
         <div class="np-step-actions">
           <el-button @click="step = 3">{{ t('setup.prev') }}</el-button>

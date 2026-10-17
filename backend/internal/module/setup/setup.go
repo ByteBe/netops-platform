@@ -130,10 +130,8 @@ func Register(a *core.App, g *gin.RouterGroup) {
 				DeployMode string          `json:"deploy_mode"`
 				WebPort    int             `json:"web_port"` // 前端独立端口（0=前端由 API 端口提供）
 				Admin      struct {
-					Username   string `json:"username"`
-					Password   string `json:"password"`
-					Email      string `json:"email"`
-					EmployeeNo string `json:"employee_no"`
+					Username string `json:"username"`
+					Password string `json:"password"`
 				} `json:"admin"`
 			}
 			if err := json.Unmarshal(plain, &req); err != nil {
@@ -196,13 +194,11 @@ func Register(a *core.App, g *gin.RouterGroup) {
 			salt, _ := crypto.GenerateSalt()
 			a.DB.Where("username = ?", req.Admin.Username).Delete(&model.User{})
 			admin := model.User{
-				Username:      req.Admin.Username,
-				EmployeeNo:    req.Admin.EmployeeNo,
-				Email:         req.Admin.Email,
-				PasswordHash:  crypto.PasswordHash(req.Admin.Password, salt),
-				Salt:          salt,
-				Role:          "admin",
-				Status:        "active",
+				Username:     req.Admin.Username,
+				PasswordHash: crypto.PasswordHash(req.Admin.Password, salt),
+				Salt:         salt,
+				Role:         "admin",
+				Status:       "active",
 				MustChangePwd: false,
 			}
 			if err := a.DB.Create(&admin).Error; err != nil {
