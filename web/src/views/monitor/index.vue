@@ -389,20 +389,22 @@ onBeforeUnmount(() => {
           <span v-if="testResult" :style="{ marginLeft:'12px', color: testResult.indexOf(t('monitor.testSuccess')) >= 0 ? '#67C23A' : '#F56C6C', fontSize:'13px' }">{{ testResult }}</span>
         </el-form-item>
         <el-divider content-position="left">BGP/VPNv4 SSH</el-divider>
-        <el-form-item :label="t('bgp.sshUser')">
-          <el-input v-model="form.ssh_user" placeholder="admin" />
-        </el-form-item>
-        <el-form-item :label="t('bgp.sshPass')">
-          <el-input v-model="form.ssh_pass" type="password" show-password />
-        </el-form-item>
-        <el-form-item :label="t('bgp.sshPort')">
-          <el-input-number v-model="form.ssh_port" :min="1" :max="65535" style="margin-right:12px" />
-          <el-button :loading="sshTesting" @click="testSsh">{{ t('bgp.testBtn') }}</el-button>
-          <span v-if="sshTestResult" :style="{ marginLeft:'12px', color: sshTestResult.indexOf('OK') >= 0 ? '#67C23A' : '#F56C6C', fontSize:'13px' }">{{ sshTestResult }}</span>
-        </el-form-item>
         <el-form-item :label="t('bgp.bgpEnable')">
           <el-switch v-model="form.bgp_enable" />
         </el-form-item>
+        <template v-if="form.bgp_enable">
+          <el-form-item :label="t('bgp.sshUser')">
+            <el-input v-model="form.ssh_user" placeholder="admin" />
+          </el-form-item>
+          <el-form-item :label="t('bgp.sshPass')">
+            <el-input v-model="form.ssh_pass" type="password" show-password />
+          </el-form-item>
+          <el-form-item :label="t('bgp.sshPort')">
+            <el-input-number v-model="form.ssh_port" :min="1" :max="65535" style="margin-right:12px" />
+            <el-button :loading="sshTesting" @click="testSsh">{{ t('bgp.testBtn') }}</el-button>
+            <span v-if="sshTestResult" :style="{ marginLeft:'12px', color: sshTestResult.indexOf('OK') >= 0 ? '#67C23A' : '#F56C6C', fontSize:'13px' }">{{ sshTestResult }}</span>
+          </el-form-item>
+        </template>
         <el-form-item :label="t('monitor.displayIfs')">
           <el-select v-model="displayIfArr" multiple filterable :placeholder="t('monitor.displayIfsPlaceholder')" style="width:100%">
             <el-option v-for="i in (snaps[form.id]?.interfaces || [])" :key="i.index" :label="i.name" :value="i.name" />
