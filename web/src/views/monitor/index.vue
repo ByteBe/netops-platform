@@ -151,7 +151,7 @@ async function testConn() {
       username: form.username, auth_proto: form.auth_proto, priv_proto: form.priv_proto,
       auth_pass: form.auth_pass, priv_pass: form.priv_pass, port: form.port
     })
-    testResult.value = r.ok ? `${t('monitor.testSuccess')} (Uptime ${Math.floor((r.uptime||0)/86400)}${t('monitor.days')})` : `${t('monitor.testFail')}: ${r.error}`
+    testResult.value = (r && r.ok) ? `${t('monitor.testSuccess')} (Uptime ${Math.floor((r.uptime||0)/86400)}${t('monitor.days')})` : `${t('monitor.testFail')}: ${(r && r.error) || t('monitor.testFail')}`
   } catch (e: any) { testResult.value = t('monitor.testFail') + ': ' + e.message } finally { testing.value = false }
 }
 
@@ -341,7 +341,7 @@ onBeforeUnmount(() => {
             <el-option label="Linux" value="linux" />
           </el-select>
         </el-form-item>
-        <template v-if="form.type !== 'server' && form.type !== 'db'">
+        <template v-if="form.type !== 'db'">
         <el-form-item :label="t('monitor.snmpVersion')">
           <el-select v-model="form.snmp_version" style="width: 120px">
             <el-option label="v1" value="1" />

@@ -126,6 +126,7 @@ http.interceptors.response.use(
     if (body.code !== OK) {
       if (body.code === 40100) {
         auth.logout()
+        router.push('/login')
       } else if (body.code === 40310) {
         // 强制改密：跳转改密页
         /* 强制改密由路由守卫处理 */
@@ -140,7 +141,7 @@ http.interceptors.response.use(
   (error) => {
     const status = error?.response?.status
     if (status === 401) {
-      try { useAuthStore().logout() } catch {}
+      try { useAuthStore().logout(); router.push('/login') } catch {}
       return Promise.resolve({ data: { code: 40100, data: null } })
     }
     const auth = useAuthStore()
