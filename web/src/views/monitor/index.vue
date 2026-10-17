@@ -158,7 +158,7 @@ async function testConn() {
 const sshTesting = ref(false)
 const sshTestResult = ref('')
 async function testSsh() {
-  if (!form.ip || !form.ssh_user) { ElMessage.warning('请填写 IP 与 SSH 账号'); return }
+  if (!form.ip || !form.ssh_user) { ElMessage.warning(t('bgp.sshUserIpRequired')); return }
   sshTesting.value = true; sshTestResult.value = ''
   try {
     const r = await postEnc<{ok: boolean; count?: number; error?: string}>('/bgpmon/test', {

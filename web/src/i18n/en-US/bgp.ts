@@ -11,5 +11,6 @@ export default {
   pickDevice: 'Select device',
   noEnabledDevice: 'No device with BGP monitor enabled',
   testOk: 'Connected, found {n} peers',
-  testFail: 'Test failed, check backend log'
+  testFail: 'Test failed, check backend log',
+  sshUserIpRequired: 'Please enter IP and SSH account'
 }

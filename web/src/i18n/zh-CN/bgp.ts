@@ -11,5 +11,6 @@ export default {
   pickDevice: '选择设备',
   noEnabledDevice: '暂无已启用 BGP 监控的设备',
   testOk: '连接成功，发现 {n} 个邻居',
-  testFail: '测试失败，查看后端日志'
+  testFail: '测试失败，查看后端日志',
+  sshUserIpRequired: '请填写 IP 与 SSH 账号'
 }
