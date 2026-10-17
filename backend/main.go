@@ -6,13 +6,17 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"os/signal"
 	"path"
+	"strings"
 	"syscall"
 	"time"
 
@@ -35,7 +39,7 @@ func main() {
   ██║╚██╗██║██╔══╝     ██║       ██║  ██║██║   ██║██║  ██║██╔══╝
   ██║ ╚████║███████╗   ██║       ██████╔╝╚██████╔╝██████╔╝███████╗
   ╚═╝  ╚═══╝╚══════╝   ╚═╝       ╚═════╝  ╚═════╝ ╚═════╝ ╚══════╝
-  NetOps 网络运维监控平台 v2.1.9 | AI巡检 · 日志中心 · 告警通知
+  NetOps 网络运维监控平台 v2.2.0 | AI巡检 · 日志中心 · 告警通知
 `)
 
 	// 1. 加载配置（支持 --config 指定，缺省自动探测 ./config.yaml 与可执行文件同目录）
@@ -58,29 +62,16 @@ func main() {
 	// 3.1 上传文件静态服务（/uploads/ 映射到 data/uploads/）
 	engine.Static("/uploads", "./data/uploads")
 
-	// 3.2 前端资源：从外部目录 ./web/dist 读取（不再 go:embed）
+	// 3.2 前端资源：默认由 API 端口提供；配置了独立前端端口(web_port>0)时改由独立端口提供
 	webDir := "./web"
-	if st, err := os.Stat(webDir); err == nil && st.IsDir() {
-		sub := os.DirFS(webDir)
-		if entries, err := fs.ReadDir(sub, "assets"); err == nil {
-			log.Printf("[web] 前端静态资源目录: %s, assets 文件数: %d", webDir, len(entries))
-		}
-		engine.NoRoute(func(c *gin.Context) {
-			if c.Request.Method != http.MethodGet {
-				c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
-				return
-			}
-			reqPath := path.Clean(c.Request.URL.Path)
-			if reqPath != "/" {
-				if _, err := fs.Stat(sub, reqPath[1:]); err == nil {
-					c.FileFromFS(reqPath, http.FS(sub))
-					return
-				}
-			}
-			c.FileFromFS("/", http.FS(sub))
-		})
-	} else {
-		log.Printf("[web] 警告: 未找到前端目录 %s（请将前端构建产物放在该目录）", webDir)
+	var webSrv *http.Server
+	useTLS := cfg.Server.TLSCert != "" && cfg.Server.TLSKey != ""
+	if err := validateWebPort(cfg); err != nil {
+		log.Fatalf("[bootstrap] %v", err)
+	}
+	webEnabled := cfg.Server.WebPort > 0
+	if !webEnabled {
+		mountFrontend(engine, webDir)
 	}
 
 	// 3.3 注册 API 路由
@@ -98,16 +89,15 @@ func main() {
 		}
 	}()
 
-	// 5. 启动外部 Web 服务（30821）
+	// 5. 启动 API 服务（默认 30821）
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 	srv := &http.Server{Addr: addr, Handler: engine}
 	go func() {
-		useTLS := cfg.Server.TLSCert != "" && cfg.Server.TLSKey != ""
 		scheme := "http"
 		if useTLS {
 			scheme = "https"
 		}
-		log.Printf("[web] NetOps 平台启动: %s://%s", scheme, addr)
+		log.Printf("[api] NetOps API 服务启动: %s://%s", scheme, addr)
 		var err error
 		if useTLS {
 			err = srv.ListenAndServeTLS(cfg.Server.TLSCert, cfg.Server.TLSKey)
@@ -115,9 +105,21 @@ func main() {
 			err = srv.ListenAndServe()
 		}
 		if err != nil && err != http.ErrServerClosed {
-			log.Fatalf("[web] 服务异常退出: %v", err)
+			log.Fatalf("[api] 服务异常退出: %v", err)
 		}
 	}()
+
+	// 5.1 独立前端服务（web_port>0 时启用：前端静态资源 + /api /ws /mcp 反向代理）
+	if webEnabled {
+		webAddr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.WebPort)
+		webSrv = &http.Server{Addr: webAddr, Handler: buildWebHandler(webDir, cfg.Server.Port, useTLS)}
+		go func() {
+			log.Printf("[web] 前端独立服务启动: http://%s（API 端口 %d）", webAddr, cfg.Server.Port)
+			if err := webSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Fatalf("[web] 前端服务异常退出: %v", err)
+			}
+		}()
+	}
 
 	// 6. 审计日志自动清理（保留180天）
 	go func() {
@@ -144,7 +146,107 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(ctx)
+	if webSrv != nil {
+		_ = webSrv.Shutdown(ctx)
+	}
 	_ = internalSrv.Shutdown(ctx)
 	app.Shutdown()
 	log.Println("[web] 服务已安全退出")
+}
+
+// mountFrontend 在前端目录存在时挂载 SPA 静态资源（默认由 API 端口提供）
+func mountFrontend(engine *gin.Engine, webDir string) {
+	if st, err := os.Stat(webDir); err == nil && st.IsDir() {
+		sub := os.DirFS(webDir)
+		if entries, err := fs.ReadDir(sub, "assets"); err == nil {
+			log.Printf("[web] 前端静态资源目录: %s, assets 文件数: %d", webDir, len(entries))
+		}
+		engine.NoRoute(func(c *gin.Context) {
+			if c.Request.Method != http.MethodGet {
+				c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+				return
+			}
+			reqPath := path.Clean(c.Request.URL.Path)
+			if reqPath != "/" {
+				if _, err := fs.Stat(sub, reqPath[1:]); err == nil {
+					c.FileFromFS(reqPath, http.FS(sub))
+					return
+				}
+			}
+			c.FileFromFS("/", http.FS(sub))
+		})
+	} else {
+		log.Printf("[web] 警告: 未找到前端目录 %s（请将前端构建产物放在该目录）", webDir)
+	}
+}
+
+// validateWebPort 校验前端独立端口配置：范围 0-65535，且不能与 API/内部端口冲突
+func validateWebPort(cfg *config.Config) error {
+	wp := cfg.Server.WebPort
+	if wp < 0 || wp > 65535 {
+		return fmt.Errorf("配置错误: web_port=%d 超出有效范围 0-65535", wp)
+	}
+	if wp == 0 {
+		return nil
+	}
+	if wp == cfg.Server.Port {
+		return fmt.Errorf("配置错误: web_port=%d 不能与 API 端口(port=%d)相同（填 0 表示前端由 API 端口提供）", wp, cfg.Server.Port)
+	}
+	if wp == cfg.Server.InternalPort {
+		return fmt.Errorf("配置错误: web_port=%d 不能与内部端口(internal_port=%d)相同", wp, cfg.Server.InternalPort)
+	}
+	return nil
+}
+
+// buildWebHandler 构建独立前端服务 handler：
+//   - 前端 SPA 静态资源（./web，回退 index.html）
+//   - /uploads 上传文件静态资源
+//   - /api /ws /mcp 反向代理到 API 端口（TLS 模式下走 https 并信任本机证书）
+func buildWebHandler(webDir string, apiPort int, useTLS bool) http.Handler {
+	mux := http.NewServeMux()
+
+	// API / WebSocket / MCP 反向代理到 API 端口
+	if apiPort > 0 {
+		scheme := "http"
+		if useTLS {
+			scheme = "https"
+		}
+		target := &url.URL{Scheme: scheme, Host: fmt.Sprintf("127.0.0.1:%d", apiPort)}
+		rp := httputil.NewSingleHostReverseProxy(target)
+		if useTLS {
+			// 本机回环反代：信任本机 API 服务证书（含自签名），仅限回环地址，风险可控
+			rp.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+		}
+		for _, p := range []string{"/api", "/api/", "/ws", "/mcp", "/mcp/"} {
+			mux.Handle(p, rp)
+		}
+	}
+
+	// 上传文件静态资源
+	mux.Handle("/uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir("./data/uploads"))))
+
+	// 前端 SPA 静态资源（回退 index.html）
+	if st, err := os.Stat(webDir); err == nil && st.IsDir() {
+		sub := os.DirFS(webDir)
+		if entries, err := fs.ReadDir(sub, "assets"); err == nil {
+			log.Printf("[web] 前端静态资源目录: %s, assets 文件数: %d", webDir, len(entries))
+		}
+		mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet {
+				http.Error(w, "not found", http.StatusNotFound)
+				return
+			}
+			reqPath := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
+			if reqPath != "" && reqPath != "." {
+				if _, err := fs.Stat(sub, reqPath); err == nil {
+					http.FileServer(http.FS(sub)).ServeHTTP(w, r)
+					return
+				}
+			}
+			http.ServeFileFS(w, r, sub, "index.html")
+		}))
+	} else {
+		log.Printf("[web] 警告: 未找到前端目录 %s（请将前端构建产物放在该目录）", webDir)
+	}
+	return mux
 }

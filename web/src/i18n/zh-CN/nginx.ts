@@ -1,0 +1,20 @@
+export default {
+  addInstance: '添加Nginx实例',
+  editInstance: '编辑Nginx实例',
+  instanceName: '实例名称',
+  statusUrl: '状态页地址',
+  statusUrlTip: '如 http://127.0.0.1/nginx_status（需启用 ngx_http_stub_status_module）',
+  urlRequired: '请填写状态页地址',
+  activeConns: '活跃连接',
+  qps: 'QPS(次/秒)',
+  requests: '累计请求',
+  reading: 'Reading',
+  writing: 'Writing',
+  waiting: 'Waiting',
+  state: '状态',
+  online: '运行中',
+  offline: '离线',
+  testConn: '测试连接',
+  testSuccess: '连接成功',
+  testFail: '连接失败'
+}

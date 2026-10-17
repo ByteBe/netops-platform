@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -26,15 +27,17 @@ const (
 	KeySession   = "session_key"
 )
 
-// CORS 跨域（开发模式）
-func CORS() gin.HandlerFunc {
+// CORS 跨域中间件
+// 默认（未配置 cors_origins）反射请求 Origin，兼容开发模式与跨端口部署；
+// 配置了 cors_origins 白名单后，仅放行白名单来源或同源请求，降低任意站点跨域调用风险
+func CORS(allowOrigins []string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.GetHeader("Origin")
-		if origin != "" {
+		if origin != "" && corsAllowed(origin, c.Request.Host, allowOrigins) {
 			c.Header("Access-Control-Allow-Origin", origin)
 			c.Header("Access-Control-Allow-Credentials", "true")
 			c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-			c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Enc, X-Request-Id")
+			c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Enc, X-Request-Id, X-Timestamp, X-Nonce")
 		}
 		if c.Request.Method == http.MethodOptions {
 			c.AbortWithStatus(http.StatusNoContent)
@@ -42,6 +45,23 @@ func CORS() gin.HandlerFunc {
 		}
 		c.Next()
 	}
+}
+
+// corsAllowed 判断来源是否允许：未配置白名单=反射兼容；命中白名单或与请求同源=放行
+func corsAllowed(origin, host string, allowOrigins []string) bool {
+	if len(allowOrigins) == 0 {
+		return true
+	}
+	for _, o := range allowOrigins {
+		if o == origin || o == "*" {
+			return true
+		}
+	}
+	// 同源请求（Origin 的 host 与请求 Host 一致）不受 CORS 限制，直接放行
+	if u, err := url.Parse(origin); err == nil && u.Host == host {
+		return true
+	}
+	return false
 }
 
 // Auth JWT 认证 + 强制改密拦截

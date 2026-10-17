@@ -3,6 +3,7 @@ package email
 
 import (
 	"crypto/tls"
+	"encoding/base64"
 	"fmt"
 	"net/smtp"
 	"strings"
@@ -32,9 +33,22 @@ func Send(cfg Config, to []string, subject, bodyHTML string) error {
 	if cfg.From != "" {
 		from = cfg.From
 	}
-	header := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n",
-		from, strings.Join(to, ","), subject)
-	msg := []byte(header + bodyHTML)
+	// 编码 Subject 支持中文
+	encSubject := "=?UTF-8?B?" + base64.StdEncoding.EncodeToString([]byte(subject)) + "?="
+	header := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n",
+		from, strings.Join(to, ","), encSubject)
+	// RFC 5321 要求每行不超过 998 字节；将 HTML 正文按标签折行后 base64 编码，base64 每行 76 字符
+	bodyB64 := base64.StdEncoding.EncodeToString([]byte(bodyHTML))
+	var wrapped strings.Builder
+	for i := 0; i < len(bodyB64); i += 76 {
+		end := i + 76
+		if end > len(bodyB64) {
+			end = len(bodyB64)
+		}
+		wrapped.WriteString(bodyB64[i:end])
+		wrapped.WriteString("\r\n")
+	}
+	msg := []byte(header + wrapped.String())
 
 	var auth smtp.Auth
 	if cfg.User != "" {

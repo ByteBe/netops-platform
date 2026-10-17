@@ -72,7 +72,8 @@ func Register(a *core.App, g *gin.RouterGroup) {
 			"initialized":   a.Ready,
 			"db_types":      storage.SupportedTypes(),
 			"tsdb_types":    []string{"tdengine", "influxdb", "builtin"},
-			"web_port":      a.Cfg.Server.Port,
+			"api_port":      a.Cfg.Server.Port,
+			"web_port":      a.Cfg.Server.WebPort,
 			"internal_port": a.Cfg.Server.InternalPort,
 		})
 	})
@@ -127,6 +128,7 @@ func Register(a *core.App, g *gin.RouterGroup) {
 				Database   config.Database `json:"database"`
 				TSDB       config.TSDB     `json:"tsdb"`
 				DeployMode string          `json:"deploy_mode"`
+				WebPort    int             `json:"web_port"` // 前端独立端口（0=前端由 API 端口提供）
 				Admin      struct {
 					Username   string `json:"username"`
 					Password   string `json:"password"`
@@ -145,6 +147,18 @@ func Register(a *core.App, g *gin.RouterGroup) {
 			}
 			if req.Admin.Username == "" || req.Admin.Password == "" {
 				return nil, fmt.Errorf("请填写管理员账号与初始密码")
+			}
+			// web_port 校验：0=前端由 API 端口提供；1-65535 为独立前端端口，不能与 API/内部端口冲突
+			if req.WebPort < 0 || req.WebPort > 65535 {
+				return nil, fmt.Errorf("前端端口无效: %d（范围 0-65535）", req.WebPort)
+			}
+			if req.WebPort != 0 {
+				if req.WebPort == a.Cfg.Server.Port {
+					return nil, fmt.Errorf("前端端口 %d 与 API 端口相同，请修改或填 0", req.WebPort)
+				}
+				if req.WebPort == a.Cfg.Server.InternalPort {
+					return nil, fmt.Errorf("前端端口 %d 与内部端口相同，请修改或填 0", req.WebPort)
+				}
 			}
 			if err := password.Validate(req.Admin.Password); err != nil {
 				return nil, bizFail(http.StatusUnprocessableEntity, response.CodeWeakPassword, err.Error())
@@ -167,6 +181,9 @@ func Register(a *core.App, g *gin.RouterGroup) {
 			}
 			a.Cfg.Database = req.Database
 			a.Cfg.TSDB = req.TSDB
+			if req.WebPort > 0 {
+				a.Cfg.Server.WebPort = req.WebPort
+			}
 			a.Cfg.Initialized = true
 			if err := a.Cfg.Save(); err != nil {
 				return nil, fmt.Errorf("保存配置失败: %w", err)
@@ -192,13 +209,14 @@ func Register(a *core.App, g *gin.RouterGroup) {
 				return nil, fmt.Errorf("创建管理员失败: %w", err)
 			}
 			a.DB.Model(&admin).Update("must_change_pwd", false)
-			// 保存部署模式：standalone / distributed
+			// 保存部署模式：standalone / distributed（FirstOrCreate upsert，跨方言）
 			mode := req.DeployMode
 			if mode == "" {
 				mode = "standalone"
 			}
-			a.DB.Exec("INSERT OR REPLACE INTO system_settings (key, value) VALUES ('deploy_mode', ?)", mode)
-			a.DB.Exec("INSERT INTO system_settings (key, value) VALUES ('deploy_mode', ?) ON CONFLICT(key) DO UPDATE SET value = ?", mode, mode)
+			if err := a.DB.Where("`key` = ?", "deploy_mode").Assign(model.SystemSetting{Value: mode}).FirstOrCreate(&model.SystemSetting{Key: "deploy_mode", Value: mode}).Error; err != nil {
+				return nil, fmt.Errorf("写入部署模式失败: %w", err)
+			}
 			a.Ready = true
 			appinit.SyncManagers(a)
 			return gin.H{"ok": true, "message": "初始化完成，请使用管理员账号登录"}, nil

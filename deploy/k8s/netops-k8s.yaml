@@ -1,0 +1,88 @@
+# NetOps 平台 K8s 部署清单
+# 使用：kubectl apply -f netops-k8s.yaml
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: netops
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: netops
+  namespace: netops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: netops
+  template:
+    metadata:
+      labels:
+        app: netops
+    spec:
+      containers:
+      - name: netops
+        image: registry.example.com/netops:v2.1.9
+        ports:
+        - containerPort: 30821
+          name: http
+        env:
+        - name: DB_HOST
+          value: "mysql.netops.svc"
+        - name: DB_PORT
+          value: "3306"
+        - name: DB_USER
+          value: "root"
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: netops-secret
+              key: mysql-password
+        - name: TD_ENABLED
+          value: "true"
+        - name: TD_HOST
+          value: "tdengine.netops.svc"
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+          limits:
+            cpu: "2"
+            memory: "2Gi"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 30821
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 30821
+          initialDelaySeconds: 5
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: netops
+  namespace: netops
+spec:
+  type: NodePort
+  ports:
+  - port: 30821
+    targetPort: 30821
+    nodePort: 30821
+  selector:
+    app: netops
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: netops-secret
+  namespace: netops
+type: Opaque
+stringData:
+  mysql-password: "ChangeMeStrongPass"

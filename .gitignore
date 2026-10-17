@@ -64,3 +64,14 @@ backend/*-review.exe
 /upload_web.py
 /backend/netops-linux-amd64
 /backend/netops-linux-arm64
+
+# 本机会话临时产物
+_check_log.py
+_k8s_setup.sh
+_run_k8s.py
+backend/config.yaml.*
+backend/local_run*.err
+backend/netops-server.exe.v219
+backend/netops-server-darwin-*
+backend/resp.txt
+backend/test.svg

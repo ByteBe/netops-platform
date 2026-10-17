@@ -20,10 +20,14 @@ const tab = ref('device')
   </div>
 </template>
 <style>
-.devicelog-page .el-table { width: 100% !important; }
-.devicelog-page .el-table__inner-wrapper { width: 100% !important; }
+.devicelog-page .el-table,
+.devicelog-page .el-table__inner-wrapper,
+.devicelog-page .el-table__header-wrapper,
+.devicelog-page .el-table__body-wrapper { width: 100% !important; }
 .devicelog-page .el-table__header-wrapper table,
-.devicelog-page .el-table__body-wrapper table { width: 100% !important; }
+.devicelog-page .el-table__body-wrapper table { width: 100% !important; table-layout: fixed !important; }
+.devicelog-page .el-table__header-wrapper col,
+.devicelog-page .el-table__body-wrapper col { width: auto !important; }
 </style>
 <style scoped>
 .logcenter-page { padding: 16px; }

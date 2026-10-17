@@ -66,8 +66,11 @@ func SM2Decrypt(privateHex, cipherHex string) ([]byte, error) {
 	if err == nil {
 		return out, nil
 	}
-	// 无前缀 C1（sm-crypto 的 X||Y，64字节）：补 04 前缀后重试
-	if len(cipher) > 64 && cipher[0] != 0x04 && cipher[0] != 0x02 && cipher[0] != 0x03 {
+	// 无前缀 C1（sm-crypto 的 X||Y，64字节）：补 04 前缀后重试。
+	// 注意不能以 cipher[0] 是否为 04/02/03 作为判断条件：
+	// sm-crypto 输出的 X||Y 中 X 首字节是随机的，可能恰好等于 0x02/0x03，
+	// 用前缀字节判断会漏补前缀导致偶发解密失败（先试原样、再试补前缀，两种均已覆盖）
+	if len(cipher) > 64 {
 		patched := make([]byte, 1+len(cipher))
 		patched[0] = 0x04
 		copy(patched[1:], cipher)

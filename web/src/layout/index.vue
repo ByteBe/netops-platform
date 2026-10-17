@@ -19,7 +19,7 @@ const groups: { titleKey: string; items: string[] }[] = [
   { titleKey: 'group_monitor', items: ['linkdetect', 'monitor', 'topology', 'traffic', 'bgpmon'] },
   { titleKey: 'group_alert', items: ['alert'] },
   { titleKey: 'group_asset', items: ['resource', 'ipam', 'subnet'] },
-  { titleKey: 'group_infra', items: ['container', 'k8s', 'dbmonitor'] },
+  { titleKey: 'group_infra', items: ['container', 'k8s', 'dbmonitor', 'nginxmon'] },
   { titleKey: 'group_ops', items: ['report', 'scriptgen', 'devicelog', 'aiinspect'] },
   { titleKey: 'group_system', items: ['system', 'distributed', 'dbmigrate'] }
 ]

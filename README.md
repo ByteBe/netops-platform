@@ -43,4 +43,4 @@ cd /opt/netops-platform && chmod +x install.sh && ./install.sh install
 
 ## 版本
 
-v1.5.0
+v2.2.0

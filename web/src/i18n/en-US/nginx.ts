@@ -1,0 +1,20 @@
+export default {
+  addInstance: 'Add Nginx Instance',
+  editInstance: 'Edit Nginx Instance',
+  instanceName: 'Instance Name',
+  statusUrl: 'Status URL',
+  statusUrlTip: 'e.g. http://127.0.0.1/nginx_status (requires ngx_http_stub_status_module)',
+  urlRequired: 'Please enter the status URL',
+  activeConns: 'Active Conns',
+  qps: 'QPS (req/s)',
+  requests: 'Total Requests',
+  reading: 'Reading',
+  writing: 'Writing',
+  waiting: 'Waiting',
+  state: 'State',
+  online: 'Online',
+  offline: 'Offline',
+  testConn: 'Test Connection',
+  testSuccess: 'Connected',
+  testFail: 'Connection Failed'
+}

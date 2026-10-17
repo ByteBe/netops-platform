@@ -24,7 +24,7 @@ var upgrader = websocket.Upgrader{
 // Register 注册全部路由
 func Register(engine *gin.Engine, app *core.App) {
 	// 全局中间件
-	engine.Use(middleware.CORS())
+	engine.Use(middleware.CORS(app.Cfg.Server.CORSOrigins))
 	engine.Use(middleware.RateLimit())
 
 	// 基础路由（所有API统一防重放 + 登录锁定）

@@ -12,6 +12,7 @@ import (
 	"netops/internal/collector/dbprobe"
 	"netops/internal/collector/docker"
 	"netops/internal/collector/k8s"
+	"netops/internal/collector/nginxprobe"
 	"netops/internal/collector/ping"
 	"netops/internal/collector/snmp"
 	"netops/internal/common/crypto"
@@ -39,6 +40,7 @@ type App struct {
 	DockerM *docker.Monitor
 	K8sM    *k8s.Monitor
 	DBProbe *dbprobe.Manager
+	NginxM  *nginxprobe.Manager
 
 	// MCP 能力服务（外部 Agent 接入本系统）
 	MCPServer *mcp.Server
@@ -93,6 +95,7 @@ func (a *App) InitRuntime() {
 	a.DockerM = docker.NewMonitor(a.TSDB, a.Hub)
 	a.K8sM = k8s.NewMonitor(a.TSDB, a.Hub)
 	a.DBProbe = dbprobe.NewManager(a.TSDB, a.Hub)
+	a.NginxM = nginxprobe.NewManager(a.TSDB, a.Hub)
 }
 
 // Shutdown 优雅关闭
@@ -111,6 +114,9 @@ func (a *App) Shutdown() {
 	}
 	if a.DBProbe != nil {
 		a.DBProbe.StopAll()
+	}
+	if a.NginxM != nil {
+		a.NginxM.StopAll()
 	}
 	if a.TSDB != nil {
 		_ = a.TSDB.Close()

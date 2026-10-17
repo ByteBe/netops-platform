@@ -12,6 +12,7 @@ import (
 	"gorm.io/gorm"
 
 	"netops/internal/collector/dbprobe"
+	"netops/internal/collector/nginxprobe"
 	"netops/internal/collector/ping"
 	"netops/internal/collector/snmp"
 	"netops/internal/common/crypto"
@@ -35,7 +36,7 @@ func AllModels() []any {
 	return []any{
 		&model.User{}, &model.AuditLog{}, &model.DeviceGroup{},
 		&model.MonitorDevice{}, &model.LinkTask{}, &model.TopoDevice{},
-		&model.TopoLink{}, &model.TopoLinkIP{}, &model.DBInstance{},
+		&model.TopoLink{}, &model.TopoLinkIP{}, &model.DBInstance{}, &model.NginxInstance{},
 		&model.ScriptTemplate{}, &model.ScriptHistory{}, &model.Subnet{},
 		&model.IPRecord{}, &model.BindDevice{}, &model.TrafficRule{},
 		&model.AIConfig{}, &model.MCPAgent{}, &model.EmailConfig{},
@@ -244,6 +245,16 @@ func SyncManagers(a *core.App) {
 		}
 	}
 	a.DBProbe.Sync(dbs)
+
+	var nginxList []model.NginxInstance
+	a.DB.Find(&nginxList)
+	nx := make([]nginxprobe.Instance, 0, len(nginxList))
+	for _, n := range nginxList {
+		if n.Enable {
+			nx = append(nx, nginxprobe.Instance{ID: n.ID, Name: n.Name, StatusURL: n.StatusURL, Interval: n.Interval})
+		}
+	}
+	a.NginxM.Sync(nx)
 
 	// 从数据库读取已启用的Docker主机列表
 	dockerAddrs := []string{}

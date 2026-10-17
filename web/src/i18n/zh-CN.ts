@@ -26,9 +26,10 @@ import setup from './zh-CN/setup'
 import bgp from './zh-CN/bgp'
 import tasklog from './zh-CN/tasklog'
 import devicelog from './zh-CN/devicelog'
+import nginx from './zh-CN/nginx'
 
 export default {
   app, nav, common, login, dashboard, link, topo, monitor, container,
   report, alert, resource, subnet, node, dbmon, script, ipam, traffic,
-  system, profile, theme, lang, k8s, dbmigrate, setup, bgp, tasklog, devicelog
+  system, profile, theme, lang, k8s, dbmigrate, setup, bgp, tasklog, devicelog, nginx
 }

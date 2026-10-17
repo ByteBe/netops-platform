@@ -156,6 +156,19 @@ type DBInstance struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// NginxInstance Nginx 监控实例（ngx_http_stub_status_module 状态页探针）
+type NginxInstance struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	Name      string    `gorm:"size:128;not null" json:"name"`
+	StatusURL string    `gorm:"size:256;not null" json:"status_url"` // stub_status 页面地址，如 http://127.0.0.1/nginx_status
+	Interval  int       `gorm:"default:60" json:"interval"`
+	Enable    bool      `gorm:"default:false" json:"enable"`
+	Status    string    `gorm:"size:16;default:unknown" json:"status"`
+	GroupID   uint      `gorm:"index;default:0" json:"group_id"`
+	Remark    string    `gorm:"size:256" json:"remark"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 // ScriptTemplate 脚本模板（模板全部在代码中制作，启动时写入数据库，前后端不可配置）
 type ScriptTemplate struct {
 	ID          uint      `gorm:"primaryKey" json:"id"`

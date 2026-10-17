@@ -7,6 +7,7 @@ export type WSChannel =
   | 'traffic'
   | 'dbmonitor'
   | 'containermon'
+  | 'nginxmon'
   | 'dashboard'
 
 export interface WSMessage {

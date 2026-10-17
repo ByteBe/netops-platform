@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getEnc, postEnc } from '@/utils/request'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -24,6 +24,7 @@ const sourceLabel: Record<string,string> = {
 }
 const detailVisible = ref(false)
 const detailLog = ref<Log | null>(null)
+const tableRef = ref()
 
 function fmtTime(s: string) { return s ? s.replace('T', ' ').substring(0, 19) : '' }
 function showDetail(row: Log) { detailLog.value = row; detailVisible.value = true }
@@ -38,6 +39,9 @@ async function load() {
     if (keyword.value) p.set('keyword', keyword.value)
     const r = await getEnc<{ list: Log[]; total: number }>(`/devicelog/list?${p}`)
     list.value = r.list || []; total.value = r.total || 0
+    await nextTick()
+    tableRef.value?.doLayout?.()
+    setTimeout(() => tableRef.value?.doLayout?.(), 200)
   } finally { loading.value = false }
 }
 function search() { page.value = 1; load() }
@@ -69,7 +73,7 @@ onMounted(async () => {
       <el-button @click="load">{{ t('common.refresh') }}</el-button>
       <el-button type="danger" @click="clear">{{ t('devicelog.clear') }}</el-button>
     </div>
-    <el-table :data="list" v-loading="loading" stripe size="small" style="width:100%">
+    <el-table ref="tableRef" :data="list" v-loading="loading" stripe size="small" style="width:100%">
       <el-table-column :label="t('devicelog.time')" width="170">
         <template #default="{ row }">{{ fmtTime(row.created_at) }}</template>
       </el-table-column>
@@ -80,7 +84,7 @@ onMounted(async () => {
       <el-table-column prop="device_name" :label="t('devicelog.device')" width="150" />
       <el-table-column prop="ip" label="IP" width="130" />
       <el-table-column prop="facility" :label="t('devicelog.facility')" width="80" />
-      <el-table-column :label="t('devicelog.message')">
+      <el-table-column :label="t('devicelog.message')" min-width="200">
         <template #default="{ row }">
           <div class="log-msg" @click="showDetail(row)">{{ row.message }}</div>
         </template>

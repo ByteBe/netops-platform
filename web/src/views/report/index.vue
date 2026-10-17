@@ -25,8 +25,6 @@ const genLoading = ref(false)
 const genForm = reactive({
   title: t('report.reportTitle'),
   send_email: false,
-  channels: [] as string[],
-  email_to: '',
   include: ['link', 'monitor', 'db'] as string[]
 })
 
@@ -64,13 +62,9 @@ async function generate() {
 }
 
 async function send(r: ReportRecord) {
-  const to = await ElMessageBox.prompt(t('report.emailPrompt'), t('report.sendMail'), {
-    inputValue: '',
-    confirmButtonText: t('common.confirm'),
-    cancelButtonText: t('common.cancel')
-  })
-  await postEnc(`/report/${r.id}/send`, { email_to: to.value })
+  await postEnc(`/report/${r.id}/send`, {})
   ElMessage.success(t('common.success'))
+  await load()
 }
 
 async function remove(r: ReportRecord) {
@@ -167,19 +161,6 @@ async function quickGen(kind: string) {
             <el-checkbox value="container">{{ t('report.containerK8s') }}</el-checkbox>
             <el-checkbox value="node">{{ t('report.nodeHealth') }}</el-checkbox>
           </el-checkbox-group>
-        </el-form-item>
-        <el-form-item :label="t('report.channels')">
-          <el-select v-model="genForm.channels" multiple :placeholder="t('report.channelsPlaceholder')" style="width:100%">
-            <el-option :label="t('report.email')" value="email" />
-            <el-option :label="t('report.dingtalk')" value="dingtalk" />
-            <el-option :label="t('report.wecom')" value="wecom" />
-            <el-option :label="t('report.feishu')" value="feishu" />
-            <el-option :label="t('report.sms')" value="sms" />
-            <el-option label="Webhook" value="webhook" />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="t('report.target')" v-if="genForm.channels?.includes('email')">
-          <el-input v-model="genForm.email_to" :placeholder="t('report.emailPlaceholder')" />
         </el-form-item>
       </el-form>
       <template #footer>

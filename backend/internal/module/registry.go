@@ -23,6 +23,7 @@ import (
 	_ "netops/internal/module/ipam"
 	_ "netops/internal/module/linkdetect"
 	_ "netops/internal/module/monitor"
+	_ "netops/internal/module/nginxmon"
 	_ "netops/internal/module/report"
 	_ "netops/internal/module/resource"
 	_ "netops/internal/module/scriptgen"

@@ -8,6 +8,7 @@ export default {
   container: 'Docker监控',
   k8s: 'K8s监控',
   dbmonitor: '数据库监控',
+  nginx: 'Nginx监控',
   report: '巡检报告',
   scriptgen: '脚本生成器',
   ipam: 'IP地址管理',

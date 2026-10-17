@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getEnc } from '@/utils/request'
 const { t } = useI18n()
@@ -11,18 +11,22 @@ interface TaskLog {
 const taskLogs = ref<TaskLog[]>([])
 const taskDetailVisible = ref(false)
 const taskDetailLog = ref<TaskLog | null>(null)
+const tableRef = ref()
 
 function fmtTime(s: string) { return s ? s.replace('T', ' ').substring(0, 19) : '' }
 function showDetail(row: TaskLog) { taskDetailLog.value = row; taskDetailVisible.value = true }
 
 async function load() {
   taskLogs.value = await getEnc<TaskLog[]>('/monitor/task-logs')
+  await nextTick()
+  tableRef.value?.doLayout?.()
+  setTimeout(() => tableRef.value?.doLayout?.(), 200)
 }
-onMounted(load)
+onMounted(() => { load() })
 </script>
 <template>
   <div>
-    <el-table :data="taskLogs" stripe size="small" style="width:100%">
+    <el-table ref="tableRef" :data="taskLogs" stripe size="small" style="width:100%">
       <el-table-column :label="t('devicelog.time')" width="170">
         <template #default="{ row }">{{ fmtTime(row.created_at) }}</template>
       </el-table-column>
@@ -37,7 +41,7 @@ onMounted(load)
       <el-table-column :label="t('devicelog.duration')" width="80">
         <template #default="{ row }">{{ row.duration_ms }}ms</template>
       </el-table-column>
-      <el-table-column :label="t('devicelog.message')">
+      <el-table-column :label="t('devicelog.message')" min-width="200">
         <template #default="{ row }">
           <div class="log-msg" @click="showDetail(row)">{{ row.message }}</div>
         </template>

@@ -177,7 +177,7 @@ onMounted(async () => {
   try {
     types.value = await getEnc<any[]>('/dbmonitor/types')
   } catch {
-    types.value = [{label:'MySQL',value:'mysql'},{label:'Oracle',value:'oracle'},{label:'PostgreSQL',value:'postgresql'},{label:'Microsoft SQL Server',value:'sqlserver'},{label:'MongoDB',value:'mongodb'},{label:'ClickHouse',value:'clickhouse'},{label:'TiDB',value:'tidb'},{label:'OceanBase',value:'oceanbase'},{label:'达梦 DM',value:'dm'},{label:'人大金仓 KingbaseES',value:'kingbase'},{label:'openGauss',value:'opengauss'},{label:'GBase 8s/8a',value:'gbase'},{label:'IBM DB2',value:'db2'},{label:'SAP Sybase',value:'sybase'},{label:'内置数据库',value:'sqlite'},{label:'TDengine',value:'tdengine'},{label:'InfluxDB',value:'influxdb'}]
+    types.value = [{label:'MySQL',value:'mysql'},{label:'PostgreSQL',value:'postgres'},{label:'Oracle',value:'oracle'},{label:'OceanBase MySQL模式',value:'oceanbase'},{label:'OceanBase Oracle模式',value:'oceanbase_oracle'},{label:'达梦 DM',value:'dm'},{label:'人大金仓 KingbaseES',value:'kingbase'},{label:'内置数据库',value:'sqlite'},{label:'TDengine',value:'tdengine'}]
   }
   ws = new WSClient(['dbmonitor'])
   ws.on('dbmonitor', 'db_snapshot', (msg) => {
@@ -213,7 +213,7 @@ onBeforeUnmount(() => {
         <div class="np-db-body">
           <div class="np-db-metrics">
             <div class="np-db-m"><span class="np-db-label">{{ t('dbmon.version') }}</span><span>{{ snaps[d.id]?.version || '--' }}</span></div>
-            <div class="np-db-m"><span class="np-db-label">{{ t('dbmon.connections') }}</span><span>{{ snaps[d.id]?.conns ?? '--' }} / {{ snaps[d.id]?.max_conns ?? '--' }}</span></div>
+            <div class="np-db-m"><span class="np-db-label">数据库数</span><span>{{ snaps[d.id]?.conns ?? '--' }}</span></div>
             <div class="np-db-m"><span class="np-db-label">{{ t('dbmon.capacity') }}</span><span>{{ snaps[d.id] ? fmtBytes(snaps[d.id].size_bytes) : '--' }}</span></div>
             <div class="np-db-m"><span class="np-db-label">{{ t('dbmon.tables') }}</span><span>{{ snaps[d.id]?.table_count ?? '--' }}</span></div>
             <div class="np-db-m"><span class="np-db-label">存活状态</span><span :style="{ color: snaps[d.id]?.up ? '#22c55e' : '#ef4444' }">{{ snaps[d.id]?.up ? '运行中' : '离线' }}</span></div>

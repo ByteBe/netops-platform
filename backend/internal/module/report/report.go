@@ -1,8 +1,11 @@
 package report
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"html/template"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -92,9 +95,8 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		}
 
 		if req.Send {
-			to := splitTo(req.EmailTo)
-			if err := sendReportEmail(a, rec.ID, title, content, to); err != nil {
-				response.Fail(c, 500, response.CodeServerError, "报告已生成，但邮件发送失败: "+err.Error())
+			if err := sendReportViaChannels(a, title, content); err != nil {
+				response.Fail(c, 500, response.CodeServerError, "报告已生成，但发送失败: "+err.Error())
 				return
 			}
 		}
@@ -152,19 +154,11 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			response.NotFound(c, "报告不存在")
 			return
 		}
-		var req struct {
-			EmailTo string `json:"email_to"`
-		}
-		_ = c.ShouldBindJSON(&req)
-		to := splitTo(req.EmailTo)
-		if len(to) == 0 {
-			to = splitTo(rec.EmailTo)
-		}
-		if err := sendReportEmail(a, rec.ID, rec.Title, rec.Content, to); err != nil {
-			response.Fail(c, 500, response.CodeServerError, "邮件发送失败: "+err.Error())
+		if err := sendReportViaChannels(a, rec.Title, rec.Content); err != nil {
+			response.Fail(c, 500, response.CodeServerError, "报告发送失败: "+err.Error())
 			return
 		}
-		a.DB.Model(&rec).Updates(map[string]any{"send_email": true, "email_to": strings.Join(to, ",")})
+		a.DB.Model(&rec).Updates(map[string]any{"send_email": true})
 		response.OK(c, gin.H{"ok": true})
 	})
 
@@ -177,31 +171,68 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 	startReportScheduler(a)
 }
 
-func sendReportEmail(a *core.App, id uint, title, content string, to []string) error {
-	if len(to) == 0 {
-		return fmt.Errorf("收件人列表为空")
+// sendReportViaChannels 通过系统管理中配置的所有启用通知渠道发送报告
+func sendReportViaChannels(a *core.App, title, content string) error {
+	var ncs []model.NotifyConfig
+	a.DB.Where("enabled = ?", true).Find(&ncs)
+	if len(ncs) == 0 {
+		return fmt.Errorf("未配置任何通知渠道（系统管理-通知渠道）")
 	}
-	var cfgs []model.EmailConfig
-	a.DB.Where("enable = ?", true).Find(&cfgs)
-	if len(cfgs) == 0 {
-		return fmt.Errorf("未启用任何邮箱配置（系统管理-邮箱）")
-	}
-	cfg := cfgs[0]
-	return email.Send(email.Config{
-		Name: cfg.Name, SMTPHost: cfg.SMTPHost, SMTPPort: cfg.SMTPPort,
-		User: cfg.User, Password: cfg.Password, UseSSL: cfg.UseSSL, Enable: true,
-	}, to, title, content)
-}
-
-func splitTo(s string) []string {
-	var out []string
-	for _, v := range strings.Split(s, ",") {
-		v = strings.TrimSpace(v)
-		if v != "" && strings.Contains(v, "@") {
-			out = append(out, v)
+	sent := 0
+	// 收集所有 email 渠道的收件地址
+	var recipients []string
+	for _, nc := range ncs {
+		if nc.Type == "email" {
+			recipients = append(recipients, nc.Addr)
 		}
 	}
-	return out
+	// 通过邮箱配置 SMTP 发送
+	if len(recipients) > 0 {
+		var cfgs []model.EmailConfig
+		a.DB.Where("enable = ?", true).Find(&cfgs)
+		if len(cfgs) == 0 {
+			return fmt.Errorf("未配置发件邮箱（系统管理-邮箱）")
+		}
+		cfg := cfgs[0]
+		if err := email.Send(email.Config{Name: cfg.Name, SMTPHost: cfg.SMTPHost, SMTPPort: cfg.SMTPPort, User: cfg.User, Password: cfg.Password, UseSSL: cfg.UseSSL, Enable: true}, recipients, title, content); err == nil {
+			sent++
+		} else {
+			return err
+		}
+	}
+	// 推送 webhook 渠道（飞书/钉钉/企业微信）
+	client := &http.Client{Timeout: 10 * time.Second}
+	for _, nc := range ncs {
+		if nc.Type == "email" {
+			continue
+		}
+		url := nc.Config
+		if url == "" {
+			url = nc.Addr
+		}
+		if url == "" {
+			continue
+		}
+		var out []byte
+		if nc.Type == "feishu" {
+			out, _ = json.Marshal(map[string]any{"msg_type": "text", "content": map[string]string{"text": title + "\n" + content}})
+		} else {
+			out, _ = json.Marshal(map[string]any{"msgtype": "text", "text": map[string]string{"content": title + "\n" + content}})
+		}
+		req, _ := http.NewRequest("POST", url, bytes.NewReader(out))
+		req.Header.Set("Content-Type", "application/json")
+		if nc.Token != "" {
+			req.Header.Set("X-Signature", nc.Token)
+		}
+		if resp, err := client.Do(req); err == nil {
+			_ = resp.Body.Close()
+			sent++
+		}
+	}
+	if sent == 0 {
+		return fmt.Errorf("所有通知渠道发送失败")
+	}
+	return nil
 }
 
 func badge(status, color string) string {

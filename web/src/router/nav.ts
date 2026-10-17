@@ -18,6 +18,7 @@ const overrides: Record<string, NavMeta> = {
   container: { title: 'nav.container', icon: 'Box' },
   k8s: { title: 'nav.k8s', icon: 'Ship' },
   dbmonitor: { title: 'nav.dbmonitor', icon: 'Coin' },
+  nginxmon: { title: 'nav.nginx', icon: 'Service' },
   report: { title: 'nav.report', icon: 'Document' },
   scriptgen: { title: 'nav.scriptgen', icon: 'MagicStick' },
   ipam: { title: 'nav.ipam', icon: 'MapLocation' },

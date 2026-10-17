@@ -36,6 +36,7 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 					item["version"] = s.Version
 					item["db_status"] = s.Status
 					item["conns"] = s.Conns
+					item["max_conns"] = s.MaxConns
 					item["data_size"] = s.DataSize
 					item["table_count"] = s.TableCount
 					item["tx_per_sec"] = s.TxPerSec
@@ -169,22 +170,14 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 	g.GET("/types", func(c *gin.Context) {
 		response.OK(c, []gin.H{
 			{"value": "mysql", "label": "MySQL", "port": 3306},
+			{"value": "postgres", "label": "PostgreSQL", "port": 5432},
 			{"value": "oracle", "label": "Oracle", "port": 1521},
-			{"value": "postgresql", "label": "PostgreSQL", "port": 5432},
-			{"value": "sqlserver", "label": "Microsoft SQL Server", "port": 1433},
-			{"value": "mongodb", "label": "MongoDB", "port": 27017},
-			{"value": "clickhouse", "label": "ClickHouse", "port": 8123},
-			{"value": "tidb", "label": "TiDB", "port": 4000},
-			{"value": "oceanbase", "label": "OceanBase", "port": 2881},
+			{"value": "oceanbase", "label": "OceanBase MySQL模式", "port": 2881},
+			{"value": "oceanbase_oracle", "label": "OceanBase Oracle模式", "port": 2883},
 			{"value": "dm", "label": "达梦 DM", "port": 5236},
 			{"value": "kingbase", "label": "人大金仓 KingbaseES", "port": 54321},
-			{"value": "opengauss", "label": "openGauss", "port": 5432},
-			{"value": "gbase", "label": "GBase 8s/8a", "port": 5258},
-			{"value": "db2", "label": "IBM DB2", "port": 50000},
-			{"value": "sybase", "label": "SAP Sybase", "port": 5000},
 			{"value": "sqlite", "label": "内置数据库", "port": 0},
-			{"value": "tdengine", "label": "TDengine", "port": 6030},
-			{"value": "influxdb", "label": "InfluxDB", "port": 8086},
+			{"value": "tdengine", "label": "TDengine", "port": 6041},
 		})
 	})
 }
