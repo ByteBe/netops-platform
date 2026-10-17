@@ -217,7 +217,7 @@ onBeforeUnmount(() => {
             <div class="np-db-m"><span class="np-db-label">{{ t('dbmon.capacity') }}</span><span>{{ snaps[d.id] ? fmtBytes(snaps[d.id].size_bytes) : '--' }}</span></div>
             <div class="np-db-m"><span class="np-db-label">{{ t('dbmon.tables') }}</span><span>{{ snaps[d.id]?.table_count ?? '--' }}</span></div>
             <div class="np-db-m"><span class="np-db-label">存活状态</span><span :style="{ color: snaps[d.id]?.up ? '#22c55e' : '#ef4444' }">{{ snaps[d.id]?.up ? '运行中' : '离线' }}</span></div>
-            <div class="np-db-m"><span class="np-db-label">CPU 使用率</span><span>{{ snaps[d.id] && snaps[d.id].cpu_percent > 0 ? snaps[d.id].cpu_percent.toFixed(1) + '%' : '--' }}</span></div>
+            <div class="np-db-m"><span class="np-db-label">CPU 使用率</span><span>{{ snaps[d.id] && snaps[d.id].cpu_percent != null && !isNaN(snaps[d.id].cpu_percent) ? snaps[d.id].cpu_percent.toFixed(1) + '%' : '--' }}</span></div>
             <div class="np-db-m"><span class="np-db-label">内存使用</span><span>{{ snaps[d.id] && snaps[d.id].mem_used > 0 ? fmtBytes(snaps[d.id].mem_used) : '--' }}</span></div>
             <div class="np-db-m"><span class="np-db-label">运行时长</span><span>{{ fmtDuration(snaps[d.id]?.uptime_s || 0) }}</span></div>
           </div>
