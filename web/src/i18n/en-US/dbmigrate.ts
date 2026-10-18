@@ -19,5 +19,6 @@ export default {
   t_ai: 'AI Config', t_mcp: 'MCP Agents', t_email: 'Email Config',
   t_report: 'Report Records', t_setting: 'System Settings', t_docker: 'Docker Hosts',
   t_k8s: 'K8s Clusters', t_tskv: 'TS Data',
+  t_nginx: 'Nginx Instances', t_backupDev: 'Config Backup Devices', t_taskLog: 'Task Logs', t_devLog: 'Device Logs', t_aiReport: 'AI Inspection Reports',
   t_nodes: 'Nodes', t_backup: 'Config Backups', t_alertRule: 'Alert Rules', t_alertEvent: 'Alert Events', t_notify: 'Notify Channels'
 }

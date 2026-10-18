@@ -19,5 +19,6 @@ export default {
   t_ai: 'AI配置', t_mcp: 'MCP代理', t_email: '邮件配置',
   t_report: '巡检报告记录', t_setting: '系统设置', t_docker: 'Docker主机',
   t_k8s: 'K8S集群', t_tskv: '时序数据',
+  t_nginx: 'Nginx实例', t_backupDev: '配置备份设备', t_taskLog: '任务日志', t_devLog: '设备日志', t_aiReport: 'AI巡检报告',
   t_nodes: '节点表', t_backup: '配置备份', t_alertRule: '告警规则', t_alertEvent: '告警事件', t_notify: '通知渠道配置'
 }

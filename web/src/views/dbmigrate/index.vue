@@ -122,6 +122,7 @@ const tableKeys: Record<string, string> = {
   ai_configs: 't_ai', mcp_agents: 't_mcp', email_configs: 't_email',
   report_records: 't_report', system_settings: 't_setting', docker_hosts: 't_docker',
   k8s_clusters: 't_k8s', ts_kv: 't_tskv',
+  nginx_instances: 't_nginx', config_backup_devices: 't_backupDev', task_logs: 't_taskLog', device_logs: 't_devLog', ai_inspect_reports: 't_aiReport',
   nodes: 't_nodes', config_backups: 't_backup', alert_rules: 't_alertRule', alert_events: 't_alertEvent', notify_configs: 't_notify',
 }
 function tableLabel(n: string) { const k = tableKeys[n]; return k ? t('dbmigrate.' + k) : '-' }
