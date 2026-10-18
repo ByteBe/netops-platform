@@ -17,6 +17,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"netops/internal/common/response"
+	"netops/internal/collector/nginxprobe"
 	"netops/internal/core"
 	"netops/internal/middleware"
 	"netops/internal/model"
@@ -61,10 +62,10 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			include[s] = true
 		}
 		if len(include) == 0 {
-			include = map[string]bool{"link": true, "monitor": true, "db": true}
+			include = map[string]bool{"link": true, "monitor": true, "db": true, "nginx": true}
 		}
 
-		var linkSection, devSection, dbSection, containerSection, nodeSection string
+		var linkSection, devSection, dbSection, containerSection, nodeSection, nginxSection string
 		stats := map[string]int{"total": 0, "up": 0, "down": 0, "warn": 0}
 		if include["link"] {
 			linkSection = renderLinkSection(a, start, end, stats)
@@ -81,8 +82,11 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		if include["node"] {
 			nodeSection = renderNodeSection(a, stats)
 		}
+		if include["nginx"] {
+			nginxSection = renderNginxSection(a, stats)
+		}
 
-		content := renderHTML(title, start, end, linkSection, devSection, dbSection, containerSection, nodeSection, stats)
+		content := renderHTML(title, start, end, linkSection, devSection, dbSection, containerSection, nodeSection, nginxSection, stats)
 
 		username, _ := c.Get(middleware.KeyUsername)
 		rec := model.ReportRecord{
@@ -355,6 +359,38 @@ func renderDBSection(a *core.App, stats map[string]int) string {
 	return sb.String()
 }
 
+// renderNginxSection Nginx 状态汇总（读取 nginx_instances 表 + 采集器实时快照）
+func renderNginxSection(a *core.App, stats map[string]int) string {
+	var insts []model.NginxInstance
+	a.DB.Order("id asc").Find(&insts)
+	snapMap := map[uint]nginxprobe.Snapshot{}
+	for _, s := range a.NginxM.SnapshotAll() {
+		snapMap[s.InstanceID] = s
+	}
+
+	var sb strings.Builder
+	sb.WriteString(`<div class="section"><h3>【Nginx 状态汇总】</h3><table><thead><tr><th>实例</th><th>状态页地址</th><th>状态</th><th>活跃连接</th><th>累计请求</th><th>QPS(次/秒)</th></tr></thead><tbody>`)
+	if len(insts) == 0 {
+		sb.WriteString("<tr><td colspan='6' style='text-align:center;color:#999'>暂无 Nginx 监控实例</td></tr>")
+	}
+	for _, d := range insts {
+		stats["total"]++
+		status, color := "异常", "#f5222d"
+		if s, ok := snapMap[d.ID]; ok && s.Up {
+			status, color = "正常", "#52c41a"
+			stats["up"]++
+			sb.WriteString(fmt.Sprintf("<tr><td><b>%s</b></td><td>%s</td><td>%s</td><td>%.0f</td><td>%.0f</td><td>%.1f</td></tr>",
+				d.Name, d.StatusURL, badge(status, color), s.ActiveConns, s.Requests, s.QPS))
+		} else {
+			stats["down"]++
+			sb.WriteString(fmt.Sprintf("<tr><td><b>%s</b></td><td>%s</td><td>%s</td><td colspan='3' style='text-align:center;color:#999'>未采集</td></tr>",
+				d.Name, d.StatusURL, badge(status, color)))
+		}
+	}
+	sb.WriteString("</tbody></table></div>")
+	return sb.String()
+}
+
 func renderContainerSection(a *core.App, stats map[string]int) string {
 	var hosts []model.DockerHost
 	a.DB.Order("id asc").Find(&hosts)
@@ -481,16 +517,16 @@ tbody tr:hover{background:#f8faff}
 <td><div class="num" style="color:#f5222d">{{.Down}}</div><div class="lbl">异常/离线</div></td>
 <td><div class="num" style="color:#faad14">{{.Warn}}</div><div class="lbl">告警</div></td>
 </tr></table>
-{{.LinkSection}}{{.DevSection}}{{.DBSection}}{{.ContainerSection}}{{.NodeSection}}
+{{.LinkSection}}{{.DevSection}}{{.DBSection}}{{.ContainerSection}}{{.NodeSection}}{{.NginxSection}}
 <div class="footer">本报告由 NetOps 网络运维监控平台自动生成</div>
 </div></body></html>`))
 
-func renderHTML(title string, start, end time.Time, linkS, devS, dbS, containerS, nodeS string, stats map[string]int) string {
+func renderHTML(title string, start, end time.Time, linkS, devS, dbS, containerS, nodeS, nginxS string, stats map[string]int) string {
 	var sb strings.Builder
 	reportTpl.Execute(&sb, map[string]any{
 		"Title": title, "Start": start.Format("2006-01-02 15:04"), "End": end.Format("2006-01-02 15:04"),
 		"Now":         time.Now().Format("2006-01-02 15:04:05"),
-		"LinkSection": template.HTML(linkS), "DevSection": template.HTML(devS), "DBSection": template.HTML(dbS), "ContainerSection": template.HTML(containerS), "NodeSection": template.HTML(nodeS),
+		"LinkSection": template.HTML(linkS), "DevSection": template.HTML(devS), "DBSection": template.HTML(dbS), "ContainerSection": template.HTML(containerS), "NodeSection": template.HTML(nodeS), "NginxSection": template.HTML(nginxS),
 		"Total": stats["total"], "Up": stats["up"], "Down": stats["down"], "Warn": stats["warn"],
 	})
 	return sb.String()
@@ -724,7 +760,8 @@ func generateAutoReport(a *core.App, kind string) {
 	dbS := renderDBSection(a, stats)
 	containerS := renderContainerSection(a, stats)
 	nodeS := renderNodeSection(a, stats)
-	content := renderHTML(title, start, end, linkS, devS, dbS, containerS, nodeS, stats)
+	nginxS := renderNginxSection(a, stats)
+	content := renderHTML(title, start, end, linkS, devS, dbS, containerS, nodeS, nginxS, stats)
 	rec := model.ReportRecord{Title: title, StartAt: start, EndAt: end, Content: content, Creator: "system"}
 	a.DB.Create(&rec)
 }
