@@ -92,12 +92,12 @@
 
     <el-card style="margin-top:12px">
       <template #header>{{ t('dbmigrate.tableStructure') }}</template>
-      <el-table :data="tables" size="small" stripe>
-        <el-table-column prop="name" :label="t('dbmigrate.tableName')" />
-        <el-table-column :label="t('dbmigrate.tableComment')">
+      <el-table :data="tables" size="small" stripe :fit="false" class="db-table">
+        <el-table-column prop="name" :label="t('dbmigrate.tableName')" width="240" />
+        <el-table-column :label="t('dbmigrate.tableComment')" width="120" align="center">
           <template #default="{ row }">{{ tableLabel(row.name) }}</template>
         </el-table-column>
-        <el-table-column prop="count" :label="t('dbmigrate.rows')" width="150" />
+        <el-table-column prop="count" :label="t('dbmigrate.rows')" width="100" align="center" />
       </el-table>
     </el-card>
   </div>
@@ -164,4 +164,5 @@ onMounted(load)
 <style scoped>
 .head { display:flex; justify-content:space-between; align-items:center; }
 .page { padding: 16px; }
+.db-table { max-width: 480px; } /* 列宽固定贴合内容，避免弹性拉宽空白 */
 </style>
