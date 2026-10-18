@@ -49,12 +49,11 @@ func Chat(p Provider, messages []Message) (string, error) {
 	if p.BaseURL == "" {
 		return "", fmt.Errorf("AI提供方 %s 未配置 BaseURL", p.Name)
 	}
-	base := strings.TrimRight(p.BaseURL, "/")
-	// Ollama 原生端点兼容 /v1/chat/completions
-	url := base + "/chat/completions"
-	if strings.Contains(base, "/v1") {
-		url = base + "/chat/completions"
+	// 密文未解（加密种子与落库时不一致）时把 enc: 原样发给厂商会被拒为 401，这里前置拦截并明确提示
+	if strings.HasPrefix(p.APIKey, "enc:") {
+		return "", fmt.Errorf("API Key 密文无法本地解密（加密种子可能已变更），请在编辑中重新填写并保存 API Key")
 	}
+	url := strings.TrimRight(p.BaseURL, "/") + "/chat/completions"
 	reqBody := ChatRequest{Model: p.Model, Messages: messages, Temperature: p.Temperature}
 	data, _ := json.Marshal(reqBody)
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))
@@ -68,7 +67,7 @@ func Chat(p Provider, messages []Message) (string, error) {
 	client := &http.Client{Timeout: 60 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("AI请求失败: %w", err)
+		return "", fmt.Errorf("AI请求失败(%s): %w", url, err)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
@@ -76,7 +75,7 @@ func Chat(p Provider, messages []Message) (string, error) {
 		return "", err
 	}
 	if resp.StatusCode >= 400 {
-		return "", fmt.Errorf("AI服务返回 %d: %s", resp.StatusCode, truncate(string(body), 300))
+		return "", fmt.Errorf("AI服务返回 %d (%s): %s", resp.StatusCode, url, truncate(string(body), 300))
 	}
 	var cr ChatResponse
 	if err := json.Unmarshal(body, &cr); err != nil {
