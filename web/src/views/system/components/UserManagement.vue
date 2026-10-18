@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Edit, Key, Delete } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { getEnc, postEnc, putEnc, delEnc } from '@/utils/request'
 const { t } = useI18n()
@@ -47,15 +48,17 @@ function roleLabel(r: string) {
     <div class="np-card">
       <el-table :data="users" stripe class="np-table">
         <el-table-column prop="username" :label="t('system.username')" min-width="120" />
-        <el-table-column prop="employee_no" :label="t('system.empNo')" width="120" />
+        <el-table-column :label="t('system.empNo')" width="110"><template #default="{row}">{{ row.employee_no || '—' }}</template></el-table-column>
         <el-table-column :label="t('system.roleName')" width="100"><template #default="{row}">{{ roleLabel(row.role) }}</template></el-table-column>
-        <el-table-column :label="t('system.dataScope')" min-width="140"><template #default="{row}">{{ scopeLabel(row.node_scope) }}</template></el-table-column>
-        <el-table-column :label="t('common.status')" width="90"><template #default="{row}"><el-tag :type="row.status === 'active' ? 'success' : 'info'" size="small">{{ row.status === 'active' ? t('common.enabled') : t('system.disabled') }}</el-tag></template></el-table-column>
-        <el-table-column :label="t('common.actions')" width="230" fixed="right">
+        <el-table-column :label="t('system.dataScope')" min-width="150"><template #default="{row}">{{ scopeLabel(row.node_scope) }}</template></el-table-column>
+        <el-table-column :label="t('common.status')" width="80"><template #default="{row}"><el-tag :type="row.status === 'active' ? 'success' : 'info'" size="small">{{ row.status === 'active' ? t('common.enabled') : t('system.disabled') }}</el-tag></template></el-table-column>
+        <el-table-column :label="t('common.actions')" width="132" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" text type="primary" @click="open(row)">{{ t('system.edit') }}</el-button>
-            <el-button size="small" text type="warning" @click="resetPwd(row)">{{ t('system.resetPwd') }}</el-button>
-            <el-button size="small" text type="danger" :disabled="row.username==='admin'" @click="remove(row)">{{ t('system.del') }}</el-button>
+            <div class="op-cell">
+              <el-tooltip :content="t('system.edit')"><el-button size="small" circle text type="primary" :icon="Edit" @click="open(row)" /></el-tooltip>
+              <el-tooltip :content="t('system.resetPwd')"><el-button size="small" circle text type="warning" :icon="Key" @click="resetPwd(row)" /></el-tooltip>
+              <el-tooltip :content="t('system.del')"><el-button size="small" circle text type="danger" :icon="Delete" :disabled="row.username==='admin'" @click="remove(row)" /></el-tooltip>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -82,3 +85,6 @@ function roleLabel(r: string) {
     </el-dialog>
   </div>
 </template>
+<style scoped>
+.op-cell { display: flex; gap: 2px; align-items: center; }
+</style>
