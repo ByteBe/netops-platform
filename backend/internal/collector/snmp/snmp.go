@@ -15,6 +15,7 @@ import (
 	"github.com/gosnmp/gosnmp"
 
 	"netops/internal/notify"
+	"netops/internal/service/sshsvc"
 	"netops/internal/tsdb"
 )
 
@@ -81,6 +82,9 @@ type Device struct {
 	PrivPass    string
 	Port        int
 	Interval    int
+	SshUser     string // 可选：SSH 凭据，用于采集真实系统运行时间
+	SshPass     string
+	SshPort     int
 }
 
 // IfStats 接口统计（瞬时）
@@ -347,7 +351,7 @@ func (m *Manager) collectOnce(d Device) (*DeviceSnapshot, error) {
 
 	snap := &DeviceSnapshot{DeviceID: d.ID, Name: d.Name, IP: d.IP, Up: true, TS: time.Now()}
 
-	// Uptime: 本机直接读 /proc/uptime（真实系统运行时间）；远程优先 hrSystemUptime，sysUpTime 回退
+	// Uptime: 本机读 /proc/uptime；远程配了 SSH 则 SSH 执行 cat /proc/uptime（真实系统运行时间）；否则 SNMP 回退
 	if d.IP == "127.0.0.1" || d.IP == "::1" || d.IP == "localhost" {
 		if b, err := os.ReadFile("/proc/uptime"); err == nil {
 			if fs := strings.Fields(string(b)); len(fs) > 0 {
@@ -356,6 +360,18 @@ func (m *Manager) collectOnce(d Device) (*DeviceSnapshot, error) {
 					log.Printf("[snmp] device=%s uptime via /proc/uptime: %.0fs", d.Name, snap.Uptime)
 				}
 			}
+		}
+	} else if d.SshUser != "" && d.SshPass != "" {
+		out, err := sshsvc.Run(sshsvc.Target{Host: d.IP, Port: d.SshPort, User: d.SshUser, Credential: d.SshPass}, "cat /proc/uptime")
+		if err == nil {
+			if fs := strings.Fields(strings.TrimSpace(out)); len(fs) > 0 {
+				if sec, err := strconv.ParseFloat(fs[0], 64); err == nil {
+					snap.Uptime = sec
+					log.Printf("[snmp] device=%s uptime via ssh /proc/uptime: %.0fs", d.Name, snap.Uptime)
+				}
+			}
+		} else {
+			log.Printf("[snmp] device=%s ssh uptime failed: %v", d.Name, err)
 		}
 	}
 	if snap.Uptime == 0 {

@@ -149,7 +149,8 @@ async function testConn() {
     const r = await postEnc<{ok: boolean; uptime?: number; error?: string; message?: string}>('/monitor/test', {
       ip: form.ip, snmp_version: form.snmp_version, community: form.community,
       username: form.username, auth_proto: form.auth_proto, priv_proto: form.priv_proto,
-      auth_pass: form.auth_pass, priv_pass: form.priv_pass, port: form.port
+      auth_pass: form.auth_pass, priv_pass: form.priv_pass, port: form.port,
+      ssh_user: form.ssh_user, ssh_pass: form.ssh_pass, ssh_port: form.ssh_port
     })
     testResult.value = (r && r.ok) ? `${t('monitor.testSuccess')} (Uptime ${Math.floor((r.uptime||0)/86400)}${t('monitor.days')})` : `${t('monitor.testFail')}: ${(r && r.error) || t('monitor.testFail')}`
   } catch (e: any) { testResult.value = t('monitor.testFail') + ': ' + e.message } finally { testing.value = false }
@@ -391,23 +392,21 @@ onBeforeUnmount(() => {
           <el-button :loading="testing" @click="testConn">{{ t('monitor.testConn') }}</el-button>
           <span v-if="testResult" :style="{ marginLeft:'12px', color: testResult.indexOf(t('monitor.testSuccess')) >= 0 ? '#67C23A' : '#F56C6C', fontSize:'13px' }">{{ testResult }}</span>
         </el-form-item>
-        <el-divider content-position="left">BGP/VPNv4 SSH</el-divider>
+        <el-divider content-position="left">SSH 采集（Linux 系统运行时间 / BGP）</el-divider>
+        <el-form-item :label="t('bgp.sshUser')">
+          <el-input v-model="form.ssh_user" placeholder="root/admin" />
+        </el-form-item>
+        <el-form-item :label="t('bgp.sshPass')">
+          <el-input v-model="form.ssh_pass" type="password" show-password />
+        </el-form-item>
+        <el-form-item :label="t('bgp.sshPort')">
+          <el-input-number v-model="form.ssh_port" :min="1" :max="65535" style="margin-right:12px" />
+          <el-button :loading="sshTesting" @click="testSsh">{{ t('bgp.testBtn') }}</el-button>
+          <span v-if="sshTestResult" :style="{ marginLeft:'12px', color: sshTestResult.indexOf('OK') >= 0 ? '#67C23A' : '#F56C6C', fontSize:'13px' }">{{ sshTestResult }}</span>
+        </el-form-item>
         <el-form-item :label="t('bgp.bgpEnable')">
           <el-switch v-model="form.bgp_enable" />
         </el-form-item>
-        <template v-if="form.bgp_enable">
-          <el-form-item :label="t('bgp.sshUser')">
-            <el-input v-model="form.ssh_user" placeholder="admin" />
-          </el-form-item>
-          <el-form-item :label="t('bgp.sshPass')">
-            <el-input v-model="form.ssh_pass" type="password" show-password />
-          </el-form-item>
-          <el-form-item :label="t('bgp.sshPort')">
-            <el-input-number v-model="form.ssh_port" :min="1" :max="65535" style="margin-right:12px" />
-            <el-button :loading="sshTesting" @click="testSsh">{{ t('bgp.testBtn') }}</el-button>
-            <span v-if="sshTestResult" :style="{ marginLeft:'12px', color: sshTestResult.indexOf('OK') >= 0 ? '#67C23A' : '#F56C6C', fontSize:'13px' }">{{ sshTestResult }}</span>
-          </el-form-item>
-        </template>
         <el-form-item :label="t('monitor.displayIfs')">
           <el-select v-model="displayIfArr" multiple filterable :placeholder="t('monitor.displayIfsPlaceholder')" style="width:100%">
             <el-option v-for="i in (snaps[form.id]?.interfaces || [])" :key="i.index" :label="i.name" :value="i.name" />

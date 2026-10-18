@@ -48,7 +48,7 @@ func Run(t Target, cmd string) (string, error) {
 		User:              t.User,
 		Auth:              authMethods,
 		HostKeyCallback:   ssh.InsecureIgnoreHostKey(),
-		HostKeyAlgorithms: []string{"ssh-rsa", "rsa-sha2-256", "rsa-sha2-512"},
+		HostKeyAlgorithms: []string{"ssh-ed25519", "ecdsa-sha2-nistp256", "ssh-rsa", "rsa-sha2-256", "rsa-sha2-512"},
 		Timeout:           10 * time.Second,
 	}
 	client, err := ssh.Dial("tcp", fmt.Sprintf("%s:%d", t.Host, t.Port), cfg)
@@ -94,7 +94,7 @@ func Test(t Target) (string, error) {
 		User:              t.User,
 		Auth:              authMethods,
 		HostKeyCallback:   ssh.InsecureIgnoreHostKey(),
-		HostKeyAlgorithms: []string{"ssh-rsa", "rsa-sha2-256", "rsa-sha2-512"},
+		HostKeyAlgorithms: []string{"ssh-ed25519", "ecdsa-sha2-nistp256", "ssh-rsa", "rsa-sha2-256", "rsa-sha2-512"},
 		Timeout:           10 * time.Second,
 	}
 	client, err := ssh.Dial("tcp", fmt.Sprintf("%s:%d", t.Host, t.Port), cfg)

@@ -152,6 +152,9 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			AuthPass    string `json:"auth_pass"`
 			PrivPass    string `json:"priv_pass"`
 			Port        int    `json:"port"`
+			SSHUser     string `json:"ssh_user"`
+			SSHPass     string `json:"ssh_pass"`
+			SSHPort     int    `json:"ssh_port"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			response.Bad(c, "参数错误")
@@ -164,6 +167,7 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			IP: req.IP, SNMPVersion: req.SNMPVersion, Community: req.Community,
 			Username: req.Username, AuthProto: req.AuthProto, PrivProto: req.PrivProto,
 			AuthPass: req.AuthPass, PrivPass: req.PrivPass, Port: req.Port,
+			SshUser: req.SSHUser, SshPass: req.SSHPass, SshPort: req.SSHPort,
 		})
 		if up {
 			response.OK(c, gin.H{"ok": true, "uptime": uptime, "message": msg})
@@ -219,6 +223,7 @@ func syncDevice(a *core.App, d model.MonitorDevice) {
 			Community: d.Community, Username: d.Username, AuthProto: d.AuthProto,
 			PrivProto: d.PrivProto, AuthPass: d.AuthPass, PrivPass: d.PrivPass,
 			Port: d.Port, Interval: d.Interval,
+			SshUser: d.SshUser, SshPass: d.SshPass, SshPort: d.SshPort,
 		}})
 	} else {
 		refreshSnmp(a)
@@ -235,7 +240,8 @@ func refreshSnmp(a *core.App) {
 			devs = append(devs, snmp.Device{ID: d.ID, Name: d.Name, IP: d.IP, Type: d.Type, Vendor: d.Vendor,
 				SNMPVersion: d.SNMPVersion, Community: d.Community, Username: d.Username,
 				AuthProto: d.AuthProto, PrivProto: d.PrivProto, AuthPass: d.AuthPass,
-				PrivPass: d.PrivPass, Port: d.Port, Interval: d.Interval})
+				PrivPass: d.PrivPass, Port: d.Port, Interval: d.Interval,
+				SshUser: d.SshUser, SshPass: d.SshPass, SshPort: d.SshPort})
 		}
 	}
 	a.SnmpMgr.SyncDevices(devs)
