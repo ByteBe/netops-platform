@@ -122,7 +122,8 @@ func main() {
 		go func() {
 			log.Printf("[web] 前端独立服务启动: http://%s（API 端口 %d）", webAddr, cfg.Server.Port)
 			if err := webSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				log.Fatalf("[web] 前端服务异常退出: %v", err)
+				// 端口被占用等场景：降级警告而非退出整个进程（API 服务仍可用）
+				log.Printf("[web] 警告: 前端服务异常（%v），请检查端口占用；API 端口 %d 仍可访问（未初始化时请访问 http://IP:%d/setup 完成初始化）", err, cfg.Server.Port, cfg.Server.Port)
 			}
 		}()
 	}
