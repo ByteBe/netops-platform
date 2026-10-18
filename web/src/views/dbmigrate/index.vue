@@ -91,7 +91,7 @@
     </el-card>
 
     <el-card style="margin-top:12px">
-      <template #header>{{ t('dbmigrate.tableStructure') }}</template>
+      <template #header><div class="card-title">{{ t('dbmigrate.tableStructure') }}</div></template>
       <div class="tables-row">
         <el-table :data="tablesLeft" size="small" stripe class="db-table">
           <el-table-column prop="name" :label="t('dbmigrate.tableName')" min-width="180" />
@@ -179,4 +179,5 @@ onMounted(load)
 .page { padding: 16px; }
 .tables-row { display: flex; gap: 24px; align-items: flex-start; }
 .tables-row .db-table { flex: 1; min-width: 0; }
+.card-title { text-align: center; font-weight: 600; }
 </style>
