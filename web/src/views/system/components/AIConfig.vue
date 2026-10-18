@@ -91,7 +91,7 @@ async function test(a: AIConfig) {
           </el-select>
           <el-button style="margin-left:8px" size="small" :loading="loadingModels" @click="fetchModels">{{ t('system.detectModel') }}</el-button>
         </el-form-item>
-        <el-form-item label="Temperature"><el-input-number v-model="form.temperature" :step="0.1" :min="0" :max="2" /></el-form-item>
+        <el-form-item :label="t('system.temperature')"><el-input-number v-model="form.temperature" :step="0.1" :min="0" :max="2" /></el-form-item>
         <el-form-item :label="t('system.priority')"><el-input-number v-model="form.priority" /></el-form-item>
         <el-form-item :label="t('common.enabled')"><el-switch v-model="form.enable" /></el-form-item>
       </el-form>

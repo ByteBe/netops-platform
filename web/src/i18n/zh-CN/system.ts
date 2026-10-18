@@ -6,6 +6,7 @@ export default {
   apiKeyRequired: '未配置，请填写API密钥',
   keyConfigured: '已配置',
   keyMissing: '未配置',
+  temperature: '温度参数',
   model: '模型', enabled: '启用', chat: 'AI对话', mcpAgent: 'Agent名称',
   detectModel: '识别模型',
   serverAddr: '服务器地址', endpoint: '接口路径', emailEnable: '启用邮箱',

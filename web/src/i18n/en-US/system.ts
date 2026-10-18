@@ -6,6 +6,7 @@ export default {
   apiKeyRequired: 'Not configured, enter API key',
   keyConfigured: 'Configured',
   keyMissing: 'Missing',
+  temperature: 'Temperature',
   model: 'Model', enabled: 'Enabled', chat: 'AI Chat', mcpAgent: 'Agent Name',
   detectModel: 'Detect Models',
   serverAddr: 'Server Address', endpoint: 'Endpoint', emailEnable: 'Email Enabled',
