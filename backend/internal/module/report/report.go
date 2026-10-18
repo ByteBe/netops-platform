@@ -338,7 +338,7 @@ func renderDevSection(a *core.App, start, end time.Time, stats map[string]int) s
 
 func renderDBSection(a *core.App, stats map[string]int) string {
 	var sb strings.Builder
-	sb.WriteString(`<div class="section"><h3>【数据库状态汇总】</h3><table><thead><tr><th>实例</th><th>类型</th><th>状态</th><th>连接数</th><th>错误数</th></tr></thead><tbody>`)
+	sb.WriteString(`<div class="section"><h3>【数据库状态汇总】</h3><table><thead><tr><th>实例</th><th>类型</th><th>状态</th><th>数据库数</th><th>错误数</th></tr></thead><tbody>`)
 	for _, s := range a.DBProbe.SnapshotAll() {
 		stats["total"]++
 		status, color := "异常", "#f5222d"
@@ -407,8 +407,11 @@ func renderContainerSection(a *core.App, stats map[string]int) string {
 			stats["down"]++
 		}
 		addr := strings.TrimPrefix(h.Address, "tcp://")
+		if addr == "" {
+			addr = "本机"
+		}
 		sb.WriteString(fmt.Sprintf("<tr><td><b>%s</b></td><td>%s</td><td>docker</td><td>%s</td><td>%d</td><td>%d</td></tr>",
-			h.Name, addr, badge(status, color), containerCount[h.Address], abnormalCount[h.Address]))
+			h.Name, addr, badge(status, color), containerCount[key], abnormalCount[key]))
 	}
 
 	k8sStatus := a.K8sM.ClusterStatus()
