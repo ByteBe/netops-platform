@@ -17,7 +17,7 @@ export default {
   inspectItems: '巡检内容',
   dbStatus: '数据库状态',
   containerK8s: '容器/K8s',
-  nodeHealth: '节点健康性',
+  nodeHealth: '节点健康性', nginxStatus: 'Nginx 状态',
   channels: '发送渠道',
   channelsPlaceholder: '选择通知渠道（可多选）',
   email: '邮件', dingtalk: '钉钉', wecom: '企业微信', feishu: '飞书', sms: '短信',

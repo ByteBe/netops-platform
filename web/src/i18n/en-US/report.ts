@@ -18,7 +18,7 @@ export default {
   inspectItems: 'Inspection Items',
   dbStatus: 'Database Status',
   containerK8s: 'Container/K8s',
-  nodeHealth: 'Node Health',
+  nodeHealth: 'Node Health', nginxStatus: 'Nginx Status',
   channels: 'Channels',
   channelsPlaceholder: 'Select notification channels (multi)',
   email: 'Email', dingtalk: 'DingTalk', wecom: 'WeCom', feishu: 'Feishu', sms: 'SMS',

@@ -25,7 +25,7 @@ const genLoading = ref(false)
 const genForm = reactive({
   title: t('report.reportTitle'),
   send_email: false,
-  include: ['link', 'monitor', 'db'] as string[]
+  include: ['link', 'monitor', 'db', 'nginx'] as string[]
 })
 
 const viewVisible = ref(false)
@@ -162,6 +162,7 @@ async function quickGen(kind: string) {
             <el-checkbox value="db">{{ t('report.dbStatus') }}</el-checkbox>
             <el-checkbox value="container">{{ t('report.containerK8s') }}</el-checkbox>
             <el-checkbox value="node">{{ t('report.nodeHealth') }}</el-checkbox>
+            <el-checkbox value="nginx">{{ t('report.nginxStatus') }}</el-checkbox>
           </el-checkbox-group>
         </el-form-item>
       </el-form>
