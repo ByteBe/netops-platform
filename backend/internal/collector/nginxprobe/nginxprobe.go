@@ -149,9 +149,8 @@ func (m *Manager) collect(d Instance) {
 	if snap.Up {
 		up = 1
 	}
-	// name 含 ; = 会破坏 tsdb 的标签串解析，写入前清洗
-	cleanName := strings.NewReplacer(";", "_", "=", "_").Replace(d.Name)
-	tags := map[string]string{"nginx_id": fmt.Sprint(d.ID), "name": cleanName}
+	// 只写 nginx_id 作 tags：与查询端保持一致（TDengine 按 tags 精确哈希建表，带 name 会导致历史查不到）
+	tags := map[string]string{"nginx_id": fmt.Sprint(d.ID)}
 	rows := []tsdb.Row{
 		{Metric: "nginx_avail", Field: "value", Tags: tags, Value: up, TS: now},
 		{Metric: "nginx_conn", Field: "value", Tags: tags, Value: snap.ActiveConns, TS: now},

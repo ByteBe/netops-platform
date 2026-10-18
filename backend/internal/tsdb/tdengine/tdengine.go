@@ -53,7 +53,8 @@ func NewTDengine(host string, port int, user, pass, db string) (*Engine, error) 
 }
 
 func (e *Engine) initDB() error {
-	if err := e.exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s KEEP 30 DURATION 1", e.db)); err != nil {
+	// 建库必须用不带库路径的 /rest/sql：库不存在时带库路径的请求会被 TDengine 拒绝
+	if _, err := e.queryRaw(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s KEEP 30 DURATION 1", e.db)); err != nil {
 		return fmt.Errorf("TDengine 初始化数据库失败: %w", err)
 	}
 	return nil
@@ -81,7 +82,16 @@ type taosResp struct {
 }
 
 func (e *Engine) query(sql string) ([][]interface{}, error) {
-	req, err := http.NewRequest(http.MethodPost, e.base+"/rest/sql/"+e.db, bytes.NewBufferString(sql))
+	return e.queryAt("/rest/sql/"+e.db, sql)
+}
+
+// queryRaw 不带库路径执行（建库等库不存在场景专用）
+func (e *Engine) queryRaw(sql string) ([][]interface{}, error) {
+	return e.queryAt("/rest/sql", sql)
+}
+
+func (e *Engine) queryAt(path, sql string) ([][]interface{}, error) {
+	req, err := http.NewRequest(http.MethodPost, e.base+path, bytes.NewBufferString(sql))
 	if err != nil {
 		return nil, err
 	}

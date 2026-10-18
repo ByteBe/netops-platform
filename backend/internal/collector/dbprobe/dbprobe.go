@@ -262,7 +262,7 @@ func (m *Manager) collect(d Instance) {
 	if snap.Up {
 		up = 1
 	}
-	tags := map[string]string{"db_id": fmt.Sprint(d.ID), "name": d.Name}
+	tags := map[string]string{"db_id": fmt.Sprint(d.ID)}
 	rows := []tsdb.Row{
 		{Metric: "db_avail", Field: "value", Tags: tags, Value: up, TS: now},
 		{Metric: "db_conn", Field: "value", Tags: tags, Value: snap.Conns, TS: now},
