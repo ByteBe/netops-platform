@@ -38,15 +38,28 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		response.OK(c, list)
 	})
 	g.POST("/ai", middleware.RequireRole("admin"), func(c *gin.Context) {
-		var cfg model.AIConfig
-		if err := c.ShouldBindJSON(&cfg); err != nil {
+		var req struct {
+			Name        string  `json:"name"`
+			Provider    string  `json:"provider"`
+			BaseURL     string  `json:"base_url"`
+			APIKey      string  `json:"api_key"`
+			Model       string  `json:"model"`
+			Temperature float64 `json:"temperature"`
+			Priority    int     `json:"priority"`
+			Enable      bool    `json:"enable"`
+			Remark      string  `json:"remark"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
 			response.Bad(c, "参数错误")
 			return
 		}
-		if cfg.Name == "" || cfg.BaseURL == "" {
+		if req.Name == "" || req.BaseURL == "" {
 			response.Bad(c, "名称与BaseURL必填")
 			return
 		}
+		cfg := model.AIConfig{Name: req.Name, Provider: req.Provider, BaseURL: req.BaseURL,
+			APIKey: req.APIKey, Model: req.Model, Temperature: req.Temperature,
+			Priority: req.Priority, Enable: req.Enable, Remark: req.Remark}
 		if cfg.Model == "" {
 			cfg.Model = "gpt-3.5-turbo"
 		}
@@ -63,7 +76,17 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			response.NotFound(c, "AI配置不存在")
 			return
 		}
-		var req model.AIConfig
+		var req struct {
+			Name        string  `json:"name"`
+			Provider    string  `json:"provider"`
+			BaseURL     string  `json:"base_url"`
+			APIKey      string  `json:"api_key"`
+			Model       string  `json:"model"`
+			Temperature float64 `json:"temperature"`
+			Priority    int     `json:"priority"`
+			Enable      bool    `json:"enable"`
+			Remark      string  `json:"remark"`
+		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			response.Bad(c, "参数错误")
 			return
