@@ -90,7 +90,13 @@ func main() {
 	}()
 
 	// 5. 启动 API 服务（默认 30821）
-	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
+	apiHost := cfg.Server.Host
+	if cfg.Initialized && cfg.Server.WebPort > 0 {
+		// 已完成初始化且启用独立前端端口：API 仅绑定本机（供前端反代与内部调用），
+		// 外部只能经前端端口访问，防止绕过前端直连 API
+		apiHost = "127.0.0.1"
+	}
+	addr := fmt.Sprintf("%s:%d", apiHost, cfg.Server.Port)
 	srv := &http.Server{Addr: addr, Handler: engine}
 	go func() {
 		scheme := "http"
