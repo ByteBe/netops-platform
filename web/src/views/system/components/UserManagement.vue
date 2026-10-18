@@ -46,9 +46,9 @@ function roleLabel(r: string) {
   <div>
     <div class="np-toolbar"><div class="spacer"></div><el-button type="primary" @click="open()">{{ t('system.addUser') }}</el-button></div>
     <div class="np-card">
-      <el-table :data="users" stripe class="np-table">
+      <el-table :data="users" stripe class="np-table user-table">
         <el-table-column prop="username" :label="t('system.username')" min-width="150" />
-        <el-table-column :label="t('system.empNo')" min-width="120"><template #default="{row}">{{ row.employee_no || '—' }}</template></el-table-column>
+        <el-table-column :label="t('system.empNo')" min-width="130"><template #default="{row}">{{ row.employee_no || '—' }}</template></el-table-column>
         <el-table-column :label="t('system.roleName')" min-width="120"><template #default="{row}">{{ roleLabel(row.role) }}</template></el-table-column>
         <el-table-column :label="t('system.dataScope')" min-width="160"><template #default="{row}">{{ scopeLabel(row.node_scope) }}</template></el-table-column>
         <el-table-column :label="t('common.status')" width="90"><template #default="{row}"><el-tag :type="row.status === 'active' ? 'success' : 'info'" size="small">{{ row.status === 'active' ? t('common.enabled') : t('system.disabled') }}</el-tag></template></el-table-column>
@@ -87,4 +87,5 @@ function roleLabel(r: string) {
 </template>
 <style scoped>
 .op-cell { display: flex; gap: 2px; align-items: center; }
+.user-table { max-width: 860px; } /* 限制表格最大宽度，避免宽屏下列被拉出大片空白 */
 </style>
