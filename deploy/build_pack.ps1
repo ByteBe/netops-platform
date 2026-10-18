@@ -21,6 +21,7 @@ if (Test-Path $t) { Remove-Item $t -Recurse -Force }
 [void](New-Item -ItemType Directory -Force $t)
 Copy-Item (Join-Path $b "netops-server.exe") (Join-Path $t "netops-server.exe") -Force
 Copy-Item (Join-Path $b "web") (Join-Path $t "web") -Recurse -Force
+Copy-Item (Join-Path $b "start.bat") (Join-Path $t "start.bat") -Force
 Copy-Item $readmeWin (Join-Path $t "README.md") -Force
 Compress-Archive -Path (Join-Path $t "*") -DestinationPath (Join-Path $dist ("netops-windows-amd64-v" + $Version + ".zip")) -CompressionLevel Optimal
 Write-Output ("packed: netops-windows-amd64-v" + $Version + ".zip  " + (Get-Item (Join-Path $dist ("netops-windows-amd64-v" + $Version + ".zip"))).Length)
@@ -33,6 +34,7 @@ if (Test-Path $t) { Remove-Item $t -Recurse -Force }
 Copy-Item (Join-Path $b "netops-linux-amd64") (Join-Path $t "netops-server") -Force
 Copy-Item (Join-Path $b "web") (Join-Path $t "web") -Recurse -Force
 Copy-Item $readmeLin (Join-Path $t "README.md") -Force
+Copy-Item "E:\IDEA\netops-platform\install.sh" (Join-Path $t "install.sh") -Force
 Compress-Archive -Path (Join-Path $t "*") -DestinationPath (Join-Path $dist ("netops-kylin-amd64-v" + $Version + ".zip")) -CompressionLevel Optimal
 Compress-Archive -Path (Join-Path $t "*") -DestinationPath (Join-Path $dist ("netops-uos-amd64-v" + $Version + ".zip")) -CompressionLevel Optimal
 Write-Output ("packed: netops-kylin-amd64-v" + $Version + ".zip + netops-uos-amd64-v" + $Version + ".zip")
@@ -45,6 +47,7 @@ if (Test-Path $t) { Remove-Item $t -Recurse -Force }
 Copy-Item (Join-Path $b "netops-linux-arm64") (Join-Path $t "netops-server") -Force
 Copy-Item (Join-Path $b "web") (Join-Path $t "web") -Recurse -Force
 Copy-Item $readmeLin (Join-Path $t "README.md") -Force
+Copy-Item "E:\IDEA\netops-platform\install.sh" (Join-Path $t "install.sh") -Force
 Compress-Archive -Path (Join-Path $t "*") -DestinationPath (Join-Path $dist ("netops-kylin-arm64-v" + $Version + ".zip")) -CompressionLevel Optimal
 Compress-Archive -Path (Join-Path $t "*") -DestinationPath (Join-Path $dist ("netops-uos-arm64-v" + $Version + ".zip")) -CompressionLevel Optimal
 Write-Output ("packed: netops-kylin-arm64-v" + $Version + ".zip + netops-uos-arm64-v" + $Version + ".zip")
