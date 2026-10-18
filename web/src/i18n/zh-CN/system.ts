@@ -2,6 +2,7 @@ export default {
   users: '用户管理', addUser: '新增用户', ai: 'AI接入', mcp: 'MCP配置',
   email: '通知渠道', settings: '系统参数', audit: '审计日志',
   aiName: 'AI名称', provider: '服务商', apiKey: 'API密钥', apiBase: 'API地址',
+  apiKeyKeep: '已加密存储，留空表示不修改；首次配置或更换请填写',
   model: '模型', enabled: '启用', chat: 'AI对话', mcpAgent: 'Agent名称',
   detectModel: '识别模型',
   serverAddr: '服务器地址', endpoint: '接口路径', emailEnable: '启用邮箱',

@@ -81,7 +81,7 @@ async function test(a: AIConfig) {
           <el-select v-model="form.provider" @change="onProvider"><el-option v-for="p in providers" :key="p.value" :label="p.label" :value="p.value" /></el-select>
         </el-form-item>
         <el-form-item :label="t('system.apiBase')"><el-input v-model="form.base_url" /></el-form-item>
-        <el-form-item :label="t('system.apiKey')"><el-input v-model="form.api_key" type="password" show-password /></el-form-item>
+        <el-form-item :label="t('system.apiKey')"><el-input v-model="form.api_key" type="password" show-password :placeholder="form.id ? t('system.apiKeyKeep') : ''" /></el-form-item>
         <el-form-item :label="t('system.model')">
           <el-select v-model="form.model" filterable allow-create :loading="loadingModels" :placeholder="t('system.model')" style="width: 420px">
             <el-option v-for="m in modelOptions" :key="m" :label="m" :value="m" />

@@ -2,6 +2,7 @@ export default {
   users: 'Users', addUser: 'Add User', ai: 'AI Integration', mcp: 'MCP Config',
   email: 'Email Config', settings: 'System Settings', audit: 'Audit Logs',
   aiName: 'AI Name', provider: 'Provider', apiKey: 'API Key', apiBase: 'API Base',
+  apiKeyKeep: 'Encrypted, leave empty to keep; fill to set or change',
   model: 'Model', enabled: 'Enabled', chat: 'AI Chat', mcpAgent: 'Agent Name',
   detectModel: 'Detect Models',
   serverAddr: 'Server Address', endpoint: 'Endpoint', emailEnable: 'Email Enabled',
