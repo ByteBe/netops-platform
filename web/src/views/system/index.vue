@@ -394,7 +394,7 @@ onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
         <el-form-item :label="t('system.smtpHost')" v-if="emailForm.type==='email'"><el-input v-model="emailForm.smtp_host" placeholder="smtp.qq.com / smtp.163.com" /></el-form-item>
         <el-form-item :label="t('system.smtpPort')" v-if="emailForm.type==='email'"><el-input-number v-model="emailForm.smtp_port" /></el-form-item>
         <el-form-item :label="t('system.account')" v-if="emailForm.type==='email'"><el-input v-model="emailForm.user" :placeholder="t('system.senderEmail')" /></el-form-item>
-        <el-form-item :label="t('dbmigrate.password')" v-if="emailForm.type==='email'"><el-input v-model="emailForm.password" type="password" show-password :placeholder="t('system.authCode')" /></el-form-item>
+        <el-form-item :label="t('system.authCode')" v-if="emailForm.type==='email'"><el-input v-model="emailForm.password" type="password" show-password :placeholder="t('system.authCode')" /></el-form-item>
         <el-form-item label="Webhook" v-else><el-input v-model="emailForm.webhook" :placeholder="webhookPlaceholder()" /></el-form-item>
         <el-form-item :label="t('common.enabled')"><el-switch v-model="emailForm.enable" /></el-form-item>
       </el-form>
