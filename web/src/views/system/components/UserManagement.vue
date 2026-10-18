@@ -47,12 +47,12 @@ function roleLabel(r: string) {
     <div class="np-toolbar"><div class="spacer"></div><el-button type="primary" @click="open()">{{ t('system.addUser') }}</el-button></div>
     <div class="np-card">
       <el-table :data="users" stripe class="np-table">
-        <el-table-column prop="username" :label="t('system.username')" min-width="120" />
-        <el-table-column :label="t('system.empNo')" width="110"><template #default="{row}">{{ row.employee_no || '—' }}</template></el-table-column>
-        <el-table-column :label="t('system.roleName')" width="100"><template #default="{row}">{{ roleLabel(row.role) }}</template></el-table-column>
-        <el-table-column :label="t('system.dataScope')" min-width="150"><template #default="{row}">{{ scopeLabel(row.node_scope) }}</template></el-table-column>
-        <el-table-column :label="t('common.status')" width="80"><template #default="{row}"><el-tag :type="row.status === 'active' ? 'success' : 'info'" size="small">{{ row.status === 'active' ? t('common.enabled') : t('system.disabled') }}</el-tag></template></el-table-column>
-        <el-table-column :label="t('common.actions')" width="132" fixed="right">
+        <el-table-column prop="username" :label="t('system.username')" min-width="150" />
+        <el-table-column :label="t('system.empNo')" min-width="120"><template #default="{row}">{{ row.employee_no || '—' }}</template></el-table-column>
+        <el-table-column :label="t('system.roleName')" min-width="120"><template #default="{row}">{{ roleLabel(row.role) }}</template></el-table-column>
+        <el-table-column :label="t('system.dataScope')" min-width="160"><template #default="{row}">{{ scopeLabel(row.node_scope) }}</template></el-table-column>
+        <el-table-column :label="t('common.status')" width="90"><template #default="{row}"><el-tag :type="row.status === 'active' ? 'success' : 'info'" size="small">{{ row.status === 'active' ? t('common.enabled') : t('system.disabled') }}</el-tag></template></el-table-column>
+        <el-table-column :label="t('common.actions')" width="140" fixed="right">
           <template #default="{ row }">
             <div class="op-cell">
               <el-tooltip :content="t('system.edit')"><el-button size="small" circle text type="primary" :icon="Edit" @click="open(row)" /></el-tooltip>
