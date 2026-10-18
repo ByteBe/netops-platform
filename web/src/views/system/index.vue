@@ -118,10 +118,12 @@ async function loadAudits() {
 }
 function moduleFromPath(p?: string): string {
   if (!p) return '-'
-  const parts = p.replace('/api/v1/', '').split('/')
-  const map: Record<string, string> = { auth:'modAuth', linkdetect:'modLinkdetect', topo:'modTopo', monitor:'modMonitor', dbmonitor:'modDbmonitor', resource:'modResource', script:'modScript', ipam:'modIpam', report:'modReport', traffic:'modTraffic', system:'modSystem', docker:'modDocker', k8s:'modK8s', dashboard:'modDashboard', user:'modUser' }
-  const k = map[parts[0]]
-  return k ? t('system.' + k) : parts[0] || '-'
+  const parts = p.split('/').filter(Boolean)
+  let seg = parts[0] || ''
+  if (seg === 'api' && parts[1] === 'v1') seg = parts[2] || ''
+  const map: Record<string, string> = { auth:'modAuth', linkdetect:'modLinkdetect', topo:'modTopo', monitor:'modMonitor', dbmonitor:'modDbmonitor', resource:'modResource', script:'modScript', ipam:'modIpam', report:'modReport', traffic:'modTraffic', system:'modSystem', docker:'modDocker', k8s:'modK8s', dashboard:'modDashboard', user:'modUser', containermon:'modContainermon', nginxmon:'modNginxmon', bgpmon:'modBgpmon', alert:'modAlert', distributed:'modDistributed', devicelog:'modDevicelog', tasklog:'modTasklog', subnet:'modSubnet', setup:'modSetup', aiinspect:'modAiinspect' }
+  const k = map[seg]
+  return k ? t('system.' + k) : seg || '-'
 }
 
 // Security
@@ -148,6 +150,17 @@ const roleList = ref([
 ])
 const allPerms = ['dashboard:view', 'monitor:view', 'monitor:edit', 'alert:view', 'alert:ack', 'alert:edit',
   'config:backup', 'config:rollback', 'report:view', 'report:edit', 'topo:edit', 'user:edit', 'system:edit', 'node:edit']
+const permKeys: Record<string, string> = {
+  'dashboard:view': 'permDashboardView', 'monitor:view': 'permMonitorView', 'monitor:edit': 'permMonitorEdit',
+  'alert:view': 'permAlertView', 'alert:ack': 'permAlertAck', 'alert:edit': 'permAlertEdit',
+  'config:backup': 'permConfigBackup', 'config:rollback': 'permConfigRollback',
+  'report:view': 'permReportView', 'report:edit': 'permReportEdit',
+  'topo:edit': 'permTopoEdit', 'user:edit': 'permUserEdit', 'system:edit': 'permSystemEdit', 'node:edit': 'permNodeEdit'
+}
+function permLabel(p: string): string {
+  const key = permKeys[p]
+  return key ? t('system.' + key) : p
+}
 async function saveRoles() { ElMessage.success(t('system.saved')) }
 const checking = ref(false), upgrading = ref(false), latest = ref<any>(null)
 async function loadVersion() { try { ver.value = await getEnc('/update/version') } catch {} }
@@ -215,7 +228,7 @@ onMounted(() => { loadMCP(); loadEmails(); loadAudits(); loadSec(); loadVersion(
             <el-table-column :label="t('system.perms')" min-width="400">
               <template #default="{ row }">
                 <el-checkbox-group v-model="row.perms" :disabled="row.key==='admin'">
-                  <el-checkbox v-for="p in allPerms" :key="p" :value="p" style="margin-right:8px">{{ p }}</el-checkbox>
+                  <el-checkbox v-for="p in allPerms" :key="p" :value="p" style="margin-right:8px">{{ permLabel(p) }}</el-checkbox>
                 </el-checkbox-group>
               </template>
             </el-table-column>
@@ -305,7 +318,7 @@ onMounted(() => { loadMCP(); loadEmails(); loadAudits(); loadSec(); loadVersion(
           <el-table :data="audits" stripe size="small" class="np-table">
             <el-table-column prop="id" label="ID" width="70" />
             <el-table-column prop="username" :label="t('system.auditUser')" width="110" />
-            <el-table-column prop="action" :label="t('system.action')" min-width="140" />
+            <el-table-column prop="action" :label="t('system.action')" min-width="200" show-overflow-tooltip />
             <el-table-column :label="t('system.module')" width="110"><template #default="{ row }">{{ moduleFromPath(row.path) }}</template></el-table-column>
             <el-table-column prop="created_at" :label="t('system.time')" width="170"><template #default="{ row }">{{ fmtTime(row.created_at) }}</template></el-table-column>
           </el-table>

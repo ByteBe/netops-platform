@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"net"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -576,8 +575,7 @@ func usableIPs(cidr string) []string {
 		out = append(out, start.String())
 		start = nextIP(start)
 	}
-	sort.Strings(out)
-	return out
+	return out // nextIP 按字节递增，天然数值序；勿用字符串排序（会变成字典序）
 }
 
 func nextIP(ip net.IP) net.IP {

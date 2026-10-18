@@ -184,7 +184,7 @@ func SeedData(db *gorm.DB) {
 		db.Create(&defaults)
 	}
 	settings := map[string]string{
-		"ipam_binding_enable": "true",
+		"ipam_binding_enable": "false",
 		"docker_enable":       "false",
 		"docker_interval":     "30",
 		"docker_hosts":        "",
