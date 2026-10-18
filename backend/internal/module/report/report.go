@@ -175,9 +175,6 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 func sendReportViaChannels(a *core.App, title, content string) error {
 	var ncs []model.NotifyConfig
 	a.DB.Where("enabled = ?", true).Find(&ncs)
-	if len(ncs) == 0 {
-		return fmt.Errorf("未配置任何通知渠道（系统管理-通知渠道）")
-	}
 	sent := 0
 	// 收集所有 email 渠道的收件地址
 	var recipients []string
@@ -186,10 +183,24 @@ func sendReportViaChannels(a *core.App, title, content string) error {
 			recipients = append(recipients, nc.Addr)
 		}
 	}
+	// 启用中的邮箱配置（发件账号）
+	var cfgs []model.EmailConfig
+	a.DB.Where("enable = ?", true).Find(&cfgs)
+	// 未配置 email 通知渠道时，兜底用邮箱配置（默认收件人，缺省则发件账号自己）发送
+	if len(recipients) == 0 && len(cfgs) > 0 {
+		cfg0 := cfgs[0]
+		if cfg0.DefaultTo != "" {
+			for _, addr := range strings.Split(cfg0.DefaultTo, ",") {
+				if addr = strings.TrimSpace(addr); addr != "" {
+					recipients = append(recipients, addr)
+				}
+			}
+		} else if cfg0.User != "" {
+			recipients = []string{cfg0.User}
+		}
+	}
 	// 通过邮箱配置 SMTP 发送
 	if len(recipients) > 0 {
-		var cfgs []model.EmailConfig
-		a.DB.Where("enable = ?", true).Find(&cfgs)
 		if len(cfgs) == 0 {
 			return fmt.Errorf("未配置发件邮箱（系统管理-邮箱）")
 		}
@@ -230,6 +241,9 @@ func sendReportViaChannels(a *core.App, title, content string) error {
 		}
 	}
 	if sent == 0 {
+		if len(ncs) == 0 && len(cfgs) == 0 {
+			return fmt.Errorf("未配置任何通知渠道（系统管理-通知渠道）")
+		}
 		return fmt.Errorf("所有通知渠道发送失败")
 	}
 	return nil
