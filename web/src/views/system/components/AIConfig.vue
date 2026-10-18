@@ -24,13 +24,13 @@ function open(a?: AIConfig) {
 }
 function onProvider() { const p = providers.value.find(x => x.value === form.provider); if (p?.base_url) form.base_url = p.base_url }
 async function fetchModels() {
-  if (!form.base_url) return ElMessage.warning('请先填写 API 地址')
+  if (!form.base_url) return ElMessage.warning(t('system.apiBaseRequired'))
   loadingModels.value = true
   try {
     modelOptions.value = await postEnc<string[]>('/system/ai/models', { base_url: form.base_url, api_key: form.api_key })
-    if (!modelOptions.value.length) ElMessage.warning('未识别到模型')
+    if (!modelOptions.value.length) ElMessage.warning(t('system.noModels'))
   } catch (e: any) {
-    ElMessage.error(e?.message || '识别模型失败')
+    ElMessage.error(e?.message || t('system.detectFailed'))
   } finally { loadingModels.value = false }
 }
 async function save() {
