@@ -260,13 +260,13 @@ onBeforeUnmount(() => {
             <el-progress :percentage="snaps[d.id]?.cpu ?? 0" :stroke-width="8" :color="(snaps[d.id]?.cpu ?? 0) > 80 ? '#ef4444' : '#2f6bff'" />
           </div>
           <div class="np-metric">
-            <div class="np-metric-label">MEM</div>
+            <div class="np-metric-label">内存</div>
             <el-progress :percentage="snaps[d.id]?.mem_used ?? 0" :stroke-width="8" :color="(snaps[d.id]?.mem_used ?? 0) > 80 ? '#ef4444' : '#22c55e'" />
           </div>
         </div>
         <div v-if="(snaps[d.id]?.disks || []).length" class="np-dev-disks">
           <div v-for="disk in snaps[d.id]?.disks" :key="disk.mount" class="np-disk-row">
-            <span class="np-disk-mount">{{ disk.mount }}</span>
+            <span class="np-disk-mount">{{ disk.mount === '/' ? '磁盘' : disk.mount }}</span>
             <el-progress :percentage="disk.used_pct" :stroke-width="6" :color="disk.used_pct > 80 ? '#ef4444' : '#f59e0b'" style="flex:1" />
             <span class="np-disk-size">{{ (disk.used/1024/1024/1024).toFixed(1) }}G / {{ (disk.total/1024/1024/1024).toFixed(1) }}G</span>
           </div>
