@@ -92,19 +92,28 @@
 
     <el-card style="margin-top:12px">
       <template #header>{{ t('dbmigrate.tableStructure') }}</template>
-      <el-table :data="tables" size="small" stripe :fit="false" class="db-table">
-        <el-table-column prop="name" :label="t('dbmigrate.tableName')" width="240" />
-        <el-table-column :label="t('dbmigrate.tableComment')" width="120" align="center">
-          <template #default="{ row }">{{ tableLabel(row.name) }}</template>
-        </el-table-column>
-        <el-table-column prop="count" :label="t('dbmigrate.rows')" width="100" align="center" />
-      </el-table>
+      <div class="tables-row">
+        <el-table :data="tablesLeft" size="small" stripe class="db-table">
+          <el-table-column prop="name" :label="t('dbmigrate.tableName')" min-width="180" />
+          <el-table-column :label="t('dbmigrate.tableComment')" min-width="120" align="center">
+            <template #default="{ row }">{{ tableLabel(row.name) }}</template>
+          </el-table-column>
+          <el-table-column prop="count" :label="t('dbmigrate.rows')" width="90" align="center" />
+        </el-table>
+        <el-table :data="tablesRight" size="small" stripe class="db-table">
+          <el-table-column prop="name" :label="t('dbmigrate.tableName')" min-width="180" />
+          <el-table-column :label="t('dbmigrate.tableComment')" min-width="120" align="center">
+            <template #default="{ row }">{{ tableLabel(row.name) }}</template>
+          </el-table-column>
+          <el-table-column prop="count" :label="t('dbmigrate.rows')" width="90" align="center" />
+        </el-table>
+      </div>
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getEnc, postEnc } from '@/utils/request'
@@ -126,6 +135,9 @@ const tableKeys: Record<string, string> = {
   nodes: 't_nodes', config_backups: 't_backup', alert_rules: 't_alertRule', alert_events: 't_alertEvent', notify_configs: 't_notify',
 }
 function tableLabel(n: string) { const k = tableKeys[n]; return k ? t('dbmigrate.' + k) : '-' }
+// 表清单拆成两半并排展示，铺满内容区避免右侧空白
+const tablesLeft = computed(() => tables.value.slice(0, Math.ceil(tables.value.length / 2)))
+const tablesRight = computed(() => tables.value.slice(Math.ceil(tables.value.length / 2)))
 const form = reactive<any>({
   database: { type: 'sqlite', host: '127.0.0.1', port: 3306, user: '', password: '', database: 'netops', path: 'data/netops.db', params: '' },
   tsdb: { type: 'builtin', host: '127.0.0.1', port: 6041, user: 'root', pass: '', db: 'data', params: '' }
@@ -165,5 +177,6 @@ onMounted(load)
 <style scoped>
 .head { display:flex; justify-content:space-between; align-items:center; }
 .page { padding: 16px; }
-.db-table { max-width: 480px; } /* 列宽固定贴合内容，避免弹性拉宽空白 */
+.tables-row { display: flex; gap: 24px; align-items: flex-start; }
+.tables-row .db-table { flex: 1; min-width: 0; }
 </style>
