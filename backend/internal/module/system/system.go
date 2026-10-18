@@ -280,18 +280,32 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		response.OK(c, list)
 	})
 	g.POST("/email", middleware.RequireRole("admin"), func(c *gin.Context) {
-		var cfg model.EmailConfig
-		if err := c.ShouldBindJSON(&cfg); err != nil {
+		// EmailConfig.Password 带 json:"-"，需独立接收结构体才能绑定密码
+		var req struct {
+			Name      string `json:"name"`
+			SMTPHost  string `json:"smtp_host"`
+			SMTPPort  int    `json:"smtp_port"`
+			User      string `json:"user"`
+			Password  string `json:"password"`
+			UseSSL    bool   `json:"use_ssl"`
+			Enable    bool   `json:"enable"`
+			DefaultTo string `json:"default_to"`
+			Remark    string `json:"remark"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
 			response.Bad(c, "参数错误")
 			return
 		}
-		if cfg.Name == "" || cfg.SMTPHost == "" {
+		if req.Name == "" || req.SMTPHost == "" {
 			response.Bad(c, "名称与SMTP服务器必填")
 			return
 		}
-		if cfg.SMTPPort == 0 {
-			cfg.SMTPPort = 465
+		if req.SMTPPort == 0 {
+			req.SMTPPort = 465
 		}
+		cfg := model.EmailConfig{Name: req.Name, SMTPHost: req.SMTPHost, SMTPPort: req.SMTPPort,
+			User: req.User, Password: req.Password, UseSSL: req.UseSSL,
+			Enable: req.Enable, DefaultTo: req.DefaultTo, Remark: req.Remark}
 		if err := a.DB.Create(&cfg).Error; err != nil {
 			response.Err(c, err)
 			return
@@ -305,7 +319,17 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			response.NotFound(c, "邮箱配置不存在")
 			return
 		}
-		var req model.EmailConfig
+		var req struct {
+			Name      string `json:"name"`
+			SMTPHost  string `json:"smtp_host"`
+			SMTPPort  int    `json:"smtp_port"`
+			User      string `json:"user"`
+			Password  string `json:"password"`
+			UseSSL    bool   `json:"use_ssl"`
+			Enable    bool   `json:"enable"`
+			DefaultTo string `json:"default_to"`
+			Remark    string `json:"remark"`
+		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			response.Bad(c, "参数错误")
 			return
