@@ -46,12 +46,12 @@ function roleLabel(r: string) {
   <div>
     <div class="np-toolbar"><div class="spacer"></div><el-button type="primary" @click="open()">{{ t('system.addUser') }}</el-button></div>
     <div class="np-card">
-      <el-table :data="users" stripe class="np-table user-table">
-        <el-table-column prop="username" :label="t('system.username')" min-width="150" align="center" />
-        <el-table-column :label="t('system.empNo')" min-width="130" align="center"><template #default="{row}">{{ row.employee_no || '—' }}</template></el-table-column>
+      <el-table :data="users" stripe class="np-table user-table" :fit="false">
+        <el-table-column prop="username" :label="t('system.username')" width="120" align="center" />
+        <el-table-column :label="t('system.empNo')" width="100" align="center"><template #default="{row}">{{ row.employee_no || '—' }}</template></el-table-column>
         <el-table-column :label="t('system.roleName')" width="260" align="center"><template #default="{row}">{{ roleLabel(row.role) }}</template></el-table-column>
-        <el-table-column :label="t('system.dataScope')" min-width="160" align="center"><template #default="{row}">{{ scopeLabel(row.node_scope) }}</template></el-table-column>
-        <el-table-column :label="t('common.status')" width="90" align="center"><template #default="{row}"><el-tag :type="row.status === 'active' ? 'success' : 'info'" size="small">{{ row.status === 'active' ? t('common.enabled') : t('system.disabled') }}</el-tag></template></el-table-column>
+        <el-table-column :label="t('system.dataScope')" width="180" align="center"><template #default="{row}">{{ scopeLabel(row.node_scope) }}</template></el-table-column>
+        <el-table-column :label="t('common.status')" width="80" align="center"><template #default="{row}"><el-tag :type="row.status === 'active' ? 'success' : 'info'" size="small">{{ row.status === 'active' ? t('common.enabled') : t('system.disabled') }}</el-tag></template></el-table-column>
         <el-table-column :label="t('common.actions')" width="140" fixed="right" align="center">
           <template #default="{ row }">
             <div class="op-cell">
@@ -87,5 +87,5 @@ function roleLabel(r: string) {
 </template>
 <style scoped>
 .op-cell { display: flex; gap: 2px; align-items: center; justify-content: center; }
-.user-table { max-width: 980px; } /* 限制表格最大宽度，避免宽屏下列被拉出大片空白 */
+.user-table { max-width: 880px; } /* 列宽固定贴合内容，避免列内空白 */
 </style>
