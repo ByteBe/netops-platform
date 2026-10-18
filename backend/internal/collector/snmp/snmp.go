@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -345,15 +347,27 @@ func (m *Manager) collectOnce(d Device) (*DeviceSnapshot, error) {
 
 	snap := &DeviceSnapshot{DeviceID: d.ID, Name: d.Name, IP: d.IP, Up: true, TS: time.Now()}
 
-	// Uptime: hrSystemUptime (1.3.6.1.2.1.25.1.1.0) 系统运行时间优先，sysUpTime(agent运行时间) 回退
-	if uptime, err := params.Get([]string{"1.3.6.1.2.1.25.1.1.0"}); err == nil && len(uptime.Variables) > 0 && uptime.Variables[0].Value != nil {
-		snap.Uptime = float64(toUint32(uptime.Variables[0].Value)) / 100
-		log.Printf("[snmp] device=%s uptime via hrSystemUptime: raw=%v -> %.0fs", d.Name, uptime.Variables[0].Value, snap.Uptime)
-	} else if uptime2, err2 := params.Get([]string{oidSysUpTime}); err2 == nil && len(uptime2.Variables) > 0 && uptime2.Variables[0].Value != nil {
-		snap.Uptime = float64(toUint32(uptime2.Variables[0].Value)) / 100
-		log.Printf("[snmp] device=%s uptime via sysUpTime: raw=%v -> %.0fs", d.Name, uptime2.Variables[0].Value, snap.Uptime)
-	} else {
-		log.Printf("[snmp] device=%s uptime GET failed: hrErr=%v sysErr=%v", d.Name, err, err2)
+	// Uptime: 本机直接读 /proc/uptime（真实系统运行时间）；远程优先 hrSystemUptime，sysUpTime 回退
+	if d.IP == "127.0.0.1" || d.IP == "::1" || d.IP == "localhost" {
+		if b, err := os.ReadFile("/proc/uptime"); err == nil {
+			if fs := strings.Fields(string(b)); len(fs) > 0 {
+				if sec, err := strconv.ParseFloat(fs[0], 64); err == nil {
+					snap.Uptime = sec
+					log.Printf("[snmp] device=%s uptime via /proc/uptime: %.0fs", d.Name, snap.Uptime)
+				}
+			}
+		}
+	}
+	if snap.Uptime == 0 {
+		if uptime, err := params.Get([]string{"1.3.6.1.2.1.25.1.1.0"}); err == nil && len(uptime.Variables) > 0 && uptime.Variables[0].Value != nil {
+			snap.Uptime = float64(toUint32(uptime.Variables[0].Value)) / 100
+			log.Printf("[snmp] device=%s uptime via hrSystemUptime: raw=%v -> %.0fs", d.Name, uptime.Variables[0].Value, snap.Uptime)
+		} else if uptime2, err2 := params.Get([]string{oidSysUpTime}); err2 == nil && len(uptime2.Variables) > 0 && uptime2.Variables[0].Value != nil {
+			snap.Uptime = float64(toUint32(uptime2.Variables[0].Value)) / 100
+			log.Printf("[snmp] device=%s uptime via sysUpTime: raw=%v -> %.0fs", d.Name, uptime2.Variables[0].Value, snap.Uptime)
+		} else {
+			log.Printf("[snmp] device=%s uptime GET failed: hrErr=%v sysErr=%v", d.Name, err, err2)
+		}
 	}
 
 	// 采集 CPU
