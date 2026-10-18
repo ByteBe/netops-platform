@@ -490,22 +490,23 @@ func avgOf(series []tsdb.Series) float64 {
 var reportTpl = template.Must(template.New("report").Parse(`<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>{{.Title}}</title>
 <style>
 *{box-sizing:border-box}
-body{font-family:"Noto Sans CJK SC","WenQuanYi Micro Hei","WenQuanYi Zen Hei","Microsoft YaHei",sans-serif;margin:0;padding:32px;background:#f0f2f5;color:#2c3e50;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.wrap{max-width:900px;margin:0 auto;background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.08);overflow:hidden}
-.header{padding:28px 36px 16px 36px}
-.header h1{margin:0;font-size:22px;font-weight:700;color:#1a73e8}
-.header .meta{margin-top:6px;font-size:13px;color:#888}
-.summary{width:100%;border-collapse:collapse;margin:0 36px;width:calc(100% - 72px)}
-.summary td{width:25%;text-align:center;padding:18px 8px;border-bottom:1px solid #f0f0f0}
-.summary .num{font-size:26px;font-weight:700;line-height:1.2}
-.summary .lbl{font-size:12px;color:#999;margin-top:6px}
-.section{padding:20px 36px}
-h3{margin:0 0 14px;font-size:16px;color:#1a73e8;padding-bottom:8px;border-bottom:2px solid #e8f0fe}
+body{font-family:"Noto Sans CJK SC","WenQuanYi Micro Hei","WenQuanYi Zen Hei","Microsoft YaHei",sans-serif;margin:0;padding:32px;background:linear-gradient(180deg,#e9eef6 0%,#f5f7fa 100%);color:#2c3e50;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.wrap{max-width:920px;margin:0 auto;background:#fff;border-radius:12px;box-shadow:0 4px 20px rgba(26,115,232,.10);overflow:hidden}
+.header{padding:30px 40px 20px;background:linear-gradient(135deg,#1a73e8 0%,#0d47a1 100%);border-radius:12px 12px 0 0}
+.header h1{margin:0;font-size:24px;font-weight:700;color:#fff;letter-spacing:1px}
+.header .meta{margin-top:8px;font-size:13px;color:#d6e4ff}
+.summary{width:calc(100% - 72px);margin:26px 36px 10px;border-collapse:separate;border-spacing:10px 0}
+.summary td{width:25%;text-align:center;padding:16px 8px;background:#f6f9ff;border:1px solid #e4ecfb;border-radius:10px}
+.summary .num{font-size:28px;font-weight:700;line-height:1.2}
+.summary .lbl{font-size:12px;color:#7a8798;margin-top:6px}
+.section{padding:22px 40px}
+h3{margin:0 0 14px;font-size:16px;color:#1a73e8;padding:7px 12px;border-left:4px solid #1a73e8;background:#eef4ff;border-radius:4px}
 table{width:100%;border-collapse:collapse;font-size:13px}
-thead th{background:#f5f7fa;padding:10px 12px;text-align:left;font-weight:600;color:#555;border-bottom:2px solid #e8e8e8}
-tbody td{padding:10px 12px;border-bottom:1px solid #f0f0f0}
-tbody tr:hover{background:#f8faff}
-.footer{padding:16px 36px;text-align:center;color:#aaa;font-size:12px;border-top:1px solid #eee}
+thead th{background:#1a73e8;padding:10px 12px;text-align:left;font-weight:600;color:#fff;border:none}
+tbody td{padding:10px 12px;border-bottom:1px solid #eef1f5}
+tbody tr:nth-child(even){background:#f7f9fc}
+tbody tr:hover{background:#eef4ff}
+.footer{padding:18px 40px;text-align:center;color:#8a97a8;font-size:12px;border-top:1px solid #eef1f5;background:#f7f9fc}
 </style></head><body><div class="wrap">
 <div class="header">
 <h1>{{.Title}}</h1>
