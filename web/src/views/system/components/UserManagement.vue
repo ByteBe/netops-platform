@@ -40,11 +40,6 @@ function roleLabel(r: string) {
   const map: Record<string, string> = { admin: t('system.admin'), operator: t('system.opRole'), viewer: t('system.viewer') }
   return map[r] || r
 }
-function statusTag(s: string) {
-  return s === 'active'
-    ? { type: 'success' as const, text: t('common.enabled') }
-    : { type: 'info' as const, text: t('system.disabled') }
-}
 </script>
 <template>
   <div>
@@ -55,7 +50,7 @@ function statusTag(s: string) {
         <el-table-column prop="employee_no" :label="t('system.empNo')" width="120" />
         <el-table-column :label="t('system.roleName')" width="100"><template #default="{row}">{{ roleLabel(row.role) }}</template></el-table-column>
         <el-table-column :label="t('system.dataScope')" min-width="140"><template #default="{row}">{{ scopeLabel(row.node_scope) }}</template></el-table-column>
-        <el-table-column :label="t('common.status')" width="90"><template #default="{row}"><el-tag :type="statusTag(row.status).type" size="small">{{ statusTag(row.status).text }}</el-tag></template></el-table-column>
+        <el-table-column :label="t('common.status')" width="90"><template #default="{row}"><el-tag :type="row.status === 'active' ? 'success' : 'info'" size="small">{{ row.status === 'active' ? t('common.enabled') : t('system.disabled') }}</el-tag></template></el-table-column>
         <el-table-column :label="t('common.actions')" width="230" fixed="right">
           <template #default="{ row }">
             <el-button size="small" text type="primary" @click="open(row)">{{ t('system.edit') }}</el-button>

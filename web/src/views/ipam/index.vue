@@ -121,15 +121,11 @@ async function saveSubnet() {
 async function removeSubnet(s: Subnet) {
   await ElMessageBox.confirm(t('common.confirmDelete'), t('common.tip'), { type: 'warning' })
   await delEnc(`/ipam/subnets/${s.id}`)
+  if (currentSubnet.value?.id === s.id) currentSubnet.value = null // 删除当前网段先置空，避免用已删 id 请求明细
   ElMessage.success(t('common.success'))
-  await loadSubnets()
-  if (!currentSubnet.value) {
-    // 网段删空：清空下方 IP 明细，避免残留旧数据
-    ipItems.value = []
-    ipTotal.value = 0
-  } else {
-    await loadIps() // 自动切换到下一个网段并刷新明细
-  }
+  await loadSubnets() // 自动选中下一个网段
+  if (currentSubnet.value) await loadIps()
+  else { ipItems.value = []; ipTotal.value = 0 } // 网段删空：清空明细
 }
 
 function openRec(item: IPItem) {
@@ -269,14 +265,15 @@ function rowClassName(data: { row: IPItem; rowIndex: number }): string {
 
 let autoTimer: number | undefined
 async function autoRefresh() {
-  await loadSubnets()
-  if (currentSubnet.value) await loadIps()
+  try {
+    await loadSubnets()
+    if (currentSubnet.value) await loadIps()
+  } catch { /* 轮询静默失败，避免未捕获异常 */ }
 }
 onMounted(async () => {
   await loadSettings()
-  await loadSubnets()
   await loadBindDevices()
-  if (currentSubnet.value) await loadIps()
+  await autoRefresh()
   autoTimer = window.setInterval(autoRefresh, 30000) // 30s 自动刷新
 })
 onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
