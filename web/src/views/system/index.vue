@@ -77,8 +77,7 @@ function openEmail(e?: EmailConfig) {
 }
 async function saveEmail() {
   if (!emailForm.name) return ElMessage.warning(t('system.nameRequired'))
-  if (emailForm.type === 'email' && !emailForm.smtp_host) return ElMessage.warning(t('system.smtpRequired'))
-  if (emailForm.type !== 'email' && !emailForm.webhook) return ElMessage.warning(t('system.webhookRequired'))
+  if (!emailForm.smtp_host) return ElMessage.warning(t('system.smtpRequired'))
   if (emailForm.id) await putEnc(`/system/email/${emailForm.id}`, emailForm); else await postEnc('/system/email', emailForm)
   ElMessage.success(t('system.saved')); emailDialog.value = false; await loadEmails()
 }
@@ -101,16 +100,6 @@ async function testEmail(e: EmailConfig) {
     if (err !== 'cancel' && err?.message) ElMessage.error(err.message)
   }
 }
-function webhookPlaceholder() {
-  switch (emailForm.type) {
-    case 'dingtalk': return 'https://oapi.dingtalk.com/robot/send?access_token=xxx'
-    case 'wecom': return 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx'
-    case 'feishu': return 'https://open.feishu.cn/open-apis/bot/v2/hook/xxx'
-    case 'sms': return t('system.smsApi')
-    default: return 'https://example.com/webhook'
-  }
-}
-
 // Notification channels (email receiver / webhook push targets)
 interface NotifyConfig { id: number; name: string; type: string; addr: string; token?: string; enabled: boolean }
 const notifyList = ref<NotifyConfig[]>([])
@@ -436,21 +425,10 @@ onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
     <el-dialog v-model="emailDialog" :title="t('system.notifyChannel')" width="520px">
       <el-form :model="emailForm" label-width="110px">
         <el-form-item :label="t('common.name')"><el-input v-model="emailForm.name" /></el-form-item>
-        <el-form-item :label="t('system.channelType')">
-          <el-select v-model="emailForm.type" style="width:100%" :placeholder="t('system.emailSmtp')">
-            <el-option :label="t('system.emailSmtp')" value="email" />
-            <el-option :label="t('system.dingtalk')" value="dingtalk" />
-            <el-option :label="t('system.wecom')" value="wecom" />
-            <el-option :label="t('system.feishu')" value="feishu" />
-            <el-option :label="t('system.sms')" value="sms" />
-            <el-option :label="t('system.webhook')" value="webhook" />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="t('system.smtpHost')" v-if="emailForm.type==='email'"><el-input v-model="emailForm.smtp_host" placeholder="smtp.qq.com / smtp.163.com" /></el-form-item>
-        <el-form-item :label="t('system.smtpPort')" v-if="emailForm.type==='email'"><el-input-number v-model="emailForm.smtp_port" /></el-form-item>
-        <el-form-item :label="t('system.account')" v-if="emailForm.type==='email'"><el-input v-model="emailForm.user" :placeholder="t('system.senderEmail')" /></el-form-item>
-        <el-form-item :label="t('system.authCode')" v-if="emailForm.type==='email'"><el-input v-model="emailForm.password" type="password" show-password :placeholder="t('system.authCode')" /></el-form-item>
-        <el-form-item label="Webhook" v-else><el-input v-model="emailForm.webhook" :placeholder="webhookPlaceholder()" /></el-form-item>
+        <el-form-item :label="t('system.smtpHost')"><el-input v-model="emailForm.smtp_host" placeholder="smtp.qq.com / smtp.163.com" /></el-form-item>
+        <el-form-item :label="t('system.smtpPort')"><el-input-number v-model="emailForm.smtp_port" /></el-form-item>
+        <el-form-item :label="t('system.account')"><el-input v-model="emailForm.user" :placeholder="t('system.senderEmail')" /></el-form-item>
+        <el-form-item :label="t('system.authCode')"><el-input v-model="emailForm.password" type="password" show-password :placeholder="t('system.authCode')" /></el-form-item>
         <el-form-item :label="t('common.enabled')"><el-switch v-model="emailForm.enable" /></el-form-item>
       </el-form>
       <template #footer><el-button @click="emailDialog=false">{{ t('system.cancel') }}</el-button><el-button type="primary" @click="saveEmail">{{ t('system.save') }}</el-button></template>
