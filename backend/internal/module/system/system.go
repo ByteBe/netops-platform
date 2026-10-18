@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -35,7 +36,15 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 	g.GET("/ai/list", func(c *gin.Context) {
 		var list []model.AIConfig
 		a.DB.Order("priority asc, id asc").Find(&list)
-		response.OK(c, list)
+		type item struct {
+			model.AIConfig
+			HasKey bool `json:"has_key"`
+		}
+		out := make([]item, 0, len(list))
+		for _, v := range list {
+			out = append(out, item{AIConfig: v, HasKey: v.APIKey != ""})
+		}
+		response.OK(c, out)
 	})
 	g.POST("/ai", middleware.RequireRole("admin"), func(c *gin.Context) {
 		var req struct {
@@ -91,6 +100,7 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			response.Bad(c, "参数错误")
 			return
 		}
+		log.Printf("[AIPUT] id=%s name=%q keylen=%d", c.Param("id"), req.Name, len(req.APIKey))
 		updates := map[string]any{
 			"name": req.Name, "provider": req.Provider, "base_url": req.BaseURL,
 			"model": req.Model, "temperature": req.Temperature,
@@ -113,6 +123,10 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		var cfg model.AIConfig
 		if err := a.DB.First(&cfg, id).Error; err != nil {
 			response.NotFound(c, "AI配置不存在")
+			return
+		}
+		if cfg.APIKey == "" {
+			response.Fail(c, 400, response.CodeBadRequest, "AI测试失败: 未配置API Key，请在编辑中填写API密钥后再测试")
 			return
 		}
 		reply, err := ai.Chat(ai.Provider{Name: cfg.Name, BaseURL: cfg.BaseURL,

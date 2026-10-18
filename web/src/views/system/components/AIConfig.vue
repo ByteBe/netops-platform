@@ -4,7 +4,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { getEnc, postEnc, putEnc, delEnc } from '@/utils/request'
 const { t } = useI18n()
-interface AIConfig { id: number; name: string; provider: string; base_url: string; api_key: string; model: string; temperature: number; priority: number; enable: boolean; remark: string }
+interface AIConfig { id: number; name: string; provider: string; base_url: string; api_key: string; model: string; temperature: number; priority: number; enable: boolean; remark: string; has_key?: boolean }
 const list = ref<AIConfig[]>([])
 const providers = ref<any[]>([])
 const dlg = ref(false)
@@ -18,8 +18,8 @@ async function load() {
 onMounted(load)
 function open(a?: AIConfig) {
   reply.value = ''
-  if (a) Object.assign(form, a)
-  else Object.assign(form, { id: 0, name: '', provider: 'openai', base_url: 'https://api.openai.com/v1', api_key: '', model: '', temperature: 0.7, priority: list.value.length, enable: true, remark: '' })
+  if (a) Object.assign(form, { ...a, api_key: '', has_key: !!a.has_key })
+  else Object.assign(form, { id: 0, name: '', provider: 'openai', base_url: 'https://api.openai.com/v1', api_key: '', has_key: false, model: '', temperature: 0.7, priority: list.value.length, enable: true, remark: '' })
   dlg.value = true
 }
 function onProvider() { const p = providers.value.find(x => x.value === form.provider); if (p?.base_url) form.base_url = p.base_url }
@@ -59,7 +59,10 @@ async function test(a: AIConfig) {
     <div class="np-card">
       <el-table :data="list" stripe class="np-table">
         <el-table-column prop="name" :label="t('common.name')" min-width="120" />
-        <el-table-column prop="provider" :label="t('system.provider')" width="120" />
+        <el-table-column prop="provider" :label="t('system.provider')" width="110" />
+        <el-table-column :label="t('system.apiKey')" width="110">
+          <template #default="{ row }"><el-tag :type="row.has_key?'success':'warning'" size="small">{{ row.has_key?t('system.keyConfigured'):t('system.keyMissing') }}</el-tag></template>
+        </el-table-column>
         <el-table-column prop="model" :label="t('system.model')" min-width="140" />
         <el-table-column prop="priority" :label="t('system.priority')" width="80" />
         <el-table-column :label="t('common.enabled')" width="80">
@@ -81,7 +84,7 @@ async function test(a: AIConfig) {
           <el-select v-model="form.provider" @change="onProvider"><el-option v-for="p in providers" :key="p.value" :label="p.label" :value="p.value" /></el-select>
         </el-form-item>
         <el-form-item :label="t('system.apiBase')"><el-input v-model="form.base_url" /></el-form-item>
-        <el-form-item :label="t('system.apiKey')"><el-input v-model="form.api_key" type="password" show-password :placeholder="form.id ? t('system.apiKeyKeep') : ''" /></el-form-item>
+        <el-form-item :label="t('system.apiKey')"><el-input v-model="form.api_key" type="password" show-password :placeholder="form.has_key ? t('system.apiKeyKeep') : t('system.apiKeyRequired')" /></el-form-item>
         <el-form-item :label="t('system.model')">
           <el-select v-model="form.model" filterable allow-create :loading="loadingModels" :placeholder="t('system.model')" style="width: 420px">
             <el-option v-for="m in modelOptions" :key="m" :label="m" :value="m" />
