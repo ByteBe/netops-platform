@@ -50,7 +50,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { MagicStick } from '@element-plus/icons-vue'
 import { getEnc, postEnc, delEnc } from '@/utils/request'
 import { marked } from 'marked'
@@ -90,7 +90,9 @@ async function delHistory(row: any) {
   await loadHistory()
 }
 
-onMounted(loadHistory)
+let autoTimer: number | undefined
+onMounted(() => { loadHistory(); autoTimer = window.setInterval(loadHistory, 30000) })
+onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
 </script>
 
 <style scoped>

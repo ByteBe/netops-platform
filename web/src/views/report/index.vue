@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // 巡检报告：链路通断 + 服务器使用情况 + 数据库状态，生成/邮件发送/查看
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { getEnc, postEnc, delEnc } from '@/utils/request'
@@ -96,7 +96,9 @@ async function view(r: ReportRecord) {
   }
 }
 
-onMounted(load)
+let autoTimer: number | undefined
+onMounted(() => { load(); autoTimer = window.setInterval(load, 30000) })
+onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
 
 async function quickGen(kind: string) {
   const now = new Date()

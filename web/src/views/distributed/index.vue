@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, onUnmounted } from 'vue'
 import { getEnc } from '@/utils/request'
 import DeployMode from './components/DeployMode.vue'
 import SelfInfo from './components/SelfInfo.vue'
@@ -26,7 +26,9 @@ async function loadDist() {
     deployMode.value = (dist.self as any).deploy_mode || 'standalone'
   } catch {}
 }
-onMounted(loadDist)
+let autoTimer: number | undefined
+onMounted(() => { loadDist(); autoTimer = window.setInterval(loadDist, 30000) })
+onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
 </script>
 <template>
   <div class="p-4">

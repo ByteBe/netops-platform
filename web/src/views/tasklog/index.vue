@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getEnc } from '@/utils/request'
 const { t } = useI18n()
@@ -18,7 +18,9 @@ const logs = ref<Log[]>([])
 async function load() {
   logs.value = await getEnc<Log[]>('/monitor/task-logs')
 }
-onMounted(load)
+let autoTimer: number | undefined
+onMounted(() => { load(); autoTimer = window.setInterval(load, 30000) })
+onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
 </script>
 <template>
   <div class="tasklog-page">

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // IP 地址管理：子网/已用未用/使用登记/SSH 下发绑定（可选开关）
-import { ref, reactive, onMounted, nextTick } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { getEnc, postEnc, putEnc, delEnc } from '@/utils/request'
@@ -121,9 +121,15 @@ async function saveSubnet() {
 async function removeSubnet(s: Subnet) {
   await ElMessageBox.confirm(t('common.confirmDelete'), t('common.tip'), { type: 'warning' })
   await delEnc(`/ipam/subnets/${s.id}`)
-  if (currentSubnet.value?.id === s.id) currentSubnet.value = null
   ElMessage.success(t('common.success'))
   await loadSubnets()
+  if (!currentSubnet.value) {
+    // 网段删空：清空下方 IP 明细，避免残留旧数据
+    ipItems.value = []
+    ipTotal.value = 0
+  } else {
+    await loadIps() // 自动切换到下一个网段并刷新明细
+  }
 }
 
 function openRec(item: IPItem) {
@@ -261,12 +267,19 @@ function rowClassName(data: { row: IPItem; rowIndex: number }): string {
   return data.row.status === 'used' ? '' : 'row-unused'
 }
 
+let autoTimer: number | undefined
+async function autoRefresh() {
+  await loadSubnets()
+  if (currentSubnet.value) await loadIps()
+}
 onMounted(async () => {
   await loadSettings()
   await loadSubnets()
   await loadBindDevices()
   if (currentSubnet.value) await loadIps()
+  autoTimer = window.setInterval(autoRefresh, 30000) // 30s 自动刷新
 })
+onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
 </script>
 
 <template>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getEnc, postEnc } from '@/utils/request'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -50,10 +50,13 @@ async function clear() {
   await postEnc('/devicelog/clear', {})
   ElMessage.success(t('common.ok')); load()
 }
+let autoTimer: number | undefined
 onMounted(async () => {
   sources.value = await getEnc<{label:string,value:string}[]>('/devicelog/sources')
   load()
+  autoTimer = window.setInterval(load, 30000)
 })
+onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
 </script>
 <template>
   <div>

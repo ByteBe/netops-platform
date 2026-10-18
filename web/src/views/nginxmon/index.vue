@@ -164,6 +164,7 @@ async function showHistory(d: NginxInstance) {
   })
 }
 
+let autoTimer: number | undefined
 onMounted(async () => {
   await load()
   ws = new WSClient(['nginxmon'])
@@ -172,9 +173,11 @@ onMounted(async () => {
     snaps.value[s.instance_id] = s
   })
   ws.connect()
+  autoTimer = window.setInterval(load, 30000) // 30s 刷新实例列表
 })
 
 onBeforeUnmount(() => {
+  if (autoTimer) clearInterval(autoTimer)
   ws?.close()
   histChart?.dispose()
 })

@@ -215,6 +215,7 @@ function displayIfs(s?: DeviceSnap, d?: MonitorDevice) {
     .slice(0, 5)
 }
 
+let autoTimer: number | undefined
 onMounted(async () => {
   await loadDevices()
   ws = new WSClient(['monitor'])
@@ -223,9 +224,11 @@ onMounted(async () => {
     snaps.value[s.device_id] = s
   })
   ws.connect()
+  autoTimer = window.setInterval(loadDevices, 30000) // 30s 刷新设备列表
 })
 
 onBeforeUnmount(() => {
+  if (autoTimer) clearInterval(autoTimer)
   ws?.close()
   histChart?.dispose()
 })

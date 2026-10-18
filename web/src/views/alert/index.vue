@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getEnc, postEnc, putEnc, delEnc } from '@/utils/request'
@@ -13,7 +13,9 @@ const dlg = ref(false)
 const form = reactive({ id: 0, name: '', metric: 'cpu', threshold: 80, duration: 1, durationUnit: 'm', level: 'warning', channels: '', enabled: true })
 async function loadRules() { rules.value = await getEnc<Rule[]>('/alert/rules') }
 async function loadEvents() { const r = await getEnc<{list:Event[]}>('/alert/events?page=1&size=100'); events.value = r.list || [] }
-onMounted(() => { loadRules(); loadEvents() })
+let autoTimer: number | undefined
+onMounted(() => { loadRules(); loadEvents(); autoTimer = window.setInterval(() => { loadRules(); loadEvents() }, 30000) })
+onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
 function open(r?: Rule) {
   if (r) Object.assign(form, r)
   else Object.assign(form, { id: 0, name: '', metric: 'cpu', threshold: 80, duration: 1, durationUnit: 'm', level: 'warning', channels: '', enabled: true })

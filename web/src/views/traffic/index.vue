@@ -179,6 +179,7 @@ onMounted(async () => {
     }
   })
   ws.connect()
+  _timer = setInterval(async () => { await loadDevices(); await loadRules() }, 30000) // 30s 刷新列表
 })
 
 onBeforeUnmount(() => {

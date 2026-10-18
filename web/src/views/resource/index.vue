@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // 资源管理：将纳管设备分组分类管理
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { getEnc, postEnc, putEnc, delEnc } from '@/utils/request'
@@ -124,7 +124,9 @@ async function onImport(e: Event) {
   await load()
 }
 
-onMounted(load)
+let autoTimer: number | undefined
+onMounted(() => { load(); autoTimer = window.setInterval(load, 30000) })
+onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
 </script>
 
 <template>

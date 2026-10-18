@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
@@ -208,7 +208,9 @@ async function doRollback() {
   try { await postEnc('/update/rollback', {}); redirectAfterRestart(4000) } catch(e:any){ if (isRestartNetworkError(e)) redirectAfterRestart(4000); else ElMessage.error(e.message||t('system.upgradeFail')) }
 }
 
-onMounted(() => { loadMCP(); loadEmails(); loadAudits(); loadSec(); loadVersion() })
+let autoTimer: number | undefined
+onMounted(() => { loadMCP(); loadEmails(); loadAudits(); loadSec(); loadVersion(); autoTimer = window.setInterval(loadAudits, 30000) })
+onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
 </script>
 
 <template>
