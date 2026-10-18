@@ -63,6 +63,8 @@ export default {
   channelType: '类型', emailSmtp: '邮件 SMTP', dingtalk: '钉钉 Webhook',
   wecom: '企业微信 Webhook', feishu: '飞书 Webhook', sms: '短信网关', webhook: '通用 Webhook',
   senderEmail: '发件邮箱', authCode: '授权码',
+  channels: '通知渠道（收件/推送目标）', channelAddr: '地址', smtpAccounts: '邮箱配置（发件账号）',
+  emailChannel: '邮件收件人', addrRequired: '请输入地址',
   username: '用户名', empNo: '工号', emailCol: '邮箱',
   dataScope: '数据范围', allNodes: '全部节点（总部）', selectNode: '选择节点',
   resetPwd: '重置密码', resetPwdTitle: '重置密码',

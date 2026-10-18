@@ -108,11 +108,42 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			response.Bad(c, "参数错误")
 			return
 		}
-		nc := model.NotifyConfig{Type: req.Type, Config: req.Addr, Enabled: req.Enabled}
-		nc.Name = req.Name
-		nc.Token = req.Token
-		a.DB.Create(&nc)
+		if req.Name == "" || req.Addr == "" {
+			response.Bad(c, "名称与地址必填")
+			return
+		}
+		nc := model.NotifyConfig{Name: req.Name, Type: req.Type, Addr: req.Addr, Token: req.Token, Enabled: req.Enabled}
+		if err := a.DB.Create(&nc).Error; err != nil {
+			response.Err(c, err)
+			return
+		}
 		response.OK(c, nc)
+	})
+	g.PUT("/notify/:id", middleware.RequireRole("admin"), func(c *gin.Context) {
+		var req struct {
+			Name    string `json:"name"`
+			Type    string `json:"type"`
+			Addr    string `json:"addr"`
+			Token   string `json:"token"`
+			Enabled bool   `json:"enabled"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			response.Bad(c, "参数错误")
+			return
+		}
+		var nc model.NotifyConfig
+		if err := a.DB.First(&nc, c.Param("id")).Error; err != nil {
+			response.NotFound(c, "通知渠道不存在")
+			return
+		}
+		if req.Token == "" {
+			req.Token = nc.Token
+		}
+		a.DB.Model(&nc).Updates(map[string]any{
+			"name": req.Name, "type": req.Type, "addr": req.Addr,
+			"token": req.Token, "enabled": req.Enabled,
+		})
+		response.OK(c, gin.H{"ok": true})
 	})
 	g.DELETE("/notify/:id", middleware.RequireRole("admin"), func(c *gin.Context) {
 		a.DB.Delete(&model.NotifyConfig{}, c.Param("id"))

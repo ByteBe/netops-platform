@@ -63,6 +63,8 @@ export default {
   channelType: 'Type', emailSmtp: 'Email SMTP', dingtalk: 'DingTalk Webhook',
   wecom: 'WeCom Webhook', feishu: 'Feishu Webhook', sms: 'SMS Gateway', webhook: 'Generic Webhook',
   senderEmail: 'Sender Email', authCode: 'Auth Code',
+  channels: 'Channels (Receivers/Push Targets)', channelAddr: 'Address', smtpAccounts: 'SMTP Accounts (Sender)',
+  emailChannel: 'Email Receiver', addrRequired: 'Please enter address',
   username: 'Username', empNo: 'Employee No.', emailCol: 'Email',
   dataScope: 'Data Scope', allNodes: 'All nodes (HQ)', selectNode: 'Select node',
   resetPwd: 'Reset Password', resetPwdTitle: 'Reset Password',

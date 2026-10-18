@@ -111,6 +111,46 @@ function webhookPlaceholder() {
   }
 }
 
+// Notification channels (email receiver / webhook push targets)
+interface NotifyConfig { id: number; name: string; type: string; addr: string; token?: string; enabled: boolean }
+const notifyList = ref<NotifyConfig[]>([])
+const notifyDialog = ref(false)
+const notifyForm = reactive<NotifyConfig>({ id: 0, name: '', type: 'email', addr: '', enabled: true })
+async function loadNotify() { notifyList.value = await getEnc<NotifyConfig[]>('/alert/notify') }
+function openNotify(n?: NotifyConfig) {
+  if (n) Object.assign(notifyForm, n)
+  else Object.assign(notifyForm, { id: 0, name: '', type: 'email', addr: '', enabled: true })
+  notifyDialog.value = true
+}
+async function saveNotify() {
+  if (!notifyForm.name) return ElMessage.warning(t('system.nameRequired'))
+  if (!notifyForm.addr) return ElMessage.warning(t('system.addrRequired'))
+  if (notifyForm.id) await putEnc(`/alert/notify/${notifyForm.id}`, notifyForm); else await postEnc('/alert/notify', notifyForm)
+  ElMessage.success(t('system.saved')); notifyDialog.value = false; await loadNotify()
+}
+async function removeNotify(n: NotifyConfig) {
+  await ElMessageBox.confirm(t('common.confirmDelete'), t('common.tip'), { type: 'warning' })
+  await delEnc(`/alert/notify/${n.id}`); ElMessage.success(t('common.success')); await loadNotify()
+}
+function notifyTypeLabel(tp: string) {
+  switch (tp) {
+    case 'email': return t('system.emailChannel')
+    case 'feishu': return t('system.feishu')
+    case 'dingtalk': return t('system.dingtalk')
+    case 'wecom': return t('system.wecom')
+    default: return tp
+  }
+}
+function notifyAddrPlaceholder() {
+  switch (notifyForm.type) {
+    case 'email': return 'receiver@example.com'
+    case 'feishu': return 'https://open.feishu.cn/open-apis/bot/v2/hook/xxx'
+    case 'dingtalk': return 'https://oapi.dingtalk.com/robot/send?access_token=xxx'
+    case 'wecom': return 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx'
+    default: return 'https://example.com/webhook'
+  }
+}
+
 // Audit
 const audits = ref<any[]>([])
 async function loadAudits() {
@@ -209,7 +249,7 @@ async function doRollback() {
 }
 
 let autoTimer: number | undefined
-onMounted(() => { loadMCP(); loadEmails(); loadAudits(); loadSec(); loadVersion(); autoTimer = window.setInterval(loadAudits, 30000) })
+onMounted(() => { loadMCP(); loadEmails(); loadNotify(); loadAudits(); loadSec(); loadVersion(); autoTimer = window.setInterval(loadAudits, 30000) })
 onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
 </script>
 
@@ -275,7 +315,22 @@ onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
       </el-tab-pane>
 
       <el-tab-pane :label="t('system.notifyChannel')" name="email">
-        <div class="np-toolbar"><div class="spacer"></div><el-button type="primary" @click="openEmail()">{{ t('system.add') }}</el-button></div>
+        <div class="np-toolbar"><span class="np-title">{{ t('system.channels') }}</span><div class="spacer"></div><el-button type="primary" @click="openNotify()">{{ t('system.add') }}</el-button></div>
+        <div class="np-card">
+          <el-table :data="notifyList" stripe class="np-table">
+            <el-table-column prop="name" :label="t('common.name')" min-width="110" />
+            <el-table-column :label="t('system.channelType')" width="120"><template #default="{ row }">{{ notifyTypeLabel(row.type) }}</template></el-table-column>
+            <el-table-column prop="addr" :label="t('system.channelAddr')" min-width="220" show-overflow-tooltip />
+            <el-table-column :label="t('common.enabled')" width="80"><template #default="{ row }"><el-tag :type="row.enabled?'success':'info'" size="small">{{ row.enabled?t('system.on'):t('system.off') }}</el-tag></template></el-table-column>
+            <el-table-column :label="t('common.actions')" width="130">
+              <template #default="{ row }">
+                <el-button size="small" text type="primary" @click="openNotify(row)">{{ t('system.edit') }}</el-button>
+                <el-button size="small" text type="danger" @click="removeNotify(row)">{{ t('system.del') }}</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+        <div class="np-toolbar" style="margin-top:12px"><span class="np-title">{{ t('system.smtpAccounts') }}</span><div class="spacer"></div><el-button type="primary" @click="openEmail()">{{ t('system.add') }}</el-button></div>
         <div class="np-card">
           <el-table :data="emailList" stripe class="np-table">
             <el-table-column prop="name" :label="t('common.name')" min-width="110" />
@@ -399,6 +454,22 @@ onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
         <el-form-item :label="t('common.enabled')"><el-switch v-model="emailForm.enable" /></el-form-item>
       </el-form>
       <template #footer><el-button @click="emailDialog=false">{{ t('system.cancel') }}</el-button><el-button type="primary" @click="saveEmail">{{ t('system.save') }}</el-button></template>
+    </el-dialog>
+    <el-dialog v-model="notifyDialog" :title="t('system.channels')" width="480px">
+      <el-form :model="notifyForm" label-width="90px">
+        <el-form-item :label="t('common.name')"><el-input v-model="notifyForm.name" /></el-form-item>
+        <el-form-item :label="t('system.channelType')">
+          <el-select v-model="notifyForm.type" style="width:100%">
+            <el-option :label="t('system.emailChannel')" value="email" />
+            <el-option :label="t('system.feishu')" value="feishu" />
+            <el-option :label="t('system.dingtalk')" value="dingtalk" />
+            <el-option :label="t('system.wecom')" value="wecom" />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="t('system.channelAddr')"><el-input v-model="notifyForm.addr" :placeholder="notifyAddrPlaceholder()" /></el-form-item>
+        <el-form-item :label="t('common.enabled')"><el-switch v-model="notifyForm.enabled" /></el-form-item>
+      </el-form>
+      <template #footer><el-button @click="notifyDialog=false">{{ t('system.cancel') }}</el-button><el-button type="primary" @click="saveNotify">{{ t('system.save') }}</el-button></template>
     </el-dialog>
   </div>
 </template>
