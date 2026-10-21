@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
@@ -132,69 +132,95 @@ calc()
 </script>
 
 <template>
-  <div class="ipcalc-page">
-    <div class="calc-hero">
-      <h2>{{ t('subnet.title') }}</h2>
-      <p class="desc">{{ t('subnet.desc') }}</p>
-      <div class="input-row">
-        <el-input v-model="ipInput" :placeholder="t('subnet.ipPlaceholder')" size="large" @keyup.enter="calc" />
+  <div class="np-page ipcalc-page">
+    <div class="np-page-head">
+      <div class="np-page-head-info">
+        <div class="np-page-head-title">{{ t('subnet.title') }}</div>
+        <div class="np-page-head-desc">{{ t('subnet.desc') }}</div>
+      </div>
+      <div class="np-page-head-actions">
+        <el-input v-model="ipInput" :placeholder="t('subnet.ipPlaceholder')" class="calc-ip-input" @keyup.enter="calc" />
         <span class="slash">/</span>
-        <el-input-number v-model="cidrInput" :min="0" :max="32" size="large" controls-position="right" />
-        <el-button type="primary" size="large" @click="calc">{{ t('subnet.calc') }}</el-button>
+        <el-input-number v-model="cidrInput" :min="0" :max="32" controls-position="right" />
+        <el-button type="primary" @click="calc">{{ t('subnet.calc') }}</el-button>
       </div>
     </div>
 
     <div v-if="result" class="result-wrap">
       <!-- 核心结果 -->
-      <div class="result-grid">
-        <div class="r-card highlight">
-          <div class="r-label">{{ t('subnet.ipAddr') }}</div>
-          <div class="r-value">{{ result.ip }}</div>
-          <div class="r-sub">/{{ result.cidr }}</div>
+      <div class="np-kpi-grid result-grid">
+        <div class="np-kpi r-card">
+          <div class="np-kpi-icon"><el-icon><InfoFilled /></el-icon></div>
+          <div class="np-kpi-body">
+            <div class="np-kpi-value r-value">{{ result.ip }}</div>
+            <div class="np-kpi-label">{{ t('subnet.ipAddr') }} /{{ result.cidr }}</div>
+          </div>
           <el-button size="small" class="cp-btn" @click="copy(result.ip)">{{ t('common.copy') }}</el-button>
         </div>
-        <div class="r-card">
-          <div class="r-label">{{ t('subnet.mask') }}</div>
-          <div class="r-value">{{ result.mask }}</div>
+        <div class="np-kpi r-card">
+          <div class="np-kpi-icon is-info"><el-icon><Key /></el-icon></div>
+          <div class="np-kpi-body">
+            <div class="np-kpi-value r-value">{{ result.mask }}</div>
+            <div class="np-kpi-label">{{ t('subnet.mask') }}</div>
+          </div>
           <el-button size="small" class="cp-btn" @click="copy(result.mask)">{{ t('common.copy') }}</el-button>
         </div>
-        <div class="r-card">
-          <div class="r-label">{{ t('subnet.network') }}</div>
-          <div class="r-value hl">{{ result.network }}</div>
+        <div class="np-kpi r-card">
+          <div class="np-kpi-icon is-success"><el-icon><Connection /></el-icon></div>
+          <div class="np-kpi-body">
+            <div class="np-kpi-value r-value hl">{{ result.network }}</div>
+            <div class="np-kpi-label">{{ t('subnet.network') }}</div>
+          </div>
           <el-button size="small" class="cp-btn" @click="copy(result.network)">{{ t('common.copy') }}</el-button>
         </div>
-        <div class="r-card">
-          <div class="r-label">{{ t('subnet.broadcast') }}</div>
-          <div class="r-value">{{ result.broadcast }}</div>
+        <div class="np-kpi r-card">
+          <div class="np-kpi-icon is-warning"><el-icon><Promotion /></el-icon></div>
+          <div class="np-kpi-body">
+            <div class="np-kpi-value r-value">{{ result.broadcast }}</div>
+            <div class="np-kpi-label">{{ t('subnet.broadcast') }}</div>
+          </div>
           <el-button size="small" class="cp-btn" @click="copy(result.broadcast)">{{ t('common.copy') }}</el-button>
         </div>
-        <div class="r-card">
-          <div class="r-label">{{ t('subnet.hostRange') }}</div>
-          <div class="r-value sm">{{ result.firstHost }}<br>~ {{ result.lastHost }}</div>
+        <div class="np-kpi r-card">
+          <div class="np-kpi-icon is-info"><el-icon><Position /></el-icon></div>
+          <div class="np-kpi-body">
+            <div class="np-kpi-value r-value sm">{{ result.firstHost }}</div>
+            <div class="np-kpi-sub">~ {{ result.lastHost }}</div>
+            <div class="np-kpi-label">{{ t('subnet.hostRange') }}</div>
+          </div>
           <el-button size="small" class="cp-btn" @click="copy(result.firstHost + ' ~ ' + result.lastHost)">{{ t('common.copy') }}</el-button>
         </div>
-        <div class="r-card">
-          <div class="r-label">{{ t('subnet.hostCount') }}</div>
-          <div class="r-value hl">{{ result.totalHosts }}</div>
-          <div class="r-sub">{{ t('subnet.totalAddrs') }}: {{ result.totalAddrs }}</div>
+        <div class="np-kpi r-card">
+          <div class="np-kpi-icon is-success"><el-icon><Coin /></el-icon></div>
+          <div class="np-kpi-body">
+            <div class="np-kpi-value r-value hl">{{ result.totalHosts }}</div>
+            <div class="np-kpi-sub">{{ t('subnet.totalAddrs') }}: {{ result.totalAddrs }}</div>
+            <div class="np-kpi-label">{{ t('subnet.hostCount') }}</div>
+          </div>
         </div>
-        <div class="r-card">
-          <div class="r-label">{{ t('subnet.wildcard') }}</div>
-          <div class="r-value sm">{{ result.wildcard }}</div>
+        <div class="np-kpi r-card">
+          <div class="np-kpi-icon is-info"><el-icon><Grid /></el-icon></div>
+          <div class="np-kpi-body">
+            <div class="np-kpi-value r-value sm">{{ result.wildcard }}</div>
+            <div class="np-kpi-label">{{ t('subnet.wildcard') }}</div>
+          </div>
           <el-button size="small" class="cp-btn" @click="copy(result.wildcard)">{{ t('common.copy') }}</el-button>
         </div>
-        <div class="r-card">
-          <div class="r-label">{{ t('subnet.classType') }}</div>
-          <div class="r-value sm">
-            <span class="tag">{{ result.cls }} {{ t('subnet.class') }}</span>
-            <span class="tag blue">{{ result.type }}</span>
+        <div class="np-kpi r-card">
+          <div class="np-kpi-icon is-warning"><el-icon><Collection /></el-icon></div>
+          <div class="np-kpi-body">
+            <div class="np-kpi-value r-value sm">
+              <span class="tag">{{ result.cls }} {{ t('subnet.class') }}</span>
+              <span class="tag blue">{{ result.type }}</span>
+            </div>
+            <div class="np-kpi-label">{{ t('subnet.classType') }}</div>
           </div>
         </div>
       </div>
 
       <!-- 扩展信息 -->
-      <div class="section-card">
-        <div class="section-head"><h3>{{ t('subnet.detail') }}</h3></div>
+      <div class="np-card section-card">
+        <div class="np-card-title"><el-icon><Document /></el-icon><span>{{ t('subnet.detail') }}</span></div>
         <div class="info-grid">
           <div class="info-row"><span class="k">{{ t('subnet.hex') }}</span><span class="v">{{ result.hex }}</span><el-button size="small" text type="primary" @click="copy(result.hex)">{{ t('common.copy') }}</el-button></div>
           <div class="info-row"><span class="k">{{ t('subnet.binIp') }}</span><span class="v mono">{{ result.bin }}</span><el-button size="small" text type="primary" @click="copy(result.bin)">{{ t('common.copy') }}</el-button></div>
@@ -204,16 +230,18 @@ calc()
       </div>
 
       <!-- 子网划分 -->
-      <div class="section-card">
-        <div class="section-head">
-          <h3>{{ t('subnet.split') }}</h3>
+      <div class="np-card section-card">
+        <div class="np-card-title">
+          <el-icon><Share /></el-icon>
+          <span>{{ t('subnet.split') }}</span>
+          <div class="spacer"></div>
           <div class="split-ctrl">
-            <el-button size="small" type="primary" @click="copyAllSubnets">{{ t('subnet.copyAll') }}</el-button>
             {{ t('subnet.newPrefix') }}
             <el-input-number v-model="splitPrefix" :min="result.cidr" :max="30" size="small" />
+            <el-button size="small" type="primary" @click="copyAllSubnets">{{ t('subnet.copyAll') }}</el-button>
           </div>
         </div>
-        <el-table :data="splitList" stripe max-height="280" size="small">
+        <el-table :data="splitList" stripe max-height="280" size="small" class="np-table">
           <el-table-column prop="network" :label="t('subnet.network')" />
           <el-table-column prop="cidr" label="CIDR" width="80" />
           <el-table-column prop="range" :label="t('subnet.hostRange')" />
@@ -228,8 +256,8 @@ calc()
       </div>
 
       <!-- 掩码速查 -->
-      <div class="section-card">
-        <div class="section-head"><h3>{{ t('subnet.commonMasks') }}</h3></div>
+      <div class="np-card section-card">
+        <div class="np-card-title"><el-icon><Grid /></el-icon><span>{{ t('subnet.commonMasks') }}</span></div>
         <div class="mask-table">
           <div class="mask-row mask-header">
             <span>CIDR</span><span>{{ t('subnet.mask') }}</span><span>{{ t('subnet.hostCount') }}</span>
@@ -245,59 +273,58 @@ calc()
 </template>
 
 <style lang="scss" scoped>
-.ipcalc-page { max-width: 1100px; margin: 0 auto; padding: 20px; }
-.calc-hero {
-  text-align: center; padding: 30px 0 20px;
-  h2 { font-size: 26px; font-weight: 700; margin-bottom: 8px; }
-  .desc { color: #94a3b8; font-size: 14px; margin-bottom: 24px; }
-  .input-row {
-    display: flex; gap: 8px; align-items: center; max-width: 640px; margin: 0 auto;
-    .el-input { flex: 1; }
-    .slash { font-size: 20px; color: #64748b; font-weight: 600; }
-  }
+.ipcalc-page {
+  max-width: 1100px;
+  margin: 0 auto;
+  width: 100%;
 }
-.result-grid {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px;
-}
+.calc-ip-input { width: 260px; }
+.slash { font-size: 20px; color: var(--np-text-2); font-weight: 600; }
+
+.result-grid { margin-bottom: 4px; }
+
 .r-card {
-  background: var(--np-card-bg); border: 1px solid var(--np-border); border-radius: 10px;
-  padding: 18px; transition: all .2s; position: relative;
-  &:hover { box-shadow: 0 4px 16px rgba(0,0,0,.08); border-color: var(--np-primary); }
-  &.highlight { border-left: 4px solid var(--np-primary); }
-  .r-label { font-size: 12px; color: var(--np-text-2); margin-bottom: 6px; }
   .cp-btn { position: absolute; top: 12px; right: 12px; font-size: 12px; padding: 2px 8px; }
-  .r-value { font-size: 18px; font-weight: 700; color: var(--np-text-1); font-family: 'Consolas', monospace; }
+  .r-value {
+    font-family: 'Consolas', monospace;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--np-text-1);
+    word-break: break-all;
+  }
   .r-value.sm { font-size: 14px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; line-height: 1.5; }
-  .r-value.hl { color: #2f6bff; }
-  .r-sub { font-size: 12px; color: #2f6bff; margin-top: 4px; }
-  .tag { font-size: 11px; padding: 2px 8px; border-radius: 4px; background: #fef3c7; color: #b45309; &.blue { background: #dbeafe; color: #1d4ed8; } }
-}
-.section-card {
-  background: var(--np-card-bg); border: 1px solid var(--np-border); border-radius: 10px;
-  padding: 18px; margin-bottom: 16px;
-  .section-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;
-    h3 { font-size: 15px; font-weight: 600; }
-    .split-ctrl { font-size: 13px; color: #64748b; display: flex; align-items: center; gap: 8px; }
+  .r-value.hl { color: var(--np-text-1); }
+  .tag {
+    font-size: 11px; padding: 2px 8px; border-radius: 4px;
+    background: var(--np-warning-weak); color: var(--np-warning);
+    font-weight: 600;
+    &.blue { background: var(--np-info-weak); color: var(--np-info); }
   }
 }
+
+.section-card { margin-bottom: 16px; }
+.split-ctrl { font-size: 13px; color: var(--np-text-2); display: flex; align-items: center; gap: 8px; }
+
 .info-grid { display: flex; flex-direction: column; }
 .info-row {
   display: flex; justify-content: space-between; align-items: center; gap: 12px;
-  padding: 10px 12px; border-bottom: 1px solid #f1f5f9;
-  .k { color: #64748b; font-size: 13px; width: 100px; }
+  padding: 10px 12px; border-bottom: 1px solid var(--np-border);
+  .k { color: var(--np-text-2); font-size: 13px; width: 100px; }
   .v { flex: 1; text-align: right; }
-  .v { font-family: 'Consolas', monospace; font-size: 14px; color: #1e293b; font-weight: 600; }
+  .v { font-family: 'Consolas', monospace; font-size: 14px; color: var(--np-text-1); font-weight: 600; }
   .v.mono { font-size: 12px; letter-spacing: 1px; }
-  .v.hl { color: #2f6bff; }
+  .v.hl { color: var(--np-text-1); font-weight: 700; }
 }
 .mask-table { max-height: 300px; overflow-y: auto;
   .mask-row {
     display: grid; grid-template-columns: 100px 1fr 150px; padding: 8px 12px;
     font-family: 'Consolas', monospace; font-size: 13px;
-    border-bottom: 1px solid #f1f5f9; cursor: pointer;
-    &:hover { background: #f8fafc; }
-    &.mask-header { font-weight: 600; background: #f8fafc; color: #64748b; cursor: default; }
-    &.active { background: #eff6ff; color: #2f6bff; font-weight: 600; }
+    font-variant-numeric: tabular-nums;
+    border-bottom: 1px solid var(--np-border); cursor: pointer;
+    span:last-child { text-align: right; }
+    &:hover { background: var(--np-hover); }
+    &.mask-header { font-weight: 600; background: var(--np-hover); color: var(--np-text-2); cursor: default; }
+    &.active { background: var(--np-primary-weak); color: var(--np-primary); font-weight: 600; }
   }
 }
 </style>

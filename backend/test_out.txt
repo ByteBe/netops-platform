@@ -1,0 +1,10 @@
+﻿=== RUN   TestUpsertNodeDevices
+--- PASS: TestUpsertNodeDevices (0.01s)
+=== RUN   TestUpsertNodeContainersAndLinks
+--- PASS: TestUpsertNodeContainersAndLinks (0.00s)
+=== RUN   TestUpsertNodeKeepsLevel
+--- PASS: TestUpsertNodeKeepsLevel (0.00s)
+=== RUN   TestVerifyIngestToken
+--- PASS: TestVerifyIngestToken (0.00s)
+PASS
+ok  	netops/internal/module/distributed	1.284s

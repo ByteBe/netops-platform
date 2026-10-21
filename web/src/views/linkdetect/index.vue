@@ -3,15 +3,17 @@ const rtHistoryGlobal: Record<number, Array<[number, number | null]>> = {}
 </script>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, reactive, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import * as echarts from 'echarts'
 import { getEnc, postEnc, putEnc, delEnc } from '@/utils/request'
 import { WSClient } from '@/utils/ws'
-import { pickColor, fmtTime } from '@/utils'
+import { pickColor, fmtTime, cssVar, chartAxisColors } from '@/utils'
+import { useAppStore } from '@/stores/app'
 
 const { t } = useI18n()
+const appStore = useAppStore()
 
 interface LinkTask {
   id: number; name: string; target: string; method: string; port: number
@@ -107,19 +109,28 @@ async function loadLinkHistory() {
   if (!chartRef.value) return
   chart?.dispose()
   chart = echarts.init(chartRef.value)
+  const ca = chartAxisColors()
   chart.setOption({
     backgroundColor: 'transparent',
     tooltip: { trigger: 'axis', valueFormatter: (v: number) => v == null ? '--' : v.toFixed(1) + ' ms' },
     grid: { left: 50, right: 16, top: 20, bottom: 60 },
-    xAxis: { type: 'time' },
-    yAxis: { type: 'value', min: 0, axisLabel: { formatter: (v: number) => v + ' ms' } },
+    xAxis: { type: 'time', axisLabel: { color: ca.axis }, axisLine: { lineStyle: { color: ca.axisLine } } },
+    yAxis: { type: 'value', min: 0, axisLabel: { color: ca.axis, formatter: (v: number) => v + ' ms' }, splitLine: { lineStyle: { color: ca.split } } },
     dataZoom: [
       { type: 'inside', start: 0, end: 100, moveOnMouseMove: true, zoomOnMouseWheel: true, moveOnMouseWheel: false },
-      { type: 'slider', start: 0, end: 100, height: 24, bottom: 10 }
+      {
+        type: 'slider', start: 0, end: 100, height: 24, bottom: 10,
+        textStyle: { color: ca.axis },
+        borderColor: ca.axisLine,
+        fillerColor: 'transparent',
+        handleStyle: { color: ca.axisLine },
+        moveHandleStyle: { color: ca.axisLine },
+        dataBackground: { lineStyle: { color: ca.axisLine }, areaStyle: { color: ca.split } }
+      }
     ],
     series: [{
       name: row.name, type: 'line', showSymbol: false, smooth: false,
-      lineStyle: { width: 2, color: row.color }, itemStyle: { color: row.color },
+      lineStyle: { width: 2, color: row.color || cssVar('--np-primary') }, itemStyle: { color: row.color || cssVar('--np-primary') },
       areaStyle: { opacity: 0.08 }, connectNulls: false,
       data: historyData.value?.points || []
     }]
@@ -167,16 +178,17 @@ function doRenderRealtime() {
   })
   const nowMs = Date.now()
   const axisStart = nowMs - 10 * 60 * 1000
+  const ca = chartAxisColors()
   rtChart.setOption({
     backgroundColor: 'transparent',
     tooltip: { trigger: 'axis', valueFormatter: (v: number) => v == null ? '--' : v.toFixed(1) + ' ms' },
-    legend: { type: 'scroll', top: 0 },
+    legend: { type: 'scroll', top: 0, textStyle: { color: ca.axis } },
     grid: { left: 60, right: 20, top: 40, bottom: 24 },
-    xAxis: { type: 'time', min: axisStart, max: nowMs, axisLabel: { formatter: '{HH}:{mm}:{ss}' } },
-    yAxis: { type: 'value', min: 0, axisLabel: { formatter: (v: number) => v + ' ms' } },
+    xAxis: { type: 'time', min: axisStart, max: nowMs, axisLabel: { color: ca.axis, formatter: '{HH}:{mm}:{ss}' }, axisLine: { lineStyle: { color: ca.axisLine } } },
+    yAxis: { type: 'value', min: 0, axisLabel: { color: ca.axis, formatter: (v: number) => v + ' ms' }, splitLine: { lineStyle: { color: ca.split } } },
     series: list.map((s) => ({
       name: s.name, type: 'line', showSymbol: false, smooth: false,
-      lineStyle: { width: 2, color: s.color }, itemStyle: { color: s.color },
+      lineStyle: { width: 2, color: s.color || cssVar('--np-primary') }, itemStyle: { color: s.color || cssVar('--np-primary') },
       areaStyle: { opacity: 0.08 }, connectNulls: false, data: s.data
     }))
   }, true)
@@ -246,16 +258,35 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
 })
 
-function taskColor(row: LinkTask) { return row.color || '#64748b' }
+function taskColor(row: LinkTask) { return row.color || cssVar('--np-text-2') }
+
+// 主题切换时重绘图表（ECharts canvas 不感知 CSS 变量变化）
+watch(() => appStore.theme, () => {
+  nextTick(() => {
+    doRenderRealtime()
+    if (historyVisible.value) void loadLinkHistory()
+  })
+})
 </script>
 
 <template>
   <div class="np-page">
-    <div class="np-card np-full">
+    <div class="np-page-head">
+      <div class="np-page-head-info">
+        <div class="np-page-head-title">{{ t('link.realtime') }}</div>
+        <div class="np-page-head-desc">{{ t('link.realtimeDesc') }}</div>
+      </div>
+      <div class="np-page-head-actions">
+        <el-button type="primary" @click="openAdd">
+          <el-icon><Plus /></el-icon>{{ t('link.addTask') }}
+        </el-button>
+      </div>
+    </div>
+
+    <div class="np-card">
       <div class="np-card-title">
         <el-icon><Monitor /></el-icon>
         <span>{{ t('link.realtime') }}</span>
-        <span class="np-sub">{{ t('link.realtimeDesc') }}</span>
       </div>
       <div ref="rtChartRef" style="height: 320px"></div>
       <div class="np-status-table">
@@ -267,7 +298,13 @@ function taskColor(row: LinkTask) { return row.color || '#64748b' }
           <span class="np-si-val">{{ statuses[tk.id] ? (statuses[tk.id].loss_pct || 0).toFixed(0) + '%' : '--' }}</span>
           <span class="np-si-time">{{ statuses[tk.id] ? fmtTime(statuses[tk.id].ts) : '--' }}</span>
         </div>
-        <div v-if="!tasks.length" class="np-empty">{{ t('common.noData') }}</div>
+        <div v-if="!tasks.length" class="np-status-empty">
+          <div class="np-empty-box">
+            <div class="np-empty-icon"><el-icon><Connection /></el-icon></div>
+            <div class="np-empty-title">{{ t('link.taskName') }}</div>
+            <div class="np-empty-desc">{{ t('common.noData') }}</div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -275,16 +312,12 @@ function taskColor(row: LinkTask) { return row.color || '#64748b' }
       <div class="np-card-title">
         <el-icon><Connection /></el-icon>
         <span>{{ t('link.taskName') }}</span>
-        <div class="spacer"></div>
-        <el-button type="primary" @click="openAdd">
-          <el-icon><Plus /></el-icon>{{ t('link.addTask') }}
-        </el-button>
       </div>
       <el-table :data="tasks" v-loading="loading" size="default" stripe class="np-table">
         <el-table-column prop="name" :label="t('link.taskName')" min-width="140" />
         <el-table-column prop="target" :label="t('link.target')" min-width="160">
           <template #default="{ row }">
-            <span :style="{ color: taskColor(row), fontWeight: 600 }">{{ row.target }}</span>
+            <span class="td-target">{{ row.target }}</span>
           </template>
         </el-table-column>
         <el-table-column :label="t('link.method')" width="130">
@@ -367,16 +400,23 @@ function taskColor(row: LinkTask) { return row.color || '#64748b' }
 </template>
 
 <style lang="scss">
-.np-sub { font-size: 12px; color: var(--np-text-2); font-weight: 400; }
 .np-status-table { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; }
 .np-status-item {
   display: flex; align-items: center; gap: 10px;
-  background: var(--np-bg); border-radius: $radius-sm;
+  background: var(--np-surface-1);
+  border: 1px solid var(--np-border);
+  border-radius: $radius-sm;
   padding: 8px 12px; font-size: 13px;
-  .np-si-name { width: 160px; font-weight: 600; }
-  .np-si-target { flex: 1; color: var(--np-text-2); }
-  .np-si-val { width: 100px; text-align: right; font-variant-numeric: tabular-nums; }
-  .np-si-time { width: 160px; text-align: right; color: var(--np-text-2); font-size: 12px; }
+  transition: border-color 0.18s ease-out, background-color 0.18s ease-out;
+  &:hover {
+    background: var(--np-hover);
+    border-color: var(--np-border-strong);
+  }
+  .np-si-name { width: 160px; font-weight: 600; color: var(--np-text-1); }
+  .np-si-target { flex: 1; color: var(--np-text-2); font-variant-numeric: tabular-nums; }
+  .np-si-val { width: 100px; text-align: right; color: var(--np-text-1); font-variant-numeric: tabular-nums; }
+  .np-si-time { width: 160px; text-align: right; color: var(--np-text-2); font-size: 12px; font-variant-numeric: tabular-nums; }
 }
-.spacer { flex: 1; }
+.td-target { font-weight: 600; color: var(--np-text-1); font-variant-numeric: tabular-nums; }
+.np-status-empty { padding: 0; }
 </style>

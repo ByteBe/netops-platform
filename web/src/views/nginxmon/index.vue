@@ -1,14 +1,17 @@
 <script setup lang="ts">
 // Nginx 监控：可用性/状态、活跃连接、请求速率(QPS)、Reading/Writing/Waiting
-import { ref, reactive, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import * as echarts from 'echarts'
 import { getEnc, postEnc, putEnc, delEnc } from '@/utils/request'
 import { WSClient } from '@/utils/ws'
-import { fmtTime } from '@/utils'
+import { useAppStore } from '@/stores/app'
+import { fmtTime, cssVar, chartAxisColors } from '@/utils'
+import { histTooltip } from '@/utils/histTooltip'
 
 const { t } = useI18n()
+const appStore = useAppStore()
 
 interface NginxInstance {
   id: number
@@ -146,23 +149,32 @@ async function showHistory(d: NginxInstance) {
     waiting: number[][]
   }>(`/nginxmon/instances/${d.id}/history`)
   histChart ??= echarts.init(histRef.value as HTMLDivElement)
+  const ca = chartAxisColors()
   histChart.setOption({
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis' },
-    legend: { data: [t('nginx.activeConns'), t('nginx.qps'), t('nginx.requests'), t('nginx.reading'), t('nginx.writing'), t('nginx.waiting')] },
+    tooltip: histTooltip({ digits: 0 }),
+    legend: { data: [t('nginx.activeConns'), t('nginx.qps'), t('nginx.requests'), t('nginx.reading'), t('nginx.writing'), t('nginx.waiting')], textStyle: { color: ca.axis } },
     grid: { left: 60, right: 20, top: 36, bottom: 28 },
-    xAxis: { type: 'time' },
-    yAxis: [{ type: 'value', name: t('nginx.activeConns') }, { type: 'value', name: t('nginx.qps'), splitLine: { show: false } }],
+    xAxis: { type: 'time', axisLabel: { color: ca.axis }, axisLine: { lineStyle: { color: ca.axisLine } } },
+    yAxis: [
+      { type: 'value', name: t('nginx.activeConns'), nameTextStyle: { color: ca.axis }, axisLabel: { color: ca.axis }, splitLine: { lineStyle: { color: ca.split } } },
+      { type: 'value', name: t('nginx.qps'), nameTextStyle: { color: ca.axis }, axisLabel: { color: ca.axis }, splitLine: { show: false } }
+    ],
     series: [
-      { name: t('nginx.activeConns'), type: 'line', showSymbol: false, smooth: true, lineStyle: { width: 2, color: '#2f6bff' }, itemStyle: { color: '#2f6bff' }, data: h.conn || [] },
-      { name: t('nginx.qps'), type: 'line', yAxisIndex: 1, showSymbol: false, smooth: true, lineStyle: { width: 2, color: '#22c55e' }, itemStyle: { color: '#22c55e' }, data: h.qps || [] },
-      { name: t('nginx.requests'), type: 'line', showSymbol: false, smooth: true, lineStyle: { width: 2, color: '#f59e0b' }, itemStyle: { color: '#f59e0b' }, data: h.req || [] },
-      { name: t('nginx.reading'), type: 'line', showSymbol: false, smooth: true, lineStyle: { width: 2, color: '#8b5cf6' }, itemStyle: { color: '#8b5cf6' }, data: h.reading || [] },
-      { name: t('nginx.writing'), type: 'line', showSymbol: false, smooth: true, lineStyle: { width: 2, color: '#06b6d4' }, itemStyle: { color: '#06b6d4' }, data: h.writing || [] },
-      { name: t('nginx.waiting'), type: 'line', showSymbol: false, smooth: true, lineStyle: { width: 2, color: '#94a3b8' }, itemStyle: { color: '#94a3b8' }, data: h.waiting || [] }
+      { name: t('nginx.activeConns'), type: 'line', showSymbol: false, smooth: true, lineStyle: { width: 2, color: cssVar('--np-primary') }, itemStyle: { color: cssVar('--np-primary') }, data: h.conn || [] },
+      { name: t('nginx.qps'), type: 'line', yAxisIndex: 1, showSymbol: false, smooth: true, lineStyle: { width: 2, color: cssVar('--np-success') }, itemStyle: { color: cssVar('--np-success') }, data: h.qps || [] },
+      { name: t('nginx.requests'), type: 'line', showSymbol: false, smooth: true, lineStyle: { width: 2, color: cssVar('--np-warning') }, itemStyle: { color: cssVar('--np-warning') }, data: h.req || [] },
+      { name: t('nginx.reading'), type: 'line', showSymbol: false, smooth: true, lineStyle: { width: 2, color: cssVar('--np-info') }, itemStyle: { color: cssVar('--np-info') }, data: h.reading || [] },
+      { name: t('nginx.writing'), type: 'line', showSymbol: false, smooth: true, lineStyle: { width: 2, color: cssVar('--np-text-2') }, itemStyle: { color: cssVar('--np-text-2') }, data: h.writing || [] },
+      { name: t('nginx.waiting'), type: 'line', showSymbol: false, smooth: true, lineStyle: { width: 2, color: cssVar('--np-text-3') }, itemStyle: { color: cssVar('--np-text-3') }, data: h.waiting || [] }
     ]
   })
 }
+
+// 主题切换时重绘历史曲线（canvas 不感知 CSS 变量变化）
+watch(() => appStore.theme, () => {
+  if (histVisible.value && histInstance.value) void showHistory(histInstance.value)
+})
 
 let autoTimer: number | undefined
 onMounted(async () => {
@@ -185,36 +197,74 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="np-page">
-    <div class="np-toolbar">
-      <div class="spacer"></div>
-      <el-button type="primary" @click="openAdd">
-        <el-icon><Plus /></el-icon>{{ t('nginx.addInstance') }}
-      </el-button>
+    <div class="np-page-head">
+      <div class="np-page-head-info">
+        <div class="np-page-head-title">{{ t('nginx.title') }}</div>
+        <div class="np-page-head-desc">{{ t('nginx.desc') }}</div>
+      </div>
+      <div class="np-page-head-actions">
+        <el-button type="primary" @click="openAdd">
+          <el-icon><Plus /></el-icon>{{ t('nginx.addInstance') }}
+        </el-button>
+      </div>
     </div>
 
-    <div class="np-db-grid">
-      <div v-for="d in instances" :key="d.id" class="np-card np-db-card">
-        <div class="np-db-head">
+    <div class="np-kpi-grid">
+      <div class="np-kpi">
+        <div class="np-kpi-icon"><el-icon><Box /></el-icon></div>
+        <div class="np-kpi-body">
+          <div class="np-kpi-value">{{ instances.length }}</div>
+          <div class="np-kpi-label">{{ t('nginx.totalInstances') }}</div>
+        </div>
+      </div>
+      <div class="np-kpi">
+        <div class="np-kpi-icon is-success"><el-icon><Connection /></el-icon></div>
+        <div class="np-kpi-body">
+          <div class="np-kpi-value">{{ instances.filter(i => snaps[i.id]?.up).length }}</div>
+          <div class="np-kpi-label">{{ t('nginx.onlineInstances') }}</div>
+        </div>
+      </div>
+      <div class="np-kpi">
+        <div class="np-kpi-icon is-danger"><el-icon><CircleClose /></el-icon></div>
+        <div class="np-kpi-body">
+          <div class="np-kpi-value">{{ instances.length - instances.filter(i => snaps[i.id]?.up).length }}</div>
+          <div class="np-kpi-label">{{ t('nginx.offlineInstances') }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="nx-grid">
+      <div v-for="d in instances" :key="d.id" class="np-card nx-card">
+        <div class="nx-head">
           <span class="np-dot" :class="(snaps[d.id] && snaps[d.id].up) ? 'up' : 'down'"></span>
-          <span class="np-db-name">{{ d.name }}</span>
+          <span class="nx-name">{{ d.name }}</span>
           <el-tag size="small" effect="plain">Nginx</el-tag>
-          <span class="np-db-host">{{ d.status_url }}</span>
+          <span class="nx-host np-ellipsis">{{ d.status_url }}</span>
         </div>
-        <div class="np-db-body">
-          <div class="np-db-metrics">
-            <div class="np-db-m"><span class="np-db-label">{{ t('nginx.activeConns') }}</span><span>{{ snaps[d.id]?.active_conns ?? '--' }}</span></div>
-            <div class="np-db-m"><span class="np-db-label">{{ t('nginx.qps') }}</span><span>{{ snaps[d.id] ? snaps[d.id].qps.toFixed(1) : '--' }}</span></div>
-            <div class="np-db-m"><span class="np-db-label">{{ t('nginx.requests') }}</span><span>{{ snaps[d.id]?.requests ?? '--' }}</span></div>
-            <div class="np-db-m"><span class="np-db-label">{{ t('nginx.reading') }}</span><span>{{ snaps[d.id]?.reading ?? '--' }}</span></div>
-            <div class="np-db-m"><span class="np-db-label">{{ t('nginx.writing') }}</span><span>{{ snaps[d.id]?.writing ?? '--' }}</span></div>
-            <div class="np-db-m"><span class="np-db-label">{{ t('nginx.waiting') }}</span><span>{{ snaps[d.id]?.waiting ?? '--' }}</span></div>
-            <div class="np-db-m"><span class="np-db-label">{{ t('nginx.state') }}</span><span :style="{ color: snaps[d.id]?.up ? '#22c55e' : '#ef4444' }">{{ snaps[d.id]?.up ? t('nginx.online') : t('nginx.offline') }}</span></div>
-            <div class="np-db-m"><span class="np-db-label">{{ t('monitor.interval') }}</span><span>{{ d.interval }}s</span></div>
+
+        <div class="nx-stats">
+          <div class="nx-stat">
+            <div class="nx-stat-value">{{ snaps[d.id]?.active_conns ?? '--' }}</div>
+            <div class="nx-stat-label">{{ t('nginx.activeConns') }}</div>
           </div>
-          <div class="np-db-msg" v-if="snaps[d.id]?.message">{{ snaps[d.id]!.message }}</div>
+          <div class="nx-stat is-accent">
+            <div class="nx-stat-value">{{ snaps[d.id] ? snaps[d.id].qps.toFixed(1) : '--' }}</div>
+            <div class="nx-stat-label">{{ t('nginx.qps') }}</div>
+          </div>
         </div>
-        <div class="np-db-foot">
-          <span>{{ snaps[d.id] ? fmtTime(snaps[d.id].ts) : '--' }}</span>
+
+        <div class="nx-mini">
+          <span class="nx-mini-item"><em>{{ t('nginx.reading') }}</em><b>{{ snaps[d.id]?.reading ?? '--' }}</b></span>
+          <span class="nx-mini-item"><em>{{ t('nginx.writing') }}</em><b>{{ snaps[d.id]?.writing ?? '--' }}</b></span>
+          <span class="nx-mini-item"><em>{{ t('nginx.waiting') }}</em><b>{{ snaps[d.id]?.waiting ?? '--' }}</b></span>
+          <span class="nx-mini-item"><em>{{ t('nginx.requests') }}</em><b>{{ snaps[d.id]?.requests ?? '--' }}</b></span>
+          <span class="nx-mini-item"><em>{{ t('monitor.interval') }}</em><b>{{ d.interval }}s</b></span>
+        </div>
+
+        <div class="nx-msg" v-if="snaps[d.id]?.message">{{ snaps[d.id]!.message }}</div>
+
+        <div class="nx-foot">
+          <span class="nx-time">{{ snaps[d.id] ? fmtTime(snaps[d.id].ts) : '--' }}</span>
           <div>
             <el-button size="small" text type="primary" @click="showHistory(d)">{{ t('link.history') }}</el-button>
             <el-button size="small" text type="primary" @click="openEdit(d)">{{ t('common.edit') }}</el-button>
@@ -222,7 +272,13 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </div>
-      <div v-if="!instances.length" class="np-card np-empty">{{ t('common.noData') }}</div>
+      <div v-if="!instances.length" class="np-card nx-empty">
+        <div class="np-empty-box">
+          <div class="np-empty-icon"><el-icon><Monitor /></el-icon></div>
+          <div class="np-empty-title">{{ t('nginx.title') }}</div>
+          <div class="np-empty-desc">{{ t('common.noData') }}</div>
+        </div>
+      </div>
     </div>
 
     <el-dialog v-model="dialogVisible" :title="editingId ? t('nginx.editInstance') : t('nginx.addInstance')" width="520px">
@@ -235,7 +291,7 @@ onBeforeUnmount(() => {
         </el-form-item>
         <el-form-item label=" ">
           <el-button :loading="testing" @click="testConn">{{ t('nginx.testConn') }}</el-button>
-          <span v-if="testResult" :style="{ marginLeft:'12px', color: testResult.indexOf(t('nginx.testSuccess')) >= 0 ? '#67C23A' : '#F56C6C', fontSize:'13px' }">{{ testResult }}</span>
+          <span v-if="testResult" class="nx-test-result" :class="testResult.indexOf(t('nginx.testSuccess')) >= 0 ? 'is-ok' : 'is-fail'">{{ testResult }}</span>
         </el-form-item>
         <el-form-item :label="t('monitor.interval')">
           <el-input-number v-model="form.interval" :min="10" :max="3600" />
@@ -260,58 +316,105 @@ onBeforeUnmount(() => {
 </template>
 
 <style lang="scss">
-.np-db-grid {
+.nx-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
   gap: 14px;
 }
 
-.np-db-card {
-  .np-db-head {
+.nx-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+
+  .nx-head {
     display: flex;
     align-items: center;
     gap: 8px;
-    .np-db-name {
+    .nx-name {
       font-size: 15px;
       font-weight: 600;
     }
-    .np-db-host {
+    .nx-host {
       margin-left: auto;
       color: var(--np-text-2);
       font-size: 12px;
       max-width: 200px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
     }
   }
-  .np-db-body {
-    margin-top: 10px;
-  }
-  .np-db-metrics {
+
+  // 仪表读数条：单一凹陷表面 + 发丝分隔线，信号标线在左，数值墨色，微标签弱化
+  .nx-stats {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 6px 16px;
-    .np-db-m {
-      display: flex;
-      justify-content: space-between;
-      font-size: 13px;
-      border-bottom: 1px dashed var(--np-border);
-      padding-bottom: 4px;
-      .np-db-label {
-        color: var(--np-text-2);
+    border: 1px solid var(--np-border);
+    border-radius: $radius-md;
+    background: var(--np-surface-1);
+    overflow: hidden;
+    .nx-stat {
+      position: relative;
+      padding: 12px 14px 12px 16px;
+      & + & { border-left: 1px solid var(--np-border); }
+      // 左侧信号标线（常态中性，QPS 项信号橙）
+      &::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 12px;
+        bottom: 12px;
+        width: 2px;
+        background: var(--np-border-strong);
+      }
+      &.is-accent::before { background: var(--np-primary); }
+      .nx-stat-value {
+        font-size: 24px;
+        font-weight: 700;
+        line-height: 1.2;
+        font-variant-numeric: tabular-nums;
+        color: var(--np-text-1);
+      }
+      .nx-stat-label {
+        margin-top: 2px;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--np-text-3);
       }
     }
   }
-  .np-db-msg {
-    margin-top: 8px;
-    color: #ef4444;
+
+  .nx-mini {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    .nx-mini-item {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      font-size: 12px;
+      em {
+        font-style: normal;
+        font-size: 11px;
+        letter-spacing: 0.06em;
+        color: var(--np-text-3);
+      }
+      b {
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        color: var(--np-text-1);
+      }
+    }
+  }
+
+  .nx-msg {
+    color: var(--np-danger);
     font-size: 12px;
     word-break: break-all;
   }
-  .np-db-foot {
-    margin-top: 10px;
-    padding-top: 8px;
+
+  .nx-foot {
+    margin-top: auto;
+    padding-top: 10px;
     border-top: 1px solid var(--np-border);
     display: flex;
     justify-content: space-between;
@@ -319,5 +422,16 @@ onBeforeUnmount(() => {
     color: var(--np-text-2);
     font-size: 12px;
   }
+}
+
+.nx-test-result {
+  margin-left: 12px;
+  font-size: 13px;
+  &.is-ok { color: var(--np-success); }
+  &.is-fail { color: var(--np-danger); }
+}
+
+.nx-empty {
+  padding: 0;
 }
 </style>

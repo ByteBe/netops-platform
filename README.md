@@ -1,4 +1,4 @@
-# NetOps 网络运维监控平台
+﻿# NetOps 网络运维监控平台
 
 > 仓库：[Gitee](https://gitee.com/ergn/netops-platform) | [GitHub](https://github.com/ByteBe/netops-platform)
 
@@ -8,7 +8,7 @@
 
 | 分组 | 功能 |
 |---|---|
-| 网络监控 | 链路检测（ICMP/TCP）、设备监控（SNMP）、网络拓扑（2D/3D）、流量分析 |
+| 网络监控 | 链路检测（ICMP/TCP）、设备监控（SNMP）、流量分析 |
 | 告警中心 | 阈值告警（CPU/内存/磁盘/链路/节点离线）、分级、事件确认 |
 | 资源与资产 | 资源管理、IP地址管理（IPAM）、子网计算、配置备份/对比/回滚 |
 | 基础设施 | Docker 监控、K8s 监控、数据库监控 |
@@ -43,4 +43,4 @@ cd /opt/netops-platform && chmod +x install.sh && ./install.sh install
 
 ## 版本
 
-v2.2.0
+v2.2.2

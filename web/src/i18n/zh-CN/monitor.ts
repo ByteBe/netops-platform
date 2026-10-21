@@ -1,4 +1,9 @@
 export default {
+  title: '设备监控',
+  desc: '通过 SNMP / SSH 采集服务器与网络设备的 CPU、内存、磁盘与接口流量',
+  totalDevices: '设备总数',
+  onlineDevices: '在线设备',
+  offlineDevices: '离线设备',
   deviceName: '设备名称', ip: 'IP地址', deviceType: '设备类型',
   snmpVersion: 'SNMP版本', community: '团体名', username: 'SNMPv3用户名',
   authProto: '认证协议', privProto: '加密协议', authPass: '认证口令', privPass: '加密口令',

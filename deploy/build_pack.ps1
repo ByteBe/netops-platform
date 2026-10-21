@@ -1,7 +1,7 @@
 # NetOps 多平台打包脚本（Windows 交叉编译）
 # 产物：Windows-amd64 + Linux(麒麟/统信) amd64/arm64，输出到 dist-release
 param(
-    [string]$Version = "2.2.1"
+    [string]$Version = "2.2.2"
 )
 $ErrorActionPreference = "Stop"
 $b    = "E:\IDEA\netops-platform\backend"

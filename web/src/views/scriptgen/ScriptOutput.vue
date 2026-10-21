@@ -35,15 +35,38 @@ async function copy(s: string) {
 
 <template>
   <div class="np-card">
-    <div style="display:flex;align-items:center;margin-bottom:8px;font-weight:600">
-      <span>{{ t('script.generatedResult') }}</span><div style="flex:1"></div>
+    <div class="out-head">
+      <span>{{ t('script.generatedResult') }}</span>
       <el-button type="primary" plain size="small" :disabled="!output" @click="copy(output)">📋 {{ t('script.copy') }}</el-button>
     </div>
-    <pre style="background:#0b1220;color:#7dd3fc;border-radius:8px;padding:14px;font-size:12px;line-height:1.7;max-height:380px;overflow:auto;white-space:pre-wrap;margin:0">{{ output || t('script.fillParamsTip') }}</pre>
-    <div style="display:flex;align-items:center;margin:12px 0 8px;font-weight:600">
-      <span>{{ t('script.cleanVersion') }}</span><div style="flex:1"></div>
-      <el-button type="success" plain size="small" :disabled="!outputClean" @click="copy(outputClean)">📋 {{ t('script.copy') }}</el-button>
+    <pre class="code-pre">{{ output || t('script.fillParamsTip') }}</pre>
+    <div class="out-head">
+      <span>{{ t('script.cleanVersion') }}</span>
+      <el-button plain size="small" :disabled="!outputClean" @click="copy(outputClean)">📋 {{ t('script.copy') }}</el-button>
     </div>
-    <pre style="background:#0b1220;color:#7dd3fc;border-radius:8px;padding:14px;font-size:12px;line-height:1.7;max-height:380px;overflow:auto;white-space:pre-wrap;margin:0">{{ outputClean || t('script.clean') }}</pre>
+    <pre class="code-pre">{{ outputClean || t('script.clean') }}</pre>
   </div>
 </template>
+
+<style scoped>
+.out-head { display: flex; align-items: center; margin-bottom: 8px; font-weight: 600; color: var(--np-text-1); }
+.out-head > span { flex: 1; font-size: 13px; letter-spacing: 0.04em; }
+/* 代码输出块：凹陷次级表面 + 发丝描边，颜色全部走主题变量 */
+.code-pre {
+  background: var(--np-table-bg);
+  border: 1px solid var(--np-border);
+  color: var(--np-text-1);
+  border-radius: 6px;
+  padding: 14px;
+  font-size: 12px;
+  line-height: 1.7;
+  max-height: 380px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 0 0 12px;
+  font-family: Consolas, 'Courier New', monospace;
+  font-variant-numeric: tabular-nums;
+}
+.out-head + .code-pre { margin-bottom: 12px; }
+</style>

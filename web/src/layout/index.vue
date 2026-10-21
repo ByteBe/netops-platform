@@ -16,7 +16,7 @@ const authStore = useAuthStore()
 
 // 功能路由分组（左侧导航）
 const groups: { titleKey: string; items: string[] }[] = [
-  { titleKey: 'group_monitor', items: ['linkdetect', 'monitor', 'topology', 'traffic', 'bgpmon'] },
+  { titleKey: 'group_monitor', items: ['topology', 'linkdetect', 'monitor', 'traffic', 'bgpmon'] },
   { titleKey: 'group_alert', items: ['alert'] },
   { titleKey: 'group_asset', items: ['resource', 'ipam', 'subnet'] },
   { titleKey: 'group_infra', items: ['container', 'k8s', 'dbmonitor', 'nginxmon'] },
@@ -50,8 +50,10 @@ const userTitle = computed(() => authStore.user?.username || '')
     <!-- 左侧导航栏 -->
     <aside class="np-aside" :class="{ collapsed: appStore.collapsed }">
       <div class="np-logo">
-        <el-icon :size="22" color="#2f6bff"><Monitor /></el-icon>
-        <span v-show="!appStore.collapsed">{{ t('app.shortName') }}</span>
+        <span class="np-logo-mark">
+          <el-icon :size="18"><Monitor /></el-icon>
+        </span>
+        <span v-show="!appStore.collapsed" class="np-logo-text">{{ t('app.shortName') }}</span>
       </div>
       <el-menu
         class="np-menu"
@@ -84,7 +86,7 @@ const userTitle = computed(() => authStore.user?.username || '')
         </div>
         <div class="np-header-right">
           <!-- 数据大屏入口：固定在右上角，左侧导航不设入口 -->
-          <el-button type="primary" round class="np-dashboard-entry" @click="goDashboard">
+          <el-button type="primary" class="np-dashboard-entry" @click="goDashboard">
             <el-icon><DataBoard /></el-icon>
             <span>{{ t('dashboard.entry') }}</span>
           </el-button>
@@ -110,7 +112,7 @@ const userTitle = computed(() => authStore.user?.username || '')
 
           <el-dropdown trigger="click" @command="(cmd: string) => cmd === 'logout' ? logout() : router.push('/profile')">
             <span class="np-user">
-              <el-avatar :size="28" class="np-avatar">{{ userTitle.slice(0, 1).toUpperCase() }}</el-avatar>
+              <el-avatar :size="26" class="np-avatar">{{ userTitle.slice(0, 1).toUpperCase() }}</el-avatar>
               <span class="np-username">{{ userTitle }}</span>
             </span>
             <template #dropdown>
@@ -135,7 +137,6 @@ const userTitle = computed(() => authStore.user?.username || '')
   display: flex;
   height: 100%;
   width: 100%;
-  background: var(--np-bg);
 }
 
 .np-aside {
@@ -145,7 +146,7 @@ const userTitle = computed(() => authStore.user?.username || '')
   border-right: 1px solid var(--np-border);
   display: flex;
   flex-direction: column;
-  transition: width 0.2s, min-width 0.2s;
+  transition: width 0.2s ease-out, min-width 0.2s ease-out;
   &.collapsed {
     width: 64px;
     min-width: 64px;
@@ -156,12 +157,36 @@ const userTitle = computed(() => authStore.user?.username || '')
   height: $header-height;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  font-size: 17px;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 0 16px;
+  font-size: 16px;
   font-weight: 700;
+  letter-spacing: 0.5px;
   color: var(--np-text-1);
   border-bottom: 1px solid var(--np-border);
+
+  .np-logo-mark {
+    flex: none;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background: var(--np-primary);
+    color: var(--np-primary-fg);
+    box-shadow: var(--np-shadow-sm);
+  }
+
+  .np-logo-text {
+    @include ellipsis;
+  }
+}
+
+.np-aside.collapsed .np-logo {
+  justify-content: center;
+  padding: 0;
 }
 
 .np-menu {
@@ -169,6 +194,18 @@ const userTitle = computed(() => authStore.user?.username || '')
   border-right: none;
   background: transparent;
   overflow-y: auto;
+  padding: 10px 10px 16px;
+
+  .el-menu-item,
+  .el-sub-menu__title {
+    border-radius: $radius-md;
+    height: 42px;
+    margin: 2px 0;
+  }
+
+  .el-menu-item.is-active {
+    box-shadow: inset 3px 0 0 var(--np-primary);
+  }
 }
 
 .np-main {
@@ -181,54 +218,53 @@ const userTitle = computed(() => authStore.user?.username || '')
 .np-header {
   height: $header-height;
   background: var(--np-header-bg);
-  backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--np-border);
   display: flex;
   align-items: center;
   padding: 0 16px;
-  gap: 16px;
+  gap: 12px;
   z-index: 10;
 
   &-left {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
   }
   &-right {
     margin-left: auto;
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 10px;
   }
 }
 
-.np-collapse-btn {
-  font-size: 20px;
+.np-collapse-btn,
+.np-header-icon {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: $radius-md;
+  font-size: 19px;
   cursor: pointer;
   color: var(--np-text-2);
+  transition: background-color 0.18s ease-out, color 0.18s ease-out;
   &:hover {
-    color: var(--np-primary);
+    color: var(--np-text-1);
+    background: var(--np-hover);
   }
 }
 
 .np-page-title {
   font-size: 16px;
   font-weight: 600;
+  letter-spacing: 0.3px;
+  color: var(--np-text-1);
 }
 
 .np-dashboard-entry {
-  background: linear-gradient(135deg, #2f6bff, #6d5bff);
-  border: none;
-  box-shadow: 0 4px 12px rgba(47, 107, 255, 0.35);
-}
-
-.np-header-icon {
-  font-size: 18px;
-  cursor: pointer;
-  color: var(--np-text-2);
-  &:hover {
-    color: var(--np-primary);
-  }
+  font-weight: 600;
 }
 
 .np-user {
@@ -236,9 +272,20 @@ const userTitle = computed(() => authStore.user?.username || '')
   align-items: center;
   gap: 8px;
   cursor: pointer;
+  padding: 4px 12px 4px 5px;
+  border-radius: $radius-md;
+  background: var(--np-surface-1);
+  border: 1px solid var(--np-border);
+  transition: background-color 0.18s ease-out, border-color 0.18s ease-out;
+  &:hover {
+    background: var(--np-hover);
+    border-color: var(--np-border-strong);
+  }
   .np-avatar {
     background: var(--np-primary);
-    color: #fff;
+    color: var(--np-primary-fg);
+    font-weight: 600;
+    flex: none;
   }
   .np-username {
     font-size: 14px;

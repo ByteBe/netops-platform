@@ -78,8 +78,40 @@ type MonitorDevice struct {
 	SshPort     int       `gorm:"default:22" json:"ssh_port"`
 	BgpEnable   bool      `gorm:"default:false" json:"bgp_enable"`        // 启用BGP/VPNv4只读监控
 	DisplayIfs  string    `gorm:"size:512;default:''" json:"display_ifs"` // 卡片显示接口，逗号分隔名称
+	LastOnline  bool      `gorm:"default:false" json:"last_online"`       // 下级上报的在线状态
+	LastCPU     float64   `gorm:"default:0" json:"last_cpu"`              // 下级上报 CPU %
+	LastMem     float64   `gorm:"default:0" json:"last_mem"`              // 下级上报 内存 %
+	LastUptime  float64   `gorm:"default:0" json:"last_uptime"`           // 下级上报 运行时长（秒）
+	LastMsg     string    `gorm:"size:128" json:"last_msg"`               // 下级上报 采集信息
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// NodeContainer 下级节点上报的容器明细（上级展示用）
+type NodeContainer struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	NodeUUID  string    `gorm:"size:64;index;not null" json:"node_uuid"`
+	Name      string    `gorm:"size:128" json:"name"`
+	Image     string    `gorm:"size:256" json:"image"`
+	State     string    `gorm:"size:32" json:"state"`
+	CPU       float64   `gorm:"default:0" json:"cpu"`
+	MemPct    float64   `gorm:"default:0" json:"mem_pct"`
+	Host      string    `gorm:"size:128" json:"host"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// NodeLink 下级节点上报的链路明细（上级展示用）
+type NodeLink struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	NodeUUID  string    `gorm:"size:64;index;not null" json:"node_uuid"`
+	Name      string    `gorm:"size:128" json:"name"`
+	Target    string    `gorm:"size:128" json:"target"`
+	Method    string    `gorm:"size:16;default:cmd" json:"method"` // icmp/tcp/cmd
+	Port      int       `gorm:"default:0" json:"port"`
+	Status    string    `gorm:"size:16;default:unknown" json:"status"` // up/down/unknown
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // LinkTask 链路检测任务
@@ -97,45 +129,6 @@ type LinkTask struct {
 	Status    string    `gorm:"size:16;default:unknown" json:"status"` // up/down/unknown
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
-}
-
-// TopoDevice 拓扑设备
-type TopoDevice struct {
-	ID        uint      `gorm:"primaryKey" json:"id"`
-	Name      string    `gorm:"size:128;not null" json:"name"`
-	IP        string    `gorm:"size:64" json:"ip"`
-	Vendor    string    `gorm:"size:32;default:h3c" json:"vendor"`
-	Type      string    `gorm:"size:32;default:switch" json:"type"` // switch/router/server/firewall
-	Layer     string    `gorm:"size:32;default:access" json:"layer"`
-	Status    string    `gorm:"size:16;default:up" json:"status"`
-	Icon      string    `gorm:"size:128" json:"icon"`
-	X         float64   `json:"x"`
-	Y         float64   `json:"y"`
-	Z         float64   `json:"z"`
-	GroupID   uint      `gorm:"index;default:0" json:"group_id"`
-	Remark    string    `gorm:"size:256" json:"remark"`
-	CreatedAt time.Time `json:"created_at"`
-}
-
-// TopoLink 拓扑连线（支持多IP：一条线可关联多个IP地址，显示在连线上）
-type TopoLink struct {
-	ID          uint      `gorm:"primaryKey" json:"id"`
-	Name        string    `gorm:"size:128" json:"name"`
-	SourceID    uint      `gorm:"index;not null" json:"source_id"`
-	TargetID    uint      `gorm:"index;not null" json:"target_id"`
-	Color       string    `gorm:"size:16;default:#67C23A" json:"color"`
-	Bandwidth   string    `gorm:"size:64" json:"bandwidth"`
-	Utilization float64   `json:"utilization"`
-	Status      string    `gorm:"size:16;default:unknown" json:"status"` // up/down
-	Remark      string    `gorm:"size:256" json:"remark"`
-	CreatedAt   time.Time `json:"created_at"`
-}
-
-// TopoLinkIP 连线关联IP
-type TopoLinkIP struct {
-	ID     uint   `gorm:"primaryKey" json:"id"`
-	LinkID uint   `gorm:"index" json:"link_id"`
-	IP     string `gorm:"size:64" json:"ip"`
 }
 
 // DBInstance 数据库监控实例
@@ -314,10 +307,11 @@ type ReportRecord struct {
 }
 
 // SystemSetting 系统设置（键值）
+// Value 用 text：上级公有证书 / MQTT TLS CA 等 PEM 内容可能超过 1024 字符（含节点参数）
 type SystemSetting struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	Key       string    `gorm:"size:128;uniqueIndex" json:"key"`
-	Value     string    `gorm:"size:1024" json:"value"`
+	Value     string    `gorm:"type:mediumtext" json:"value"`
 	Remark    string    `gorm:"size:256" json:"remark"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -352,6 +346,7 @@ type Node struct {
 	Token        string     `gorm:"size:128" json:"-"`                             // 认证 token
 	Status       string     `gorm:"size:16;default:'offline'" json:"status"`       // online/offline
 	LastSeenAt   *time.Time `json:"last_seen_at"`
+	CertWaitAt   *time.Time `json:"cert_wait_at"` // 证书待导入时间：注册后 3 分钟内须导入其证书，否则断开删除
 	ContainerCnt int        `gorm:"default:0" json:"container_cnt"`
 	DeviceCnt    int        `gorm:"default:0" json:"device_cnt"`
 	Remark       string     `gorm:"size:256" json:"remark"`
@@ -531,4 +526,54 @@ type AIInspectReport struct {
 	Report    string    `gorm:"type:mediumtext" json:"report"`
 	Snapshot  string    `gorm:"type:text" json:"snapshot"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+// TsArchive 时序数据每日归档（从时序库聚合后写入存储库，保证监控数据永久保存）
+// 每天每个 (metric, field, tags) 组合一行：avg/max/min/last/count
+type TsArchive struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	Metric    string    `gorm:"size:64;uniqueIndex:idx_ts_archive" json:"metric"`
+	Field     string    `gorm:"size:64;uniqueIndex:idx_ts_archive" json:"field"`
+	TagsKey   string    `gorm:"size:40;uniqueIndex:idx_ts_archive" json:"tags_key"` // sha1(tags) 短签名
+	Tags      string    `gorm:"type:text" json:"tags"`                              // 原始标签 JSON
+	Day       string    `gorm:"size:10;uniqueIndex:idx_ts_archive" json:"day"`      // 归档日期 YYYY-MM-DD
+	AvgVal    float64   `json:"avg_val"`
+	MaxVal    float64   `json:"max_val"`
+	MinVal    float64   `json:"min_val"`
+	LastVal   float64   `json:"last_val"`
+	Count     int       `json:"count"` // 当天采样点数
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// TsArchiveRetry 归档失败重传/补传记录：归档失败或校验未通过的 (metric, day) 持久化待补，
+// 后续调度自动重试；达到上限标记 discard（保留时序库原始数据，需人工核查）
+type TsArchiveRetry struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	Metric    string    `gorm:"size:64;uniqueIndex:idx_ts_retry" json:"metric"`
+	Day       string    `gorm:"size:10;uniqueIndex:idx_ts_retry" json:"day"` // 待补传日期 YYYY-MM-DD
+	Reason    string    `gorm:"size:255" json:"reason"`
+	Retries   int       `json:"retries"`                 // 已重试次数
+	Status    string    `gorm:"size:16" json:"status"`   // pending / discard
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// Certificate 分布式节点证书：节点自签公证书（含公钥与身份信息）用于节点间身份认证。
+// - 本机公证书：NodeUUID=''（CertType=public），私钥仅存本机文件 data/certs/private.pem，绝不入库/外发
+// - 交换来的对方公证书：NodeUUID=对方节点UUID
+// - Fingerprint 为证书 SHA-256 指纹，作为数据上报的特征标签（cert_fingerprint）
+type Certificate struct {
+	ID          uint       `gorm:"primaryKey" json:"id"`
+	NodeUUID    string     `gorm:"size:64;index;not null" json:"node_uuid"` // ''=本机，否则为对方节点 UUID
+	Name        string     `gorm:"size:128" json:"name"`                    // 证书主体名称（节点名）
+	CertType    string     `gorm:"size:16;default:public" json:"cert_type"` // public（公证书，仅存证书，不含私钥）
+	CertPEM     string     `gorm:"type:text" json:"cert_pem"`               // 公证书 PEM（x509 自签名）
+	Fingerprint string     `gorm:"size:64;index" json:"fingerprint"`        // SM3 指纹（特征标签）
+	NotBefore   time.Time  `json:"not_before"`
+	NotAfter    time.Time  `json:"not_after"`
+	Status      string     `gorm:"size:16;default:valid" json:"status"` // valid / expired / invalid
+	LastVerify  *time.Time `json:"last_verify"`                          // 上次 4 小时认证时间
+	Remark      string     `gorm:"size:256" json:"remark"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 }

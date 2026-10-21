@@ -1,18 +1,20 @@
 <script setup lang="ts">
 // 数据大屏：KPI + 链路趋势 + 设备健康 + 专线流量 + 数据库健康（右上角入口）
-import { ref, onMounted, onBeforeUnmount, nextTick, computed } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick, computed, watch } from 'vue'
 import * as echarts from 'echarts'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { getEnc } from '@/utils/request'
 import { WSClient } from '@/utils/ws'
 import { useAuthStore } from '@/stores/auth'
-import { fmtBps, fmtTime } from '@/utils'
+import { useAppStore } from '@/stores/app'
+import { fmtBps, fmtTime, cssVar, chartAxisColors } from '@/utils'
 import NodeHealth from './components/NodeHealth.vue'
 
 const { t } = useI18n()
 const router = useRouter()
 const auth = useAuthStore()
+const appStore = useAppStore()
 
 interface Kpi {
   link_total: number
@@ -26,7 +28,6 @@ interface Kpi {
   db_down: number
   user_total: number
   ip_used: number
-  topo_devices: number
 }
 interface Snapshot {
   device_id?: number
@@ -134,6 +135,7 @@ function pushTrendPoint(taskId: number, name: string, color: string, rtMs: numbe
 async function renderTrends() {
   if (!trendRef.value) return
   trendChart ??= echarts.init(trendRef.value)
+  const ca = chartAxisColors()
   const nowMs = Date.now()
   const startMs = nowMs - 10 * 60 * 1000
   const series = Object.values(trendBuffer).map((s) => ({
@@ -141,19 +143,19 @@ async function renderTrends() {
     type: 'line' as const,
     showSymbol: false,
     smooth: true,
-    lineStyle: { width: 2, color: s.color || '#2f6bff' },
-    itemStyle: { color: s.color || '#2f6bff' },
-    areaStyle: { opacity: 0.15 },
+    lineStyle: { width: 2, color: s.color || cssVar('--np-primary', '#d95f1f') },
+    itemStyle: { color: s.color || cssVar('--np-primary', '#d95f1f') },
+    areaStyle: { opacity: 0.12 },
     connectNulls: false,
     data: s.points
   }))
   trendChart.setOption({
     backgroundColor: 'transparent',
     tooltip: { trigger: 'axis', valueFormatter: (v: number) => v == null ? '--' : v.toFixed(1) + ' ms' },
-    legend: { textStyle: { color: '#94a3b8' }, top: 0 },
+    legend: { textStyle: { color: ca.axis }, top: 0 },
     grid: { left: 50, right: 16, top: 32, bottom: 24 },
-    xAxis: { type: 'time', min: startMs, max: nowMs, axisLine: { lineStyle: { color: '#334155' } } },
-    yAxis: { type: 'value', name: 'ms', min: 0, splitLine: { lineStyle: { color: '#1e293b' } } },
+    xAxis: { type: 'time', min: startMs, max: nowMs, axisLine: { lineStyle: { color: ca.axisLine } } },
+    yAxis: { type: 'value', name: 'ms', min: 0, splitLine: { lineStyle: { color: ca.split } } },
     series
   }, true)
 }
@@ -161,26 +163,27 @@ async function renderTrends() {
 function renderHealth() {
   if (!healthRef.value) return
   healthChart ??= echarts.init(healthRef.value)
+  const ca = chartAxisColors()
   healthChart.setOption({
     backgroundColor: 'transparent',
     tooltip: { trigger: 'axis', valueFormatter: (v: number) => v == null ? '--' : v.toFixed(1) + '%' },
-    legend: { textStyle: { color: '#94a3b8' }, top: 0 },
+    legend: { textStyle: { color: ca.axis }, top: 0 },
     grid: { left: 50, right: 16, top: 32, bottom: 40 },
-    xAxis: { type: 'category', data: devices.value.map((d) => d.name), axisLabel: { color: '#94a3b8', rotate: 30 } },
-    yAxis: { type: 'value', max: 100, splitLine: { lineStyle: { color: '#1e293b' } } },
+    xAxis: { type: 'category', data: devices.value.map((d) => d.name), axisLabel: { color: ca.axis, rotate: 30 } },
+    yAxis: { type: 'value', max: 100, splitLine: { lineStyle: { color: ca.split } } },
     series: [
       {
         name: 'CPU %',
         type: 'bar',
         barWidth: 12,
-        itemStyle: { color: '#2f6bff', borderRadius: [4, 4, 0, 0] },
+        itemStyle: { color: cssVar('--np-primary', '#d95f1f'), borderRadius: [3, 3, 0, 0] },
         data: devices.value.map((d) => d.cpu)
       },
       {
         name: 'MEM %',
         type: 'bar',
         barWidth: 12,
-        itemStyle: { color: '#22c55e', borderRadius: [4, 4, 0, 0] },
+        itemStyle: { color: cssVar('--np-success', '#3f9e63'), borderRadius: [3, 3, 0, 0] },
         data: devices.value.map((d) => d.mem_used)
       }
     ]
@@ -190,31 +193,32 @@ function renderHealth() {
 function renderTraffic() {
   if (!trafficRef.value) return
   trafficChart ??= echarts.init(trafficRef.value)
+  const ca = chartAxisColors()
   trafficChart.setOption({
     backgroundColor: 'transparent',
     tooltip: { trigger: 'axis', valueFormatter: (v: number) => v == null ? '--' : (v/1e6).toFixed(2) + ' Mbps' },
-    legend: { textStyle: { color: '#94a3b8' }, top: 0 },
+    legend: { textStyle: { color: ca.axis }, top: 0 },
     grid: { left: 70, right: 16, top: 32, bottom: 24 },
-    xAxis: { type: 'category', data: trafficData.value.map((x) => x.name), axisLabel: { color: '#94a3b8' } },
+    xAxis: { type: 'category', data: trafficData.value.map((x) => x.name), axisLabel: { color: ca.axis } },
     yAxis: {
       type: 'value',
       name: 'Mbps',
-      axisLabel: { color: '#94a3b8', formatter: (v: number) => (v / 1e6).toFixed(0) },
-      splitLine: { lineStyle: { color: '#1e293b' } }
+      axisLabel: { color: ca.axis, formatter: (v: number) => (v / 1e6).toFixed(0) },
+      splitLine: { lineStyle: { color: ca.split } }
     },
     series: [
       {
         name: t('traffic.in'),
         type: 'bar',
         barWidth: 10,
-        itemStyle: { color: '#06b6d4', borderRadius: [4,4,0,0] },
+        itemStyle: { color: cssVar('--np-info', '#3a6fb0'), borderRadius: [3,3,0,0] },
         data: trafficData.value.map((x) => x.in_bps)
       },
       {
         name: t('traffic.out'),
         type: 'bar',
         barWidth: 10,
-        itemStyle: { color: '#f59e0b', borderRadius: [4,4,0,0] },
+        itemStyle: { color: cssVar('--np-warning', '#b5893a'), borderRadius: [3,3,0,0] },
         data: trafficData.value.map((x) => x.out_bps)
       }
     ]
@@ -232,18 +236,19 @@ async function loadTraffic() {
 function renderDb() {
   if (!dbRef.value) return
   dbChart ??= echarts.init(dbRef.value)
+  const ca = chartAxisColors()
   dbChart.setOption({
     backgroundColor: 'transparent',
     tooltip: { trigger: 'item' },
-    legend: { textStyle: { color: '#94a3b8' }, top: 0 },
+    legend: { textStyle: { color: ca.axis }, top: 0 },
     grid: { left: 50, right: 16, top: 32, bottom: 40 },
-    xAxis: { type: 'category', data: dbs.value.map((d) => d.name), axisLabel: { color: '#94a3b8', rotate: 20 } },
-    yAxis: { type: 'value', splitLine: { lineStyle: { color: '#1e293b' } } },
+    xAxis: { type: 'category', data: dbs.value.map((d) => d.name), axisLabel: { color: ca.axis, rotate: 20 } },
+    yAxis: { type: 'value', splitLine: { lineStyle: { color: ca.split } } },
     series: [
       {
         name: t('dbmon.connections'),
         type: 'bar',
-        itemStyle: { color: '#8b5cf6', borderRadius: [4, 4, 0, 0] },
+        itemStyle: { color: cssVar('--np-info', '#3a6fb0'), borderRadius: [3, 3, 0, 0] },
         data: dbs.value.map((d) => Number((d as unknown as { conns?: number }).conns || 0))
       }
     ]
@@ -263,6 +268,7 @@ const avgMem = computed(() => {
 function renderGauge() {
   if (!gaugeRef.value) return
   gaugeChart ??= echarts.init(gaugeRef.value)
+  const ca = chartAxisColors()
   gaugeChart.setOption({
     backgroundColor: 'transparent',
     series: [
@@ -273,18 +279,27 @@ function renderGauge() {
         min: 0, max: 100,
         startAngle: 200, endAngle: -20,
         progress: { show: true, width: 10 },
-        axisLine: { lineStyle: { width: 10, color: [[0.6, '#22c55e'], [0.85, '#f59e0b'], [1, '#ef4444']] } },
+        axisLine: { lineStyle: { width: 10, color: [
+          [0.6, cssVar('--np-success', '#3f9e63')],
+          [0.85, cssVar('--np-warning', '#b5893a')],
+          [1, cssVar('--np-danger', '#c0503d')]
+        ] } },
         axisTick: { show: false },
         splitLine: { show: false },
         axisLabel: { show: false },
         pointer: { show: true, length: '60%', width: 4 },
-        detail: { valueAnimation: true, formatter: '{value}%', color: '#e2e8f0', fontSize: 22, offsetCenter: [0, '30%'] },
-        title: { offsetCenter: [0, '60%'], color: '#94a3b8', fontSize: 12 },
+        detail: { valueAnimation: true, formatter: '{value}%', color: cssVar('--np-text-1', '#39424f'), fontSize: 22, offsetCenter: [0, '30%'] },
+        title: { offsetCenter: [0, '60%'], color: ca.axis, fontSize: 12 },
         data: [{ value: avgCpu.value, name: t('dashboard.cpuAvg') }]
       }
     ]
   }, true)
 }
+
+// 主题切换时重绘图表（ECharts canvas 不感知 CSS 变量变化）
+watch(() => appStore.theme, () => {
+  nextTick(() => renderCharts())
+})
 
 onMounted(async () => {
   await nextTick()
@@ -342,10 +357,10 @@ function kpiCards() {
   const k = kpi.value
   if (!k) return []
   return [
-    { label: t('dashboard.linkTotal'), value: k.link_total, sub: `${t('dashboard.linkUp')} ${k.link_up} · ${t('dashboard.linkDown')} ${k.link_down}`, color: '#2f6bff', go: '/linkdetect' },
-    { label: t('dashboard.deviceTotal'), value: k.device_total, sub: `${t('dashboard.deviceOnline')} ${k.device_online} · ${t('dashboard.deviceOffline')} ${k.device_offline}`, color: '#22c55e', go: '/monitor' },
-    { label: t('dashboard.dbTotal'), value: k.db_total, sub: `${t('dashboard.dbUp')} ${k.db_up} · ${t('dashboard.dbDown')} ${k.db_down}`, color: '#8b5cf6', go: '/dbmon' },
-    { label: t('dashboard.userTotal'), value: k.user_total, sub: `${t('dashboard.ipUsed')} ${k.ip_used}`, color: '#f59e0b', go: '/ipam' }
+    { label: t('dashboard.linkTotal'), value: k.link_total, sub: `${t('dashboard.linkUp')} ${k.link_up} · ${t('dashboard.linkDown')} ${k.link_down}`, color: cssVar('--np-primary', '#d95f1f'), icon: 'Link', go: '/linkdetect' },
+    { label: t('dashboard.deviceTotal'), value: k.device_total, sub: `${t('dashboard.deviceOnline')} ${k.device_online} · ${t('dashboard.deviceOffline')} ${k.device_offline}`, color: cssVar('--np-success', '#3f9e63'), icon: 'Monitor', go: '/monitor' },
+    { label: t('dashboard.dbTotal'), value: k.db_total, sub: `${t('dashboard.dbUp')} ${k.db_up} · ${t('dashboard.dbDown')} ${k.db_down}`, color: cssVar('--np-info', '#3a6fb0'), icon: 'Coin', go: '/dbmon' },
+    { label: t('dashboard.userTotal'), value: k.user_total, sub: `${t('dashboard.ipUsed')} ${k.ip_used}`, color: cssVar('--np-warning', '#b5893a'), icon: 'User', go: '/ipam' }
   ]
 }
 </script>
@@ -355,20 +370,25 @@ function kpiCards() {
     <!-- 顶部栏：标题 + 返回按钮 -->
     <div class="np-screen-topbar">
       <div class="np-screen-title">
-        <span class="np-title-dot"></span>
+        <span class="np-title-tick"></span>
         {{ t('nav.dashboard') }}
       </div>
-      <el-button type="primary" round size="small" @click="router.push('/linkdetect')">
+      <el-button type="primary" size="small" @click="router.push('/linkdetect')">
         {{ t('dashboard.backToAdmin') || '返回管理界面' }}
       </el-button>
     </div>
 
     <!-- KPI 卡片 -->
     <div class="np-kpi-grid">
-      <div v-for="c in kpiCards()" :key="c.label" class="np-kpi-card" :style="{ borderTop: `3px solid ${c.color}`, cursor: 'pointer' }" @click="c.go && router.push(c.go)">
-        <div class="np-kpi-label">{{ c.label }}</div>
-        <div class="np-kpi-value" :style="{ color: c.color }">{{ c.value }}</div>
-        <div class="np-kpi-sub">{{ c.sub }}</div>
+      <div v-for="c in kpiCards()" :key="c.label" class="np-kpi-card" :style="{ '--accent': c.color }" @click="c.go && router.push(c.go)">
+        <span class="np-kpi-icon">
+          <el-icon><component :is="c.icon" /></el-icon>
+        </span>
+        <div class="np-kpi-card-body">
+          <div class="np-kpi-value">{{ c.value }}</div>
+          <div class="np-kpi-label">{{ c.label }}</div>
+          <div class="np-kpi-sub">{{ c.sub }}</div>
+        </div>
       </div>
     </div>
 
@@ -427,10 +447,10 @@ function kpiCards() {
 
 <style lang="scss">
 .np-monitor-screen {
-  padding: 16px;
+  padding: 18px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
   background: var(--np-monitor-bg);
   min-height: 100%;
 
@@ -438,25 +458,26 @@ function kpiCards() {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding-bottom: 4px;
+    gap: 12px;
+    padding: 2px 2px 4px;
 
     .np-screen-title {
-      color: #e2e8f0;
+      color: var(--np-monitor-text);
       font-size: 20px;
       font-weight: 700;
+      letter-spacing: -0.01em;
       display: flex;
       align-items: center;
       gap: 10px;
     }
   }
 
-  .np-title-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: #22c55e;
-    box-shadow: 0 0 10px #22c55e;
-    animation: pulse 2s infinite;
+  .np-title-tick {
+    width: 6px;
+    height: 6px;
+    transform: rotate(45deg);
+    border-radius: 1px;
+    background: var(--np-primary);
   }
 
   .np-kpi-grid {
@@ -466,60 +487,120 @@ function kpiCards() {
   }
 
   .np-kpi-card {
-    background: linear-gradient(160deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.95));
-    border: 1px solid #1e293b;
-    border-radius: $radius-md;
-    padding: 16px 20px;
-    transition: transform 0.2s;
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--np-card-bg);
+    border: 1px solid var(--np-border);
+    border-radius: $radius-lg;
+    padding: 16px 18px;
+    box-shadow: var(--np-shadow-sm);
+    cursor: pointer;
+    transition: border-color 0.2s ease-out, box-shadow 0.2s ease-out, transform 0.2s ease-out;
 
-    &:hover { transform: translateY(-2px); }
-
-    .np-kpi-label {
-      color: #94a3b8;
-      font-size: 13px;
+    // 左侧信号标线（随指标状态色）
+    &::before {
+      content: '';
+      position: absolute;
+      left: -1px;
+      top: 14px;
+      bottom: 14px;
+      width: 2px;
+      border-radius: 2px;
+      background: var(--accent, var(--np-primary));
     }
+
+    &:hover {
+      border-color: var(--np-border-strong);
+      box-shadow: var(--np-shadow-md);
+      transform: translateY(-1px);
+    }
+
+    .np-kpi-icon {
+      flex: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      border-radius: $radius-md;
+      font-size: 20px;
+      color: var(--accent, var(--np-primary));
+      background: color-mix(in oklch, var(--accent, var(--np-primary)) 12%, transparent);
+    }
+
+    .np-kpi-card-body {
+      flex: 1;
+      min-width: 0;
+    }
+
     .np-kpi-value {
-      font-size: 34px;
+      font-size: 28px;
       font-weight: 700;
-      margin: 8px 0 4px;
+      line-height: 1.2;
+      letter-spacing: -0.01em;
+      margin: 2px 0 4px;
       font-variant-numeric: tabular-nums;
+      color: var(--np-monitor-text);
+    }
+    .np-kpi-label {
+      color: var(--np-text-3);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
     }
     .np-kpi-sub {
-      color: #64748b;
+      margin-top: 6px;
+      color: var(--np-text-2);
       font-size: 12px;
+      font-variant-numeric: tabular-nums;
     }
   }
 
   .np-screen-card {
-    background: rgba(30, 41, 59, 0.9);
-    border: 1px solid #1e293b;
-    border-radius: $radius-md;
-    padding: 14px 16px;
+    background: var(--np-card-bg);
+    border: 1px solid var(--np-border);
+    border-radius: $radius-lg;
+    padding: 16px 18px;
+    box-shadow: var(--np-shadow-sm);
 
     .np-screen-title {
-      color: #e2e8f0;
+      color: var(--np-monitor-text);
       font-size: 14px;
       font-weight: 600;
-      margin-bottom: 8px;
+      margin-bottom: 10px;
       display: flex;
       align-items: center;
       gap: 8px;
+      &::before {
+        content: '';
+        width: 5px;
+        height: 5px;
+        transform: rotate(45deg);
+        border-radius: 1px;
+        background: var(--np-primary);
+      }
     }
     .np-screen-time {
-      color: #64748b;
+      color: var(--np-text-3);
       font-size: 12px;
       text-align: right;
-      margin-top: 6px;
+      margin-top: 8px;
+      font-variant-numeric: tabular-nums;
     }
+  }
+
+  .np-chart {
+    width: 100%;
   }
 
   .np-live-dot {
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: #22c55e;
-    box-shadow: 0 0 8px #22c55e;
-    animation: pulse 1.5s infinite;
+    background: var(--np-success);
+    animation: np-pulse 1.5s infinite;
   }
 
   .np-grid-2 {
@@ -534,7 +615,7 @@ function kpiCards() {
 
   .np-realtime-body {
     display: flex;
-    gap: 16px;
+    gap: 18px;
     align-items: center;
   }
 
@@ -556,30 +637,35 @@ function kpiCards() {
     gap: 8px;
     font-size: 13px;
     color: var(--np-monitor-text);
-    padding: 4px 8px;
-    border-radius: 4px;
-    background: rgba(15, 23, 42, 0.4);
+    padding: 7px 10px;
+    border-radius: $radius-md;
+    background: var(--np-surface-1);
+    border: 1px solid var(--np-border);
+    transition: border-color 0.18s ease-out, background-color 0.18s ease-out;
+    &:hover {
+      background: var(--np-hover);
+    }
     .np-status-name {
       flex: 1;
       @include ellipsis;
     }
     .np-status-val {
-      width: 70px;
+      width: 76px;
       text-align: right;
-      color: #22c55e;
+      color: var(--np-success);
       font-variant-numeric: tabular-nums;
     }
     .np-status-loss {
-      width: 40px;
+      width: 44px;
       text-align: right;
-      color: #64748b;
+      color: var(--np-text-3);
       font-variant-numeric: tabular-nums;
-      &.bad { color: #ef4444; }
+      &.bad { color: var(--np-danger); }
     }
   }
 }
 
-@keyframes pulse {
+@keyframes np-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
 }

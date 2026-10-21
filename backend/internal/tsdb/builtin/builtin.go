@@ -107,6 +107,29 @@ func (e *Engine) cleanup() {
 	e.db.Where("ts < ?", cut).Delete(&point{})
 }
 
+// Delete 按 metric + field + tags + 时间范围删除（归档转存后清理已归档数据）
+func (e *Engine) Delete(q tsdb.Query) (int64, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	qb := e.db.Model(&point{}).Where("metric = ?", q.Metric)
+	if q.Field != "" {
+		qb = qb.Where("field = ?", q.Field)
+	}
+	if len(q.Tags) > 0 {
+		for k, v := range q.Tags {
+			qb = qb.Where("tags LIKE ?", "%"+k+"="+v+";%")
+		}
+	}
+	if !q.Start.IsZero() {
+		qb = qb.Where("ts >= ?", q.Start.UnixMilli())
+	}
+	if !q.End.IsZero() {
+		qb = qb.Where("ts <= ?", q.End.UnixMilli())
+	}
+	res := qb.Delete(&point{})
+	return res.RowsAffected, res.Error
+}
+
 // Query 查询
 func (e *Engine) Query(q tsdb.Query) ([]tsdb.Series, error) {
 	qb := e.db.Model(&point{}).Where("metric = ?", q.Metric)

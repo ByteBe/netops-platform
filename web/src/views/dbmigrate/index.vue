@@ -1,12 +1,21 @@
 <template>
-  <div class="page">
-    <el-card>
-      <template #header>
-        <div class="head">
-          <span>{{ t('dbmigrate.title') }}</span>
-          <el-button type="primary" :loading="running" @click="run">{{ t('dbmigrate.runMigrate') }}</el-button>
-        </div>
-      </template>
+  <div class="np-page">
+    <div class="np-page-head">
+      <div class="np-page-head-info">
+        <div class="np-page-head-title">{{ t('dbmigrate.title') }}</div>
+        <div class="np-page-head-desc">{{ t('dbmigrate.pageDesc') }}</div>
+      </div>
+      <div class="np-page-head-actions">
+        <el-button type="primary" :loading="running" @click="run">{{ t('dbmigrate.runMigrate') }}</el-button>
+      </div>
+    </div>
+
+    <!-- 当前数据库信息 -->
+    <div class="np-card">
+      <div class="np-card-title">
+        <el-icon><Coin /></el-icon>
+        <span>{{ t('dbmigrate.title') }}</span>
+      </div>
       <el-descriptions :column="2" border>
         <el-descriptions-item :label="t('dbmigrate.dbType')">{{ info.type || '-' }}</el-descriptions-item>
         <el-descriptions-item :label="t('dbmigrate.tsdb')">{{ info.tsdb || '-' }}</el-descriptions-item>
@@ -15,10 +24,14 @@
         <el-descriptions-item :label="t('dbmigrate.user')">{{ info.user || '-' }}</el-descriptions-item>
         <el-descriptions-item :label="t('dbmigrate.pool')">{{ info.inuse }} / {{ info.open }}</el-descriptions-item>
       </el-descriptions>
-    </el-card>
+    </div>
 
-    <el-card style="margin-top:12px">
-      <template #header>{{ t('dbmigrate.switchDb') }}</template>
+    <!-- 切换数据库 -->
+    <div class="np-card">
+      <div class="np-card-title">
+        <el-icon><Switch /></el-icon>
+        <span>{{ t('dbmigrate.switchDb') }}</span>
+      </div>
       <el-form :model="form" label-width="120px">
         <el-divider content-position="left">{{ t('dbmigrate.businessDb') }}</el-divider>
         <el-row :gutter="12">
@@ -88,19 +101,23 @@
           <el-button @click="save(false)">{{ t('dbmigrate.saveOnly') }}</el-button>
         </el-form-item>
       </el-form>
-    </el-card>
+    </div>
 
-    <el-card style="margin-top:12px">
-      <template #header><div class="card-title">{{ t('dbmigrate.tableStructure') }}</div></template>
+    <!-- 表结构 -->
+    <div class="np-card">
+      <div class="np-card-title">
+        <el-icon><Grid /></el-icon>
+        <span>{{ t('dbmigrate.tableStructure') }}</span>
+      </div>
       <div class="tables-row">
-        <el-table :data="tablesLeft" size="small" stripe class="db-table">
+        <el-table :data="tablesLeft" size="small" stripe class="np-table db-table">
           <el-table-column prop="name" :label="t('dbmigrate.tableName')" min-width="180" />
           <el-table-column :label="t('dbmigrate.tableComment')" min-width="120" align="center">
             <template #default="{ row }">{{ tableLabel(row.name) }}</template>
           </el-table-column>
           <el-table-column prop="count" :label="t('dbmigrate.rows')" width="90" align="center" />
         </el-table>
-        <el-table :data="tablesRight" size="small" stripe class="db-table">
+        <el-table :data="tablesRight" size="small" stripe class="np-table db-table">
           <el-table-column prop="name" :label="t('dbmigrate.tableName')" min-width="180" />
           <el-table-column :label="t('dbmigrate.tableComment')" min-width="120" align="center">
             <template #default="{ row }">{{ tableLabel(row.name) }}</template>
@@ -108,7 +125,7 @@
           <el-table-column prop="count" :label="t('dbmigrate.rows')" width="90" align="center" />
         </el-table>
       </div>
-    </el-card>
+    </div>
   </div>
 </template>
 
@@ -125,7 +142,7 @@ const running = ref(false)
 const saving = ref(false)
 const tableKeys: Record<string, string> = {
   users: 't_users', audit_logs: 't_audit', device_groups: 't_groups', monitor_devices: 't_devices',
-  link_tasks: 't_link', topo_devices: 't_topoDev', topo_links: 't_topoLink', topo_link_ips: 't_topoIp',
+  link_tasks: 't_link',
   db_instances: 't_db', script_templates: 't_tpl', script_histories: 't_hist',
   subnets: 't_subnet', ip_records: 't_ip', bind_devices: 't_bind', traffic_rules: 't_traffic',
   ai_configs: 't_ai', mcp_agents: 't_mcp', email_configs: 't_email',
@@ -133,6 +150,9 @@ const tableKeys: Record<string, string> = {
   k8s_clusters: 't_k8s', ts_kv: 't_tskv',
   nginx_instances: 't_nginx', config_backup_devices: 't_backupDev', task_logs: 't_taskLog', device_logs: 't_devLog', ai_inspect_reports: 't_aiReport',
   nodes: 't_nodes', config_backups: 't_backup', alert_rules: 't_alertRule', alert_events: 't_alertEvent', notify_configs: 't_notify',
+  node_containers: 't_nodeContainer', node_links: 't_nodeLink',
+  ts_archives: 't_tsArchive', ts_archive_retries: 't_tsArchiveRetry',
+  certificates: 't_cert',
 }
 function tableLabel(n: string) { const k = tableKeys[n]; return k ? t('dbmigrate.' + k) : '-' }
 // 表清单拆成两半并排展示，铺满内容区避免右侧空白
@@ -175,9 +195,14 @@ onMounted(load)
 </script>
 
 <style scoped>
-.head { display:flex; justify-content:space-between; align-items:center; }
-.page { padding: 16px; }
-.tables-row { display: flex; gap: 24px; align-items: flex-start; }
-.tables-row .db-table { flex: 1; min-width: 0; }
-.card-title { text-align: center; font-weight: 600; }
+.tables-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  align-items: flex-start;
+}
+.tables-row .db-table {
+  flex: 1 1 320px;
+  min-width: 0;
+}
 </style>

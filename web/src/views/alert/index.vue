@@ -28,24 +28,64 @@ async function save() {
     else await postEnc('/alert/rules', payload)
     ElMessage.success(t('alert.saved')); dlg.value = false; loadRules()
   } catch (e: any) {
-    ElMessage.error(e?.message || '保存失败')
+    ElMessage.error(e?.message || t('common.failed'))
   }
 }
 async function remove(r: Rule) { await ElMessageBox.confirm(t('alert.deleteConfirm'), t('common.tip'), { type: 'warning' }); await delEnc(`/alert/rules/${r.id}`); loadRules() }
 async function ack(e: Event) { await postEnc(`/alert/events/${e.id}/ack`, {}); loadEvents() }
 function levelTag(l: string) { return l === 'critical' ? 'danger' : l === 'warning' ? 'warning' : 'info' }
-function levelLabel(l: string) { return l === 'critical' ? '严重' : l === 'warning' ? '警告' : '信息' }
+function levelLabel(l: string) { return l === 'critical' ? t('alert.critical') : l === 'warning' ? t('alert.warning') : t('alert.info') }
 </script>
 <template>
-  <div class="alert-page">
-    <div class="np-toolbar">
+  <div class="np-page">
+    <div class="np-page-head">
+      <div class="np-page-head-info">
+        <div class="np-page-head-title">{{ t('alert.title') }}</div>
+        <div class="np-page-head-desc">{{ t('alert.desc') }}</div>
+      </div>
+      <div class="np-page-head-actions">
+        <el-button v-if="tab==='rules'" type="primary" @click="open()">{{ t('alert.newRule') }}</el-button>
+      </div>
+    </div>
+
+    <div class="np-kpi-grid">
+      <div class="np-kpi">
+        <div class="np-kpi-icon"><el-icon><Bell /></el-icon></div>
+        <div class="np-kpi-body">
+          <div class="np-kpi-value">{{ events.length }}</div>
+          <div class="np-kpi-label">{{ t('alert.events') }}</div>
+        </div>
+      </div>
+      <div class="np-kpi">
+        <div class="np-kpi-icon is-warning"><el-icon><BellRing /></el-icon></div>
+        <div class="np-kpi-body">
+          <div class="np-kpi-value">{{ events.filter(e => !e.acked).length }}</div>
+          <div class="np-kpi-label">{{ t('alert.unacked') }}</div>
+        </div>
+      </div>
+      <div class="np-kpi">
+        <div class="np-kpi-icon is-danger"><el-icon><WarningFilled /></el-icon></div>
+        <div class="np-kpi-body">
+          <div class="np-kpi-value">{{ events.filter(e => e.level === 'critical').length }}</div>
+          <div class="np-kpi-label">{{ t('alert.critical') }}</div>
+        </div>
+      </div>
+      <div class="np-kpi">
+        <div class="np-kpi-icon is-info"><el-icon><SetUp /></el-icon></div>
+        <div class="np-kpi-body">
+          <div class="np-kpi-value">{{ rules.length }}</div>
+          <div class="np-kpi-label">{{ t('alert.rules') }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="np-toolbar alert-tabs-bar">
       <el-tabs v-model="tab" class="alert-tabs">
         <el-tab-pane :label="t('alert.events')" name="events" />
         <el-tab-pane :label="t('alert.rules')" name="rules" />
       </el-tabs>
-      <div class="spacer"></div>
-      <el-button v-if="tab==='rules'" type="primary" @click="open()">{{ t('alert.newRule') }}</el-button>
     </div>
+
     <div class="np-card">
       <el-table v-if="tab==='events'" :data="events" stripe>
         <el-table-column prop="created_at" :label="t('alert.time')" width="180" />
@@ -83,14 +123,14 @@ function levelLabel(l: string) { return l === 'critical' ? '严重' : l === 'war
             <el-option :label="t('alert.nodeOffline')" value="node" />
           </el-select>
         </el-form-item>
-        <el-form-item v-if="form.metric!=='link' && form.metric!=='node'" label="阈值">
+        <el-form-item v-if="form.metric!=='link' && form.metric!=='node'" :label="t('alert.threshold')">
           <el-input v-model="form.threshold" placeholder="如 80 或 80%" />
         </el-form-item>
-        <el-form-item label="持续时间">
+        <el-form-item :label="t('alert.duration')">
           <el-input v-model="form.duration" placeholder="如 60" style="width:140px" />
           <el-select v-model="form.durationUnit" style="width:90px;margin-left:8px">
-            <el-option label="秒" value="s" />
-            <el-option label="分钟" value="m" />
+            <el-option :label="t('alert.unitSec')" value="s" />
+            <el-option :label="t('alert.unitMin')" value="m" />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('alert.level')">
@@ -106,7 +146,6 @@ function levelLabel(l: string) { return l === 'critical' ? '严重' : l === 'war
   </div>
 </template>
 <style scoped>
-.alert-page { padding: 16px; }
 .alert-tabs :deep(.el-tabs__header) { margin: 0; }
 .alert-form { margin-top: 10px; }
 </style>

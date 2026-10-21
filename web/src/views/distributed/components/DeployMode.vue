@@ -21,14 +21,18 @@ async function switchMode(m: string) {
 }
 </script>
 <template>
-  <el-card shadow="never" class="mb-4">
-    <template #header><b>{{ t('node.deployMode') }}</b></template>
+  <div class="np-card">
+    <div class="np-card-title">{{ t('node.deployMode') }}</div>
     <el-radio-group :model-value="modelValue" @change="(v: any) => switchMode(v)">
       <el-radio value="standalone">{{ t('node.standaloneMode') }}</el-radio>
       <el-radio value="distributed">{{ t('node.distributedMode') }}</el-radio>
     </el-radio-group>
-    <div style="margin-top:8px;color:#909399;font-size:13px">
+    <div class="deploy-desc">
       {{ modelValue === 'distributed' ? t('node.distributedDesc') : t('node.standaloneDesc') }}
     </div>
-  </el-card>
+  </div>
 </template>
+
+<style scoped>
+.deploy-desc { margin-top: 8px; color: var(--np-text-2); font-size: 13px; line-height: 1.6; }
+</style>

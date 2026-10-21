@@ -57,18 +57,46 @@ function stateType(s: string) {
 
 <template>
   <div class="np-page">
-    <div class="np-toolbar">
-      <span class="np-page-desc">{{ t('bgp.title') }}</span>
-      <span class="np-tip">{{ t('bgp.readOnly') }}</span>
-      <div class="spacer"></div>
-      <el-select v-model="testDevId" size="small" style="width:180px" :placeholder="devs.length ? t('bgp.pickDevice') : t('bgp.noEnabledDevice')" :disabled="!devs.length" clearable>
-        <el-option v-for="d in devs" :key="d.id" :label="d.name + '(' + d.ip + ')'" :value="d.id" />
-      </el-select>
-      <el-button size="small" :loading="testing" :disabled="!testDevId" @click="runTest">{{ t('bgp.testBtn') }}</el-button>
-      <el-button type="primary" @click="router.push('/monitor')">{{ t('bgp.goDevice') }}</el-button>
+    <div class="np-page-head">
+      <div class="np-page-head-info">
+        <div class="np-page-head-title">{{ t('bgp.title') }}</div>
+        <div class="np-page-head-desc">{{ t('bgp.readOnly') }}</div>
+      </div>
+      <div class="np-page-head-actions">
+        <el-select v-model="testDevId" size="small" style="width:180px" :placeholder="devs.length ? t('bgp.pickDevice') : t('bgp.noEnabledDevice')" :disabled="!devs.length" clearable>
+          <el-option v-for="d in devs" :key="d.id" :label="d.name + '(' + d.ip + ')'" :value="d.id" />
+        </el-select>
+        <el-button size="small" :loading="testing" :disabled="!testDevId" @click="runTest">{{ t('bgp.testBtn') }}</el-button>
+        <el-button type="primary" @click="router.push('/monitor')">{{ t('bgp.goDevice') }}</el-button>
+      </div>
     </div>
+
+    <div class="np-kpi-grid">
+      <div class="np-kpi">
+        <div class="np-kpi-icon"><el-icon><Network /></el-icon></div>
+        <div class="np-kpi-body">
+          <div class="np-kpi-value">{{ peers.length }}</div>
+          <div class="np-kpi-label">{{ t('bgp.totalPeers') }}</div>
+        </div>
+      </div>
+      <div class="np-kpi">
+        <div class="np-kpi-icon is-success"><el-icon><Connection /></el-icon></div>
+        <div class="np-kpi-body">
+          <div class="np-kpi-value">{{ peers.filter(p => p.state === 'Established').length }}</div>
+          <div class="np-kpi-label">{{ t('bgp.establishedPeers') }}</div>
+        </div>
+      </div>
+      <div class="np-kpi">
+        <div class="np-kpi-icon is-danger"><el-icon><WarningFilled /></el-icon></div>
+        <div class="np-kpi-body">
+          <div class="np-kpi-value">{{ peers.length - peers.filter(p => p.state === 'Established').length }}</div>
+          <div class="np-kpi-label">{{ t('bgp.downPeers') }}</div>
+        </div>
+      </div>
+    </div>
+
     <div class="np-card">
-      <el-table :data="peers" stripe class="np-table" v-if="peers.length">
+      <el-table :data="peers" stripe class="np-table bgp-table" v-if="peers.length">
         <el-table-column :label="t('bgp.device')" prop="device_name" min-width="140" />
         <el-table-column :label="t('bgp.peerIp')" prop="peer_ip" min-width="130" />
         <el-table-column :label="t('bgp.outIface')" prop="out_iface" min-width="170">
@@ -89,7 +117,22 @@ function stateType(s: string) {
           <template #default="{ row }">{{ fmtTime(row.updated_at) }}</template>
         </el-table-column>
       </el-table>
-      <el-empty v-else :description="t('bgp.emptyHint')" />
+      <div v-else class="bgp-empty">
+        <div class="np-empty-box">
+          <div class="np-empty-icon"><el-icon><Network /></el-icon></div>
+          <div class="np-empty-title">{{ t('bgp.title') }}</div>
+          <div class="np-empty-desc">{{ t('bgp.emptyHint') }}</div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
+
+<style lang="scss">
+.bgp-empty { padding: 0; }
+
+// 表格数字等宽对齐（仪表读数）
+.bgp-table .el-table__cell {
+  font-variant-numeric: tabular-nums;
+}
+</style>

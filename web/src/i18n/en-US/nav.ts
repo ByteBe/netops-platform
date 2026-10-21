@@ -1,5 +1,5 @@
 export default {
-  dashboard: 'Dashboard', linkdetect: 'Link Detection', topology: 'Topology',
+  dashboard: 'Dashboard', linkdetect: 'Link Detection', topology: 'Network Topology',
   monitor: 'Device Monitoring', resource: 'Resource Management',
   traffic: 'Traffic Monitoring', container: 'Container Monitoring', k8s: 'K8s Monitoring',
   dbmonitor: 'Database Monitoring', nginx: 'Nginx Monitor', report: 'Inspection Report',

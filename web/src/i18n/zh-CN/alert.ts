@@ -1,5 +1,7 @@
 export default {
   title: '告警中心', rules: '告警规则', events: '告警事件', notify: '通知渠道',
+  desc: '集中查看告警事件并管理触发规则',
+  duration: '持续时间', unitSec: '秒', unitMin: '分钟',
   newRule: '新建告警规则', metric: '监控指标', threshold: '阈值', level: '级别',
   high: '严重', medium: '警告', low: '提示', enabled: '启用', confirm: '确认',
   time: '告警时间', nodeOffline: '节点离线', cpuHigh: 'CPU过高',

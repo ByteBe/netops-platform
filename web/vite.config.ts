@@ -24,7 +24,6 @@ export default defineConfig({
       output: {
         manualChunks: {
           echarts: ['echarts'],
-          three: ['three'],
           vendor: ['vue', 'vue-router', 'pinia', 'element-plus', 'axios', 'vue-i18n']
         }
       }

@@ -1,5 +1,8 @@
 export default {
+  title: '资源管理',
   desc: '将添加的监控设备按资源分组分类管理',
+  groups: '资源分组',
+  devicesTotal: '纳管设备总数',
   autoAssign: '自动归集',
   devices: '台设备',
   color: '颜色',

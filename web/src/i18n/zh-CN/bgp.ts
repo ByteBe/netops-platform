@@ -1,6 +1,9 @@
 export default {
   title: 'BGP / VPNv4 邻居监控',
   readOnly: '通过 SSH 只读采集，不对设备做任何配置修改',
+  totalPeers: '邻居总数',
+  establishedPeers: '已建立邻居',
+  downPeers: '未建立邻居',
   device: '设备', peerIp: '邻居 IP', outIface: '出接口', state: '状态',
   upDown: 'Up/Down', prefixRcvd: '收到 Prefix', prefixSent: '发布 Prefix',
   updatedAt: '采集时间',

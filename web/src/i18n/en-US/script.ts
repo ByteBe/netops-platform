@@ -16,6 +16,7 @@ export default {
   seq: 'Seq', matchNet: 'Match Network', mask: 'Mask',
   addRow: '+ Add Row',
   scriptGen: 'Script Generator',
+  pageDesc: 'Pick a vendor feature template, fill parameters and generate deployable device config',
   cisco: 'Cisco',
   clear: 'Clear',
   fillRequired: 'Please fill',

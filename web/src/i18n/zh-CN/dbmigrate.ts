@@ -1,5 +1,6 @@
 export default {
   title: '数据库迁移',
+  pageDesc: '查看当前库连接信息，切换业务库/时序库并执行表结构迁移',
   runMigrate: '在当前库执行迁移',
   dbType: '数据库类型', tsdb: '时序数据库', host: '主机',
   dbNamePath: '库名/路径', user: '用户', pool: '连接池',
@@ -13,12 +14,14 @@ export default {
   migrateDone: '迁移完成', failed: '失败', saved: '已保存',
   restarting: '重启中', restartMsg: '服务正在重启，请稍候刷新页面',
   t_users: '用户表', t_audit: '审计日志', t_groups: '设备分组', t_devices: '监控设备',
-  t_link: '链路检测任务', t_topoDev: '拓扑设备', t_topoLink: '拓扑链路', t_topoIp: '拓扑链路IP',
+  t_link: '链路检测任务',
   t_db: '数据库实例', t_tpl: '脚本模板', t_hist: '脚本执行历史',
   t_subnet: '子网记录', t_ip: 'IP记录', t_bind: '绑定设备', t_traffic: '流量策略',
   t_ai: 'AI配置', t_mcp: 'MCP代理', t_email: '邮件配置',
   t_report: '巡检报告记录', t_setting: '系统设置', t_docker: 'Docker主机',
   t_k8s: 'K8S集群', t_tskv: '时序数据',
   t_nginx: 'Nginx实例', t_backupDev: '配置备份设备', t_taskLog: '任务日志', t_devLog: '设备日志', t_aiReport: 'AI巡检报告',
-  t_nodes: '节点表', t_backup: '配置备份', t_alertRule: '告警规则', t_alertEvent: '告警事件', t_notify: '通知渠道配置'
+  t_nodes: '节点表', t_backup: '配置备份', t_alertRule: '告警规则', t_alertEvent: '告警事件', t_notify: '通知渠道配置',
+  t_nodeContainer: '下级容器', t_nodeLink: '下级链路', t_tsArchive: '时序归档', t_tsArchiveRetry: '归档重传记录',
+  t_cert: '节点证书'
 }

@@ -1,128 +1,347 @@
-<script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted, nextTick, computed } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { ElMessage } from 'element-plus'
-import { getEnc, postEnc, putEnc, delEnc } from '@/utils/request'
-
-const { t } = useI18n()
-
-interface Node { id:number; name:string; ip:string; vendor:string; type:string; layer:string; status:string; x:number; y:number; icon:string; remark:string }
-interface Edge { id:number; name:string; source:number; target:number; color:string; bandwidth:string; utilization:number; status:string; ips:string[] }
-
-const nodes=ref<Node[]>([]), edges=ref<Edge[]>([])
-const canvasRef=ref<HTMLCanvasElement>(), ctx=ref<CanvasRenderingContext2D|null>(null)
-const selectedNode=ref<Node|null>(null), selectedEdge=ref<Edge|null>(null)
-const keyword=ref(''), layerFilter=ref('all')
-const legend=computed(()=>[{c:'#22c55e',t:t('topo.normal')},{c:'#f59e0b',t:t('topo.highLoad')},{c:'#ef4444',t:t('topo.fault')}])
-const imgMap:Record<string,HTMLImageElement>={}
-let dragId=0, dragStart={x:0,y:0}, moved=false
-
-const nmap=computed(()=>Object.fromEntries(nodes.value.map(n=>[n.id,n])))
-const shown=computed(()=>nodes.value.filter(n=>(layerFilter.value==='all'||n.layer===layerFilter.value)&&(!keyword.value||n.name.includes(keyword.value)||n.ip.includes(keyword.value))))
-
-function loadImg(src:string){ if(imgMap[src]) return imgMap[src]; const im=new Image(); im.src=src; im.onload=draw; imgMap[src]=im; return im }
-function center(){ const c=canvasRef.value!; return {x:c.width/2, y:c.height/2} }
-function toPx(n:Node){ const c=center(); return {x:c.x+n.x, y:c.y+n.y} }
-
-function draw(){ const c=canvasRef.value; if(!c) return; const g=c.getContext('2d')!; g.imageSmoothingEnabled=true; g.imageSmoothingQuality='high'; g.clearRect(0,0,c.width,c.height); g.strokeStyle='#22c55e'; g.lineWidth=2; for(const e of edges.value){ if(!nmap.value[e.source]||!nmap.value[e.target]) continue; const a=toPx(nmap.value[e.source]), b=toPx(nmap.value[e.target]); g.beginPath(); g.moveTo(a.x,a.y); g.lineTo(b.x,b.y); g.stroke(); g.fillStyle='#22c55e'; const ang=Math.atan2(b.y-a.y,b.x-a.x); g.beginPath(); g.moveTo(b.x,b.y); g.lineTo(b.x-10*Math.cos(ang-0.4),b.y-10*Math.sin(ang-0.4)); g.lineTo(b.x-10*Math.cos(ang+0.4),b.y-10*Math.sin(ang+0.4)); g.fill() } for(const n of shown.value){ const p=toPx(n); const src=n.icon||`/topology-icons/${n.type}.png?v=3`; const im=loadImg(src);
-            if(im.complete){ const sz=56; g.drawImage(im,p.x-sz/2,p.y-sz/2,sz,sz) }
-            g.fillStyle='#1f2937'; g.font='bold 13px sans-serif'; g.textAlign='center'; g.fillText(n.name,p.x,p.y+38);
-            if(selectedNode.value?.id===n.id){ g.strokeStyle='#2563eb'; g.lineWidth=2; g.strokeRect(p.x-30,p.y-30,60,60) } } }
-
-function hit(x:number,y:number):Node|undefined{ return shown.value.find(n=>{const p=toPx(n); return Math.abs(x-p.x)<=28 && Math.abs(y-p.y)<=28}) }
-function onDown(e:MouseEvent){ const r=canvasRef.value!.getBoundingClientRect(); const x=e.clientX-r.left, y=e.clientY-r.top; const n=hit(x,y); if(n){ dragId=n.id; dragStart={x:x-n.x, y:y-n.y}; moved=false; selectedNode.value=n; selectedEdge.value=null } else { selectedNode.value=null; selectedEdge.value=null; draw() } }
-function onMove(e:MouseEvent){ if(!dragId) return; const n=nodes.value.find(x=>x.id===dragId); if(!n) return; const r=canvasRef.value!.getBoundingClientRect(); n.x=Math.round(e.clientX-r.left-center().x-dragStart.x+center().x); n.y=Math.round(e.clientY-r.top-center().y-dragStart.y+center().y); moved=true; draw() }
-function onUp(){ if(!dragId) return; const n=nodes.value.find(x=>x.id===dragId); if(n&&moved) putEnc('/topology/devices/'+n.id,{...n}); dragId=0 }
-
-async function load(){ const d=await getEnc<{nodes:Node[];edges:Edge[]}>('/topology/graph'); nodes.value=d.nodes; edges.value=d.edges; await nextTick(); resize(); draw() }
-function resize(){ const c=canvasRef.value; if(!c) return; const r=c.parentElement!.getBoundingClientRect(); c.width=r.width; c.height=r.height; draw() }
-async function layout(){ await postEnc('/topology/auto-layout',{}); ElMessage.success(t('topo.layoutDone')); await load() }
-
-const devDlg=ref(false), dev=reactive<Node>({id:0,name:'',ip:'',vendor:'h3c',type:'switch',layer:'access',status:'up',x:0,y:0,icon:'',remark:''})
-function add(){ Object.assign(dev,{id:0,name:'',ip:'',vendor:'h3c',type:'switch',layer:'access',status:'up',x:Math.round(Math.random()*120-60),y:Math.round(Math.random()*80-40),icon:''}); devDlg.value=true }
-async function save(){ if(!dev.name||!dev.ip) return ElMessage.warning(t('topo.fillNameIp')); if(dev.id) await putEnc('/topology/devices/'+dev.id,dev); else await postEnc('/topology/devices',dev); devDlg.value=false; await load() }
-function editNode(){ if(selectedNode.value){ Object.assign(dev,selectedNode.value); devDlg.value=true } }
-async function removeNode(){ if(!selectedNode.value) return; await delEnc('/topology/devices/'+selectedNode.value.id); selectedNode.value=null; ElMessage.success(t('topo.deleted')); await load() }
-async function removeEdge(){ if(!selectedEdge.value) return; await delEnc('/topology/links/'+selectedEdge.value.id); selectedEdge.value=null; ElMessage.success(t('topo.deleted')); await load() }
-
-const linkDlg=ref(false), link=reactive<any>({id:0,source:0,target:0,name:''})
-function addLink(){ Object.assign(link,{id:0,source:0,target:0}); linkDlg.value=true }
-async function saveLink(){ if(!link.source||!link.target) return ElMessage.warning(t('topo.selectBothEndpoints')); const body={name:link.name||'',source_id:link.source,target_id:link.target,status:'up'}; if(link.id) await putEnc('/topology/links/'+link.id,body); else await postEnc('/topology/links',body); linkDlg.value=false; ElMessage.success(t('topo.linkSaved')); await load() }
-
-onMounted(()=>{ load(); window.addEventListener('resize',resize); canvasRef.value?.addEventListener('mousedown',onDown); window.addEventListener('mousemove',onMove); window.addEventListener('mouseup',onUp) })
-onUnmounted(()=>{ window.removeEventListener('resize',resize); canvasRef.value?.removeEventListener('mousedown',onDown); window.removeEventListener('mousemove',onMove); window.removeEventListener('mouseup',onUp) })
-</script>
-
 <template>
-<div class="np-page topo-huawei">
-  <div class="toolbar">
-    <el-input v-model="keyword" :placeholder="t('topo.searchPlaceholder')" style="width:200px"/>
-    <el-radio-group v-model="layerFilter" size="small" @change="draw">
-      <el-radio-button value="all">{{ t('topo.all') }}</el-radio-button>
-      <el-radio-button value="core">{{ t('topo.core') }}</el-radio-button>
-      <el-radio-button value="access">{{ t('topo.access') }}</el-radio-button>
-    </el-radio-group>
-    <div class="spacer"/>
-    <span v-for="l in legend" :key="l.t" class="legend"><i :style="{background:l.c}"/>{{ l.t }}</span>
-    <el-button size="small" type="primary" @click="add">{{ t('topo.addDevice') }}</el-button>
-    <el-button size="small" @click="addLink">{{ t('topo.addLink') }}</el-button>
-    <el-button size="small" @click="layout">{{ t('topo.autoLayout') }}</el-button>
-    <el-button size="small" @click="load">{{ t('topo.refresh') }}</el-button>
-  </div>
-  <div class="body">
-    <div class="left">
-      <h4>{{ t('topo.layerStats') }}</h4>
-      <div class="stat-row"><span>{{ t('topo.core') }}</span><b>{{nodes.filter(n=>n.layer==='core').length}}</b></div>
-      <div class="stat-row"><span>{{ t('topo.access') }}</span><b>{{nodes.filter(n=>n.layer==='access').length}}</b></div>
-      <div class="stat-row danger"><span>{{ t('topo.fault') }}</span><b>{{nodes.filter(n=>n.status==='down').length}}</b></div>
-    </div>
-    <div class="canvas"><canvas ref="canvasRef"/></div>
-    <div class="right">
-      <h4>{{ t('topo.details') }}</h4>
-      <div v-if="selectedNode">
-        <p>{{ t('topo.name') }}：{{selectedNode.name}}</p><p>{{ t('topo.ip') }}：{{selectedNode.ip}}</p><p>{{ t('topo.vendor') }}：{{selectedNode.vendor}}</p><p>{{ t('topo.layer') }}：{{selectedNode.layer}}</p><p>{{ t('topo.status') }}：{{selectedNode.status}}</p>
-        <el-button size="small" type="primary" @click="editNode">{{ t('topo.modify') }}</el-button>
-        <el-button size="small" type="danger" @click="removeNode">{{ t('topo.delete') }}</el-button>
+  <div class="np-page">
+    <div class="np-page-head">
+      <div class="np-page-head-info">
+        <div class="np-page-head-title">{{ t('topology.title') }}</div>
+        <div class="np-page-head-desc">{{ t('topology.desc') }}</div>
       </div>
-      <div v-else-if="selectedEdge">
-        <p>{{ t('topo.source') }}：{{nmap[selectedEdge.source]?.name}}</p><p>{{ t('topo.target') }}：{{nmap[selectedEdge.target]?.name}}</p>
-        <el-button size="small" type="danger" @click="removeEdge">{{ t('topo.deleteLink') }}</el-button>
+      <div class="np-page-head-actions">
+        <el-button :icon="Refresh" size="default" @click="load(true)">{{ t('topology.refresh') }}</el-button>
+        <el-button :icon="Position" size="default" @click="restartLayout">{{ t('topology.autoLayout') }}</el-button>
       </div>
-      <p v-else>{{ t('topo.clickNodeOrLink') }}</p>
     </div>
-  </div>
 
-  <el-dialog v-model="devDlg" :title="t('topo.deviceTitle')" width="500px">
-    <el-form :model="dev" label-width="80px">
-      <el-form-item :label="t('topo.name')"><el-input v-model="dev.name"/></el-form-item>
-      <el-form-item :label="t('topo.ip')"><el-input v-model="dev.ip"/></el-form-item>
-      <el-form-item :label="t('topo.vendor')"><el-select v-model="dev.vendor"><el-option label="H3C" value="h3c"/><el-option :label="t('topo.vendorHuawei')" value="huawei"/><el-option :label="t('topo.vendorCisco')" value="cisco"/></el-select></el-form-item>
-      <el-form-item :label="t('topo.layer')"><el-select v-model="dev.layer"><el-option :label="t('topo.core')" value="core"/><el-option :label="t('topo.access')" value="access"/></el-select></el-form-item>
-      <el-form-item :label="t('topo.deviceType')"><el-select v-model="dev.type"><el-option :label="t('topo.router')" value="router"/><el-option :label="t('topo.switch')" value="switch"/><el-option :label="t('topo.firewall')" value="firewall"/><el-option :label="t('topo.server')" value="server"/><el-option :label="t('topo.deviceTypeVuln')" value="vuln"/><el-option :label="t('topo.deviceTypeAudit')" value="audit"/><el-option :label="t('topo.deviceTypeBastion')" value="bastion"/><el-option :label="t('topo.deviceTypeWan')" value="wan"/><el-option label="AC" value="ac"/></el-select></el-form-item>
-    </el-form>
-    <template #footer><el-button @click="devDlg=false">{{ t('topo.cancel') }}</el-button><el-button type="primary" @click="save">{{ t('topo.save') }}</el-button></template>
-  </el-dialog>
-  <el-dialog v-model="linkDlg" :title="t('topo.linkTitle')" width="500px">
-    <el-form :model="link" label-width="80px">
-      <el-form-item :label="t('topo.source')"><el-select v-model="link.source"><el-option v-for="n in nodes" :key="n.id" :label="n.name" :value="n.id"/></el-select></el-form-item>
-      <el-form-item :label="t('topo.target')"><el-select v-model="link.target"><el-option v-for="n in nodes" :key="n.id" :label="n.name" :value="n.id"/></el-select></el-form-item>
-    </el-form>
-    <template #footer><el-button @click="linkDlg=false">{{ t('topo.cancel') }}</el-button><el-button type="primary" @click="saveLink">{{ t('topo.save') }}</el-button></template>
-  </el-dialog>
-</div>
+    <!-- 统计卡 -->
+    <div class="topo-stats">
+      <div class="topo-stat"><span class="ts-num">{{ stats.deviceTotal }}</span><span class="ts-label">{{ t('topology.deviceTotal') }}</span></div>
+      <div class="topo-stat ok"><span class="ts-num">{{ stats.deviceUp }}</span><span class="ts-label">{{ t('topology.online') }}</span></div>
+      <div class="topo-stat bad"><span class="ts-num">{{ stats.deviceDown }}</span><span class="ts-label">{{ t('topology.offline') }}</span></div>
+      <div class="topo-stat mute"><span class="ts-num">{{ stats.deviceUnknown }}</span><span class="ts-label">{{ t('topology.unknown') }}</span></div>
+      <div class="topo-stat-sep"></div>
+      <div class="topo-stat"><span class="ts-num">{{ stats.linkTotal }}</span><span class="ts-label">{{ t('topology.linkTotal') }}</span></div>
+      <div class="topo-stat ok"><span class="ts-num">{{ stats.linkUp }}</span><span class="ts-label">{{ t('topology.normal') }}</span></div>
+      <div class="topo-stat bad"><span class="ts-num">{{ stats.linkDown }}</span><span class="ts-label">{{ t('topology.abnormal') }}</span></div>
+    </div>
+
+    <!-- 拓扑画布 -->
+    <div class="topo-wrap">
+      <div class="topo-canvas" ref="chartRef"></div>
+      <div class="topo-legend">
+        <div class="tl-title">{{ t('topology.legend') }}</div>
+        <div class="tl-group">
+          <div class="tl-name">{{ t('topology.nodeLegend') }}</div>
+          <div class="tl-row"><span class="dot" style="background:#3f9e63"></span>{{ t('topology.up') }}</div>
+          <div class="tl-row"><span class="dot" style="background:#d9534f"></span>{{ t('topology.down') }}</div>
+          <div class="tl-row"><span class="dot" style="background:#9aa0a6"></span>{{ t('topology.unknown') }}</div>
+        </div>
+        <div class="tl-group">
+          <div class="tl-name">{{ t('topology.linkLegend') }}</div>
+          <div class="tl-row"><span class="dot" style="background:#3f9e63"></span>{{ t('topology.normal') }}</div>
+          <div class="tl-row"><span class="dot" style="background:#d9534f"></span>{{ t('topology.abnormal') }}</div>
+          <div class="tl-row"><span class="dot" style="background:#9aa0a6"></span>{{ t('topology.unknown') }}</div>
+        </div>
+      </div>
+      <el-empty v-if="empty" :description="t('topology.empty')" :image-size="120" />
+    </div>
+
+    <!-- 设备/链路详情抽屉 -->
+    <el-drawer v-model="drawer" :title="detailTitle" size="380px" :with-header="true">
+      <div v-if="cur" class="topo-detail">
+        <div class="td-hero">
+          <div class="td-icon" :style="{ color: statusColor(cur.status) }">
+            <svg viewBox="0 0 24 24" width="38" height="38" fill="currentColor"><path :d="iconOf(cur.type)" /></svg>
+          </div>
+          <div>
+            <div class="td-name">{{ cur.name }}</div>
+            <el-tag size="small" :type="cur.status === 'up' ? 'success' : cur.status === 'down' ? 'danger' : 'info'">
+              {{ t('topology.' + (cur.status === 'up' ? 'up' : cur.status === 'down' ? 'down' : 'unknown')) }}
+            </el-tag>
+          </div>
+        </div>
+        <el-descriptions :column="1" size="small" class="td-desc">
+          <el-descriptions-item v-if="cur.ip" :label="t('topology.ip')">{{ cur.ip }}</el-descriptions-item>
+          <el-descriptions-item :label="t('topology.type')">{{ typeName(cur.type) }}</el-descriptions-item>
+          <el-descriptions-item v-if="cur.vendor" :label="t('topology.vendor')">{{ cur.vendor }}</el-descriptions-item>
+          <template v-if="isDevice">
+            <el-descriptions-item :label="t('topology.cpu')">{{ cur.cpu ? cur.cpu.toFixed(1) + '%' : '--' }}</el-descriptions-item>
+            <el-descriptions-item :label="t('topology.mem')">{{ cur.mem ? cur.mem.toFixed(1) + '%' : '--' }}</el-descriptions-item>
+            <el-descriptions-item :label="t('topology.node')">{{ cur.node_uuid ? cur.node_uuid : t('topology.local') }}</el-descriptions-item>
+          </template>
+          <template v-if="!isDevice">
+            <el-descriptions-item :label="t('topology.method')">{{ cur.method }}</el-descriptions-item>
+            <el-descriptions-item v-if="cur.port" :label="t('topology.port')">{{ cur.port }}</el-descriptions-item>
+            <el-descriptions-item :label="t('topology.latency')">{{ cur.rt ? cur.rt.toFixed(1) + ' ms' : '--' }}</el-descriptions-item>
+            <el-descriptions-item :label="t('topology.loss')">{{ cur.loss ? cur.loss.toFixed(1) + '%' : '--' }}</el-descriptions-item>
+          </template>
+        </el-descriptions>
+        <el-button v-if="isDevice" type="primary" style="width:100%;margin-top:16px" @click="go('/monitor')">
+          {{ t('topology.viewDevice') }}
+        </el-button>
+        <el-button v-else type="primary" style="width:100%;margin-top:16px" @click="go('/linkdetect')">
+          {{ t('topology.viewLink') }}
+        </el-button>
+      </div>
+    </el-drawer>
+  </div>
 </template>
 
+<script setup lang="ts">
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
+import { Refresh, Position } from '@element-plus/icons-vue'
+import * as echarts from 'echarts'
+import { getEnc } from '@/utils/request'
+import { useAppStore } from '@/stores/app'
+import { cssVar, chartAxisColors } from '@/utils'
+
+const { t } = useI18n()
+const router = useRouter()
+const appStore = useAppStore()
+const dark = computed(() => appStore.theme === 'dark')
+
+const chartRef = ref<HTMLDivElement>()
+let chart: echarts.ECharts | null = null
+let timer: ReturnType<typeof setInterval> | null = null
+
+const nodes = ref<any[]>([])
+const links = ref<any[]>([])
+const stats = ref({ deviceTotal: 0, deviceUp: 0, deviceDown: 0, deviceUnknown: 0, linkTotal: 0, linkUp: 0, linkDown: 0 })
+const empty = computed(() => nodes.value.length === 0)
+
+// 详情抽屉
+const drawer = ref(false)
+const cur = ref<any>(null)
+const isDevice = computed(() => !cur.value || cur.value.kind === 'device')
+const detailTitle = computed(() => t(isDevice.value ? 'topo.deviceDetail' : 'topo.linkDetail'))
+
+// 设备图标（ECharts path:// 24x24 视口）
+const ICONS: Record<string, string> = {
+  server: 'M3,5h18v4H3zM3,11h18v4H3zM3,17h18v4H3zM6,6.5h1v-1H6zM6,12.5h1v-1H6zM6,18.5h1v-1H6z',
+  switch: 'M2,7h20v10H2zM4,9h3v6H4zM8,9h12v6H8zM8,11h1v2H8zM10,11h1v2h-1zM12,11h1v2h-1zM14,11h1v2h-1zM16,11h1v2h-1z',
+  router: 'M5,9a7,7 0 0 1 14,0v6H5V9zM8,11h3M13,11h3M8,14h3M13,14h3M5,17h14v2H5z',
+  firewall: 'M12,2l8,3v6c0,5 -3,8 -8,11c-5,-3 -8,-6 -8,-11V5zM9,12l2,2l4,-4',
+  other: 'M12,12m-9,0a9,9 0 1 1 18,0a9,9 0 1 1 -18,0',
+  target: 'M12,12m-9,0a9,9 0 1 1 18,0a9,9 0 1 1 -18,0M12,12m-4,0a4,4 0 1 1 8,0a4,4 0 1 1 -8,0'
+}
+
+const STATUS = { up: '#3f9e63', down: '#d9534f', unknown: '#9aa0a6' }
+function statusColor(s: string) {
+  return STATUS[s as keyof typeof STATUS] ?? STATUS.unknown
+}
+
+function typeName(type: string) {
+  if (type === 'server') return t('topology.server')
+  if (type === 'switch') return t('topology.switch')
+  if (type === 'router') return t('topology.router')
+  if (type === 'firewall') return t('topology.firewall')
+  if (type === 'target') return t('topology.targetType')
+  return t('topology.other')
+}
+function iconOf(type: string) {
+  return ICONS[type] ?? ICONS.other
+}
+
+async function load(forceLayout = false) {
+  try {
+    const r = await getEnc<any>('/topology/overview')
+    if (!r || !r.data) return
+    const data = r.data
+    nodes.value = data.nodes ?? []
+    links.value = data.links ?? []
+
+    const devs = nodes.value.filter((n: any) => !n.id.startsWith('ext_'))
+    stats.value = {
+      deviceTotal: devs.length,
+      deviceUp: devs.filter((d: any) => d.status === 'up').length,
+      deviceDown: devs.filter((d: any) => d.status === 'down').length,
+      deviceUnknown: devs.filter((d: any) => d.status !== 'up' && d.status !== 'down').length,
+      linkTotal: links.value.length,
+      linkUp: links.value.filter((l: any) => l.status === 'up').length,
+      linkDown: links.value.filter((l: any) => l.status !== 'up').length
+    }
+    render(forceLayout)
+  } catch { /* 静默 */ }
+}
+
+function render(forceLayout = false) {
+  if (!chartRef.value) return
+  if (!chart) {
+    chart = echarts.init(chartRef.value)
+    chart.on('click', onChartClick)
+    window.addEventListener('resize', onResize)
+  }
+  const ax = chartAxisColors()
+  const g = cssVar('--np-bg-raise', '#ffffff')
+
+  chart.setOption({
+    backgroundColor: 'transparent',
+    tooltip: {
+      trigger: 'item',
+      confine: true,
+      backgroundColor: cssVar('--np-bg-raise', 'rgba(255,255,255,0.96)'),
+      borderColor: cssVar('--np-border', '#d0d4da'),
+      borderWidth: 1,
+      textStyle: { color: cssVar('--np-text', '#1a1d23'), fontSize: 12 },
+      formatter: (p: any) => {
+        const d = p.data
+        if (!d) return ''
+        const st = d.status === 'up' ? t('topology.up') : d.status === 'down' ? t('topology.down') : t('topology.unknown')
+        if (d.kind === 'link') {
+          return `${d.name}<br/><span style="color:${cssVar('--np-text-2', '#5a6070')}">${st}${d.rt ? ' · ' + d.rt.toFixed(1) + 'ms' : ''}</span>`
+        }
+        return `${d.name}<br/><span style="color:${cssVar('--np-text-2', '#5a6070')}">${d.ip ?? ''} · ${st}</span>`
+      }
+    },
+    series: [{
+      type: 'graph',
+      layout: forceLayout ? 'force' : 'force',
+      roam: true,
+      draggable: true,
+      symbolSize: 46,
+      label: { show: true, position: 'bottom', color: cssVar('--np-text', '#1a1d23'), fontSize: 11 },
+      edgeLabel: { show: true, color: cssVar('--np-text-2', '#5a6070'), fontSize: 10, formatter: (p: any) => (p.data.rt ? p.data.rt.toFixed(0) + 'ms' : '') },
+      force: { repulsion: 260, edgeLength: 150, gravity: 0.1, layoutAnimation: forceLayout },
+      emphasis: { focus: 'adjacency', label: { fontWeight: 600, fontSize: 13 } },
+      data: nodes.value.map((n: any) => ({
+        id: n.id,
+        name: n.name,
+        ip: n.ip,
+        vendor: n.vendor,
+        type: n.type,
+        status: n.status,
+        cpu: n.cpu,
+        mem: n.mem,
+        node_uuid: n.node_uuid,
+        kind: 'device',
+        symbol: 'path://' + (ICONS[n.type] ?? ICONS.other),
+        itemStyle: { color: statusColor(n.status) },
+        label: { show: true, position: 'bottom', formatter: n.name, color: cssVar('--np-text', '#1a1d23'), fontSize: 11 }
+      })),
+      links: links.value.map((l: any) => ({
+        id: l.id,
+        source: l.source,
+        target: l.target,
+        name: l.name,
+        method: l.method,
+        port: l.port,
+        status: l.status,
+        rt: l.rt,
+        loss: l.loss,
+        kind: 'link',
+        lineStyle: { color: statusColor(l.status), width: l.status === 'up' ? 2 : 2.5, opacity: l.status === 'up' ? 0.85 : 1, curveness: 0.15 },
+        edgeLabel: { show: true, formatter: (p: any) => (l.rt ? l.rt.toFixed(0) + 'ms' : ''), color: cssVar('--np-text-2', '#5a6070'), fontSize: 10 }
+      }))
+    }]
+  }, forceLayout) // 常规刷新 merge 保留拖拽位置；自动布局 notMerge 重建
+}
+
+function onChartClick(p: any) {
+  if (!p || p.dataType === undefined) return
+  const d = p.data
+  if (!d) return
+  if (d.kind === 'link') {
+    cur.value = { ...d, kind: 'link' }
+  } else {
+    cur.value = { ...d, kind: 'device' }
+  }
+  drawer.value = true
+}
+
+function restartLayout() {
+  render(true)
+}
+
+function go(path: string) {
+  drawer.value = false
+  router.push(path)
+}
+
+function onResize() {
+  chart?.resize()
+}
+
+watch(dark, () => nextTick(() => render()))
+
+onMounted(() => {
+  load(true)
+  timer = setInterval(() => load(), 30000)
+})
+onBeforeUnmount(() => {
+  if (timer) clearInterval(timer)
+  window.removeEventListener('resize', onResize)
+  chart?.dispose()
+  chart = null
+})
+</script>
+
 <style scoped>
-.topo-huawei{display:flex;flex-direction:column;height:calc(100vh - 110px)}
-.toolbar{display:flex;align-items:center;gap:10px;background:var(--np-card-bg);padding:10px;border-radius:8px;margin-bottom:10px;border:1px solid var(--np-border)}
-.body{display:grid;grid-template-columns:180px 1fr 230px;gap:10px;flex:1;min-height:0}
-.left,.right{background:var(--np-card-bg);border-radius:10px;padding:16px;color:var(--np-text-2);font-size:13px;line-height:1.6;border:1px solid var(--np-border)}
-.left h4,.right h4{font-size:14px;font-weight:600;color:var(--np-text-1);margin:0 0 12px}
-.stat-row{display:flex;justify-content:space-between;padding:8px 10px;border-radius:6px;background:var(--np-hover);margin-bottom:6px}
-.stat-row b{color:var(--np-primary)}.stat-row.danger b{color:#ef4444}
-.right p{margin:6px 0;color:var(--np-text-2)}
-.canvas{position:relative;background:var(--np-card-bg);border-radius:8px;overflow:hidden;min-height:400px;border:1px solid var(--np-border)}
-.canvas canvas{position:absolute;inset:0;width:100%;height:100%;cursor:grab}
-.legend{display:flex;align-items:center;gap:4px;font-size:12px}
-.legend i{width:10px;height:10px;border-radius:50%;display:inline-block}
+.np-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.np-page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.np-page-head-info { display: flex; flex-direction: column; gap: 4px; }
+.np-page-head-title { font-size: 20px; font-weight: 600; letter-spacing: 0.01em; }
+.np-page-head-desc { font-size: 13px; color: var(--np-text-2, #5a6070); }
+.np-page-head-actions { display: flex; gap: 8px; }
+
+/* 统计卡 */
+.topo-stats {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.topo-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: var(--np-bg-raise, #fff);
+  border: 1px solid var(--np-border, #e3e6ea);
+}
+.ts-num { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ts-label { font-size: 12px; color: var(--np-text-2, #5a6070); }
+.topo-stat.ok .ts-num { color: #3f9e63; }
+.topo-stat.bad .ts-num { color: #d9534f; }
+.topo-stat.mute .ts-num { color: #9aa0a6; }
+.topo-stat-sep { width: 1px; height: 32px; background: var(--np-border, #e3e6ea); }
+
+/* 画布 */
+.topo-wrap { position: relative; }
+.topo-canvas { width: 100%; height: calc(100vh - 300px); min-height: 420px; border-radius: 12px; border: 1px solid var(--np-border, #e3e6ea); background: var(--np-bg, #f5f6f8); }
+.topo-legend {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--np-bg-raise, rgba(255,255,255,0.96));
+  border: 1px solid var(--np-border, #e3e6ea);
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 5;
+}
+.tl-title { font-weight: 600; margin-bottom: 2px; }
+.tl-group { display: flex; flex-direction: column; gap: 3px; }
+.tl-name { color: var(--np-text-2, #5a6070); font-size: 11px; }
+.tl-row { display: flex; align-items: center; gap: 6px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+/* 详情 */
+.topo-detail { display: flex; flex-direction: column; gap: 12px; }
+.td-hero { display: flex; align-items: center; gap: 12px; }
+.td-icon { font-size: 34px; line-height: 1; width: 46px; text-align: center; }
+.td-name { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+.td-desc { width: 100%; }
 </style>

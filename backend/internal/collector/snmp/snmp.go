@@ -38,13 +38,11 @@ const (
 	oidHrStorageUsed   = "1.3.6.1.2.1.25.2.3.1.6"
 	oidHrStorageDescr  = "1.3.6.1.2.1.25.2.3.1.3"
 	hrStorageRam       = "1.3.6.1.2.1.25.2.1.2"
-	// UCD-SNMP-MIB 即时百分比（Linux snmpd 默认暴露）
-	oidUcdCpuUser    = "1.3.6.1.4.1.2021.11.0"
-	oidUcdCpuSystem  = "1.3.6.1.4.1.2021.11.1"
-	oidUcdCpuIdle    = "1.3.6.1.4.1.2021.11.2"
-	oidUcdCpuRawIdle = "1.3.6.1.4.1.2021.11.11.0"
-	oidUcdCpuRawSys  = "1.3.6.1.4.1.2021.11.10.0"
-	oidUcdCpuRawUser = "1.3.6.1.4.1.2021.11.9.0"
+	// UCD-SNMP-MIB raw 计数器（Linux net-snmp >=5.4 标准暴露，需两次采样差分）
+	// ssCpuRawUser=.50  ssCpuRawSystem=.52  ssCpuRawIdle=.53
+	oidUcdCpuRawUser   = "1.3.6.1.4.1.2021.11.50.0"
+	oidUcdCpuRawSystem = "1.3.6.1.4.1.2021.11.52.0"
+	oidUcdCpuRawIdle   = "1.3.6.1.4.1.2021.11.53.0"
 	// HOST-RESOURCES 内存总量/可用（KB），直接 .0 取值
 	oidHrMemSize  = "1.3.6.1.2.1.25.2.2.1.5.0"
 	oidHrMemAvail = "1.3.6.1.2.1.25.2.2.1.6.0"
@@ -461,53 +459,8 @@ func (m *Manager) collectCPU(params *gosnmp.GoSNMP, d Device, snap *DeviceSnapsh
 		}
 	}
 
-	// 4. UCD-SNMP-MIB 即时百分比 (Linux net-snmp 默认暴露，优先于 hrProcessorLoad)
-	if r, err := params.Get([]string{oidUcdCpuUser, oidUcdCpuSystem, oidUcdCpuIdle}); err == nil && len(r.Variables) >= 3 {
-		userPct := float64(toInt32(r.Variables[0].Value))
-		sysPct := float64(toInt32(r.Variables[1].Value))
-		idlePct := float64(toInt32(r.Variables[2].Value))
-		if userPct >= 0 && sysPct >= 0 && idlePct >= 0 && idlePct <= 100 {
-			cpu := userPct + sysPct
-			if cpu < 0 {
-				cpu = 100 - idlePct
-			}
-			if cpu < 0 {
-				cpu = 0
-			}
-			if cpu > 100 {
-				cpu = 100
-			}
-			snap.CPU = math.Round(cpu*10) / 10
-			log.Printf("[snmp] device=%s CPU via UCD pct: user=%.1f sys=%.1f idle=%.1f -> %.1f", d.Name, userPct, sysPct, idlePct, snap.CPU)
-			return
-		}
-		log.Printf("[snmp] device=%s UCD pct invalid: user=%v sys=%v idle=%v (types=%T %T %T)", d.Name, userPct, sysPct, idlePct, r.Variables[0].Value, r.Variables[1].Value, r.Variables[2].Value)
-	} else {
-		log.Printf("[snmp] device=%s UCD pct GET failed: %v", d.Name, err)
-	}
-
-	// 5. HR-Storage hrProcessorLoad (Linux/Windows) — 跳过 -1/负数（snmpd 未暴露时返回 -1）
-	loads := map[string]uint32{}
-	if rows, err := params.BulkWalkAll(oidHrProcessorLoad); err == nil {
-		for _, v := range rows {
-			iv := toInt32(v.Value)
-			if iv < 0 || iv > 100 { // -1 = not available
-				continue
-			}
-			loads[oidLast(v.Name)] = uint32(iv)
-		}
-	}
-	if len(loads) > 0 {
-		var sum float64
-		for _, l := range loads {
-			sum += float64(l)
-		}
-		snap.CPU = math.Round(sum/float64(len(loads))*10) / 10
-		return
-	}
-
-	// 6. UCD-SNMP raw counters (Linux net-snmp) — 需要两次采样差分
-	if raw, err := params.Get([]string{oidUcdCpuRawIdle, oidUcdCpuRawSys, oidUcdCpuRawUser}); err == nil && len(raw.Variables) == 3 {
+	// 4. UCD-SNMP-MIB raw 计数器差分（Linux net-snmp 标准，ssCpuRawUser/System/Idle）
+	if raw, err := params.Get([]string{oidUcdCpuRawIdle, oidUcdCpuRawSystem, oidUcdCpuRawUser}); err == nil && len(raw.Variables) == 3 {
 		now := time.Now()
 		key := fmt.Sprintf("%d", d.ID)
 		m.mu.Lock()
@@ -528,9 +481,40 @@ func (m *Manager) collectCPU(params *gosnmp.GoSNMP, d Device, snap *DeviceSnapsh
 			dIdle := idle - prevIdle
 			dTotal := (idle + user + system) - (prevIdle + prevUser + prevSystem)
 			if dTotal > 0 {
-				snap.CPU = math.Round((1-dIdle/dTotal)*1000) / 10
+				cpu := (1 - dIdle/dTotal) * 100
+				if cpu < 0 {
+					cpu = 0
+				}
+				if cpu > 100 {
+					cpu = 100
+				}
+				snap.CPU = math.Round(cpu*10) / 10
+				log.Printf("[snmp] device=%s CPU via UCD raw: user=%.0f sys=%.0f idle=%.0f -> %.1f", d.Name, user, system, idle, snap.CPU)
+				return
 			}
 		}
+	} else {
+		log.Printf("[snmp] device=%s UCD raw GET failed: %v", d.Name, err)
+	}
+
+	// 5. HR-Storage hrProcessorLoad (Linux/Windows) — 跳过 -1/负数（snmpd 未暴露时返回 -1）
+	loads := map[string]uint32{}
+	if rows, err := params.BulkWalkAll(oidHrProcessorLoad); err == nil {
+		for _, v := range rows {
+			iv := toInt32(v.Value)
+			if iv < 0 || iv > 100 { // -1 = not available
+				continue
+			}
+			loads[oidLast(v.Name)] = uint32(iv)
+		}
+	}
+	if len(loads) > 0 {
+		var sum float64
+		for _, l := range loads {
+			sum += float64(l)
+		}
+		snap.CPU = math.Round(sum/float64(len(loads))*10) / 10
+		return
 	}
 }
 

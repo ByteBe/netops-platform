@@ -18,7 +18,7 @@ const levelType: Record<string, string> = { critical: 'danger', warning: 'warnin
 const levelText: Record<string, string> = { critical: '严重', warning: '警告', info: '信息', debug: '调试' }
 const sources = ref<{label:string,value:string}[]>([])
 const sourceLabel: Record<string,string> = {
-  syslog:'Syslog', docker:'Docker', k8s:'K8s', switch:'交换机', router:'路由器',
+  system:'系统管理', syslog:'Syslog', docker:'Docker', k8s:'K8s', nginx:'Nginx', switch:'交换机', router:'路由器',
   server:'服务器', mysql:'MySQL', postgres:'PostgreSQL', mongodb:'MongoDB',
   redis:'Redis', tdengine:'TDengine', influxdb:'InfluxDB', prometheus:'Prometheus', elasticsearch:'Elasticsearch'
 }
@@ -61,10 +61,10 @@ onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
 <template>
   <div>
     <div class="filter-bar">
-      <el-select v-model="source" placeholder="来源" clearable style="width:140px">
+      <el-select v-model="source" :placeholder="t('devicelog.source')" clearable style="width:140px">
         <el-option v-for="s in sources" :key="s.value" :label="sourceLabel[s.value] || s.value" :value="s.value" />
       </el-select>
-      <el-select v-model="level" placeholder="级别" clearable style="width:120px">
+      <el-select v-model="level" :placeholder="t('devicelog.level')" clearable style="width:120px">
         <el-option label="严重" value="critical" />
         <el-option label="警告" value="warning" />
         <el-option label="信息" value="info" />
@@ -76,9 +76,9 @@ onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
       <el-button @click="load">{{ t('common.refresh') }}</el-button>
       <el-button type="danger" @click="clear">{{ t('devicelog.clear') }}</el-button>
     </div>
-    <el-table ref="tableRef" :data="list" v-loading="loading" stripe size="small" style="width:100%">
+    <el-table ref="tableRef" :data="list" v-loading="loading" stripe size="small" class="np-table">
       <el-table-column :label="t('devicelog.time')" width="170">
-        <template #default="{ row }">{{ fmtTime(row.created_at) }}</template>
+        <template #default="{ row }"><span class="time-cell">{{ fmtTime(row.created_at) }}</span></template>
       </el-table-column>
       <el-table-column prop="source" :label="t('devicelog.source')" width="80" />
       <el-table-column :label="t('devicelog.level')" width="90">
@@ -93,21 +93,45 @@ onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
         </template>
       </el-table-column>
     </el-table>
+    <div v-if="!list.length && !loading" class="np-empty-box">
+      <el-icon class="np-empty-icon"><Document /></el-icon>
+      <div class="np-empty-title">{{ t('common.noData') }}</div>
+      <div class="np-empty-desc">{{ t('devicelog.keywordPh') }}</div>
+    </div>
     <el-pagination style="margin-top:12px;justify-content:flex-end" layout="total,prev,pager,next"
       :total="total" :page-size="size" :current-page="page" @current-change="(p:number)=>{page=p;load()}" />
-    <el-dialog v-model="detailVisible" title="日志详情" width="700px">
+    <el-dialog v-model="detailVisible" :title="t('devicelog.detailTitle')" width="700px">
       <div v-if="detailLog">
-        <p><b>时间：</b>{{ fmtTime(detailLog.created_at) }}</p>
-        <p><b>来源：</b>{{ detailLog.source }}　<b>级别：</b>{{ levelText[detailLog.level] || detailLog.level }}　<b>设备：</b>{{ detailLog.device_name }}（{{ detailLog.ip }}）</p>
-        <p><b>内容：</b></p>
+        <p class="detail-meta"><b>时间：</b>{{ fmtTime(detailLog.created_at) }}</p>
+        <p class="detail-meta"><b>来源：</b>{{ detailLog.source }}　<b>级别：</b>{{ levelText[detailLog.level] || detailLog.level }}　<b>设备：</b>{{ detailLog.device_name }}（{{ detailLog.ip }}）</p>
+        <p class="detail-meta"><b>内容：</b></p>
         <pre class="log-detail-text">{{ detailLog.message }}</pre>
       </div>
     </el-dialog>
   </div>
 </template>
 <style scoped>
-.filter-bar { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; }
-.log-msg { cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.log-msg:hover { color: #409eff; }
-.log-detail-text { background: #f5f7fa; padding: 10px; border-radius: 4px; white-space: pre-wrap; word-break: break-all; max-height: 400px; overflow-y: auto; font-size: 13px; }
+.filter-bar { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; flex-wrap: wrap; }
+.time-cell { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum'; color: var(--np-text-2); }
+.log-msg { cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--np-text-1); transition: color 0.15s ease-out; }
+.log-msg:hover { color: var(--np-primary); }
+.detail-meta { margin: 0 0 8px; font-size: 13px; line-height: 1.7; color: var(--np-text-2); }
+.detail-meta b { color: var(--np-text-1); font-weight: 600; }
+/* 日志输出：中性次级表面 + 发丝描边 + 等宽技术感，全部走主题变量 */
+.log-detail-text {
+  margin: 6px 0 0;
+  background: var(--np-surface-1);
+  color: var(--np-text-1);
+  border: 1px solid var(--np-border);
+  padding: 10px 12px;
+  border-radius: 6px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 400px;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.7;
+  font-family: Consolas, 'Courier New', monospace;
+  font-variant-numeric: tabular-nums;
+}
 </style>

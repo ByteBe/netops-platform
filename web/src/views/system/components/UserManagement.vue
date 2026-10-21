@@ -44,8 +44,11 @@ function roleLabel(r: string) {
 </script>
 <template>
   <div>
-    <div class="np-toolbar"><div class="spacer"></div><el-button type="primary" @click="open()">{{ t('system.addUser') }}</el-button></div>
     <div class="np-card">
+      <div class="card-head-row">
+        <div class="np-card-title">{{ t('system.users') }}</div>
+        <el-button type="primary" @click="open()">{{ t('system.addUser') }}</el-button>
+      </div>
       <el-table :data="users" stripe class="np-table user-table" :fit="false">
         <el-table-column prop="username" :label="t('system.username')" width="120" align="center" />
         <el-table-column :label="t('system.empNo')" width="100" align="center"><template #default="{row}">{{ row.employee_no || '—' }}</template></el-table-column>
@@ -86,6 +89,15 @@ function roleLabel(r: string) {
   </div>
 </template>
 <style scoped>
+.card-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.card-head-row .np-card-title { margin-bottom: 0; }
 .op-cell { display: flex; gap: 2px; align-items: center; justify-content: center; }
 .user-table { max-width: 880px; } /* 列宽固定贴合内容，避免列内空白 */
 </style>

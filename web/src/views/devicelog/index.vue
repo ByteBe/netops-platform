@@ -7,8 +7,13 @@ const { t } = useI18n()
 const tab = ref('device')
 </script>
 <template>
-  <div class="logcenter-page devicelog-page">
-    <div class="np-toolbar"><h3>{{ t('devicelog.title') }}</h3></div>
+  <div class="np-page">
+    <div class="np-page-head">
+      <div class="np-page-head-info">
+        <div class="np-page-head-title">{{ t('devicelog.title') }}</div>
+        <div class="np-page-head-desc">{{ t('devicelog.pageDesc') }}</div>
+      </div>
+    </div>
     <div class="tab-bar">
       <div class="tab-item" :class="{active: tab==='device'}" @click="tab='device'">{{ t('devicelog.tabDevice') }}</div>
       <div class="tab-item" :class="{active: tab==='task'}" @click="tab='task'">{{ t('devicelog.tabTask') }}</div>
@@ -19,22 +24,37 @@ const tab = ref('device')
     </div>
   </div>
 </template>
-<style>
-.devicelog-page .el-table,
-.devicelog-page .el-table__inner-wrapper,
-.devicelog-page .el-table__header-wrapper,
-.devicelog-page .el-table__body-wrapper { width: 100% !important; }
-.devicelog-page .el-table__header-wrapper table,
-.devicelog-page .el-table__body-wrapper table { width: 100% !important; table-layout: fixed !important; }
-.devicelog-page .el-table__header-wrapper col,
-.devicelog-page .el-table__body-wrapper col { width: auto !important; }
-</style>
 <style scoped>
-.logcenter-page { padding: 16px; }
-.np-toolbar { display: flex; align-items: center; margin-bottom: 12px; }
-.np-toolbar h3 { margin: 0; }
-.tab-bar { display: flex; gap: 24px; border-bottom: 1px solid var(--np-border); margin-bottom: 12px; }
-.tab-item { padding: 8px 0; cursor: pointer; color: var(--np-text-secondary); font-size: 14px; }
-.tab-item.active { color: var(--el-color-primary); border-bottom: 2px solid var(--el-color-primary); font-weight: 500; }
-.np-card { background: var(--np-card-bg); border: 1px solid var(--np-border); border-radius: 8px; padding: 12px; }
+.tab-bar {
+  display: flex;
+  gap: 24px;
+  padding: 0 4px;
+  border-bottom: 1px solid var(--np-border);
+}
+.tab-item {
+  padding: 10px 0;
+  cursor: pointer;
+  color: var(--np-text-3);
+  font-size: 14px;
+  letter-spacing: 0.02em;
+  position: relative;
+  transition: color 0.18s ease-out;
+}
+.tab-item:hover {
+  color: var(--np-text-2);
+}
+.tab-item.active {
+  color: var(--np-primary);
+  font-weight: 600;
+}
+.tab-item.active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--np-primary);
+}
 </style>

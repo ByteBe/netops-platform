@@ -251,21 +251,80 @@ onMounted(async () => {
 
 <style lang="scss">
 .np-setup {
-  min-height: 100%; display: flex; align-items: center; justify-content: center;
-  background: var(--np-bg); padding: 24px;
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--np-bg);
+  padding: 24px;
+
+  // 工程角标框架：左上 / 右下信号橙 L 形角标（与登录页同一语言）
   &-card {
     position: relative;
-    width: 640px; background: var(--np-card-bg); border: 1px solid var(--np-border);
-    border-radius: 12px; box-shadow: 0 20px 60px rgba(15,23,42,.14); padding: 28px 36px 36px;
+    width: 640px;
+    max-width: 100%;
+    background: var(--np-bg-elevated);
+    border: 1px solid var(--np-border);
+    border-radius: 12px;
+    box-shadow: var(--np-shadow-md);
+    padding: 28px 36px 36px;
+
+    &::before {
+      content: '';
+      position: absolute;
+      left: -7px;
+      top: -7px;
+      width: 24px;
+      height: 24px;
+      border-left: 1px solid var(--np-primary);
+      border-top: 1px solid var(--np-primary);
+      opacity: 0.8;
+    }
+    &::after {
+      content: '';
+      position: absolute;
+      right: -7px;
+      bottom: -7px;
+      width: 24px;
+      height: 24px;
+      border-right: 1px solid var(--np-primary);
+      border-bottom: 1px solid var(--np-primary);
+      opacity: 0.8;
+    }
   }
+
   &-lang {
-    position: absolute; top: 14px; right: 20px;
-    display: flex; align-items: center; gap: 4px;
-    color: var(--np-text-2); font-size: 13px;
+    position: absolute;
+    top: 14px;
+    right: 20px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--np-text-2);
+    font-size: 13px;
   }
-  &-head { text-align: center; margin-bottom: 24px; h1 { font-size: 22px; } p { color: var(--np-text-2); font-size: 13px; margin-top: 6px; } }
+
+  &-head {
+    text-align: center;
+    margin-bottom: 24px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--np-border);
+    h1 { font-size: 22px; color: var(--np-text-1); letter-spacing: -0.01em; }
+    p { color: var(--np-text-2); font-size: 13px; margin-top: 6px; line-height: 1.6; }
+  }
+
+  .el-steps { margin: 8px 0 4px; }
   .np-field-tip { font-size: 12px; color: var(--np-text-2); line-height: 1.5; margin-top: 4px; }
-  .np-step-panel { margin-top: 28px; }
+
+  // 步骤面板：中性次级表面 + 发丝描边（弱底不再铺满橙）
+  .np-step-panel {
+    margin-top: 24px;
+    padding: 18px 20px;
+    border: 1px solid var(--np-border);
+    border-radius: 12px;
+    background: var(--np-surface-1);
+  }
+
   .np-step-actions { display: flex; justify-content: center; gap: 12px; margin-top: 20px; }
 }
 </style>

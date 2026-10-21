@@ -1,14 +1,17 @@
 <script setup lang="ts">
 // 设备监控：SNMP采集（服务器/交换机/路由器）+ 快照 + 历史
-import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import * as echarts from 'echarts'
 import { getEnc, postEnc, putEnc, delEnc } from '@/utils/request'
 import { WSClient } from '@/utils/ws'
-import { fmtBps, fmtDuration, fmtTime } from '@/utils'
+import { useAppStore } from '@/stores/app'
+import { fmtBps, fmtDuration, fmtTime, cssVar, chartAxisColors } from '@/utils'
+import { histTooltip } from '@/utils/histTooltip'
 
 const { t } = useI18n()
+const appStore = useAppStore()
 
 interface MonitorDevice {
   id: number
@@ -185,19 +188,28 @@ async function loadHistory() {
     mem: number[][]
   }>(`/monitor/devices/${histDevice.value.id}/history?hours=${histHours.value}`)
   histChart ??= echarts.init(histChartRef.value as HTMLDivElement)
+  const ca = chartAxisColors()
   histChart.setOption({
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis' },
-    legend: { data: ['CPU %', 'MEM %'] },
+    tooltip: histTooltip({ digits: 1, suffix: '%' }),
+    legend: { data: ['CPU %', 'MEM %'], textStyle: { color: ca.axis } },
     grid: { left: 50, right: 16, top: 36, bottom: 28 },
-    xAxis: { type: 'time' },
-    yAxis: { type: 'value', max: 100 },
+    xAxis: { type: 'time', axisLabel: { color: ca.axis }, axisLine: { lineStyle: { color: ca.axisLine } } },
+    yAxis: { type: 'value', max: 100, axisLabel: { color: ca.axis }, splitLine: { lineStyle: { color: ca.split } } },
     series: [
-      { name: 'CPU %', type: 'line', showSymbol: false, smooth: true, lineStyle: { width: 2, color: '#2f6bff' }, itemStyle: { color: '#2f6bff' }, data: h.cpu || [] },
-      { name: 'MEM %', type: 'line', showSymbol: false, smooth: true, lineStyle: { width: 2, color: '#22c55e' }, itemStyle: { color: '#22c55e' }, data: h.mem || [] }
+      { name: 'CPU %', type: 'line', showSymbol: false, smooth: true, lineStyle: { width: 2, color: cssVar('--np-primary') }, itemStyle: { color: cssVar('--np-primary') }, data: h.cpu || [] },
+      { name: 'MEM %', type: 'line', showSymbol: false, smooth: true, lineStyle: { width: 2, color: cssVar('--np-success') }, itemStyle: { color: cssVar('--np-success') }, data: h.mem || [] }
     ]
   })
 }
+
+// 进度条信号色：超阈危险色，常态语义色（ECharts/组件不解析 CSS 变量，显式取色）
+function cpuBarColor(v: number) { return v > 80 ? cssVar('--np-danger') : cssVar('--np-primary') }
+function memBarColor(v: number) { return v > 80 ? cssVar('--np-danger') : cssVar('--np-success') }
+function diskBarColor(v: number) { return v > 80 ? cssVar('--np-danger') : cssVar('--np-warning') }
+
+// 主题切换时重绘历史曲线（canvas 不感知 CSS 变量变化）
+watch(() => appStore.theme, () => { if (histChart) void loadHistory() })
 
 function ifName(s: DeviceSnap, name: string): string {
   return s.interfaces.find((i) => i.name === name || i.index === name)?.name || name
@@ -237,12 +249,41 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="np-page">
-    <div class="np-toolbar">
-      <el-input :placeholder="t('common.search')" style="width: 260px" clearable />
-      <div class="spacer"></div>
-      <el-button type="primary" @click="openAdd">
-        <el-icon><Plus /></el-icon>{{ t('monitor.addDevice') }}
-      </el-button>
+    <div class="np-page-head">
+      <div class="np-page-head-info">
+        <div class="np-page-head-title">{{ t('monitor.title') }}</div>
+        <div class="np-page-head-desc">{{ t('monitor.desc') }}</div>
+      </div>
+      <div class="np-page-head-actions">
+        <el-input :placeholder="t('common.search')" style="width: 220px" clearable />
+        <el-button type="primary" @click="openAdd">
+          <el-icon><Plus /></el-icon>{{ t('monitor.addDevice') }}
+        </el-button>
+      </div>
+    </div>
+
+    <div class="np-kpi-grid">
+      <div class="np-kpi">
+        <div class="np-kpi-icon"><el-icon><Cpu /></el-icon></div>
+        <div class="np-kpi-body">
+          <div class="np-kpi-value">{{ devices.length }}</div>
+          <div class="np-kpi-label">{{ t('monitor.totalDevices') }}</div>
+        </div>
+      </div>
+      <div class="np-kpi">
+        <div class="np-kpi-icon is-success"><el-icon><Connection /></el-icon></div>
+        <div class="np-kpi-body">
+          <div class="np-kpi-value">{{ devices.filter(d => snaps[d.id]?.up).length }}</div>
+          <div class="np-kpi-label">{{ t('monitor.onlineDevices') }}</div>
+        </div>
+      </div>
+      <div class="np-kpi">
+        <div class="np-kpi-icon is-danger"><el-icon><CircleClose /></el-icon></div>
+        <div class="np-kpi-body">
+          <div class="np-kpi-value">{{ devices.length - devices.filter(d => snaps[d.id]?.up).length }}</div>
+          <div class="np-kpi-label">{{ t('monitor.offlineDevices') }}</div>
+        </div>
+      </div>
     </div>
 
     <!-- 设备快照卡片 -->
@@ -256,18 +297,24 @@ onBeforeUnmount(() => {
         </div>
         <div class="np-dev-metrics">
           <div class="np-metric">
-            <div class="np-metric-label">CPU</div>
-            <el-progress :percentage="snaps[d.id]?.cpu ?? 0" :stroke-width="8" :color="(snaps[d.id]?.cpu ?? 0) > 80 ? '#ef4444' : '#2f6bff'" />
+            <div class="np-metric-top">
+              <span class="np-metric-label">{{ t('monitor.cpu') }}</span>
+              <span class="np-metric-value">{{ (snaps[d.id]?.cpu ?? 0).toFixed(0) }}%</span>
+            </div>
+            <el-progress :percentage="snaps[d.id]?.cpu ?? 0" :stroke-width="8" :color="cpuBarColor(snaps[d.id]?.cpu ?? 0)" />
           </div>
           <div class="np-metric">
-            <div class="np-metric-label">内存</div>
-            <el-progress :percentage="snaps[d.id]?.mem_used ?? 0" :stroke-width="8" :color="(snaps[d.id]?.mem_used ?? 0) > 80 ? '#ef4444' : '#22c55e'" />
+            <div class="np-metric-top">
+              <span class="np-metric-label">{{ t('monitor.mem') }}</span>
+              <span class="np-metric-value">{{ (snaps[d.id]?.mem_used ?? 0).toFixed(0) }}%</span>
+            </div>
+            <el-progress :percentage="snaps[d.id]?.mem_used ?? 0" :stroke-width="8" :color="memBarColor(snaps[d.id]?.mem_used ?? 0)" />
           </div>
         </div>
         <div v-if="(snaps[d.id]?.disks || []).length" class="np-dev-disks">
           <div v-for="disk in snaps[d.id]?.disks" :key="disk.mount" class="np-disk-row">
             <span class="np-disk-mount">{{ disk.mount === '/' ? '磁盘' : disk.mount }}</span>
-            <el-progress :percentage="disk.used_pct" :stroke-width="6" :color="disk.used_pct > 80 ? '#ef4444' : '#f59e0b'" style="flex:1" />
+            <el-progress :percentage="disk.used_pct" :stroke-width="6" :color="diskBarColor(disk.used_pct)" style="flex:1" />
             <span class="np-disk-size">{{ (disk.used/1024/1024/1024).toFixed(1) }}G / {{ (disk.total/1024/1024/1024).toFixed(1) }}G</span>
           </div>
         </div>
@@ -290,7 +337,13 @@ onBeforeUnmount(() => {
           <el-button size="small" text type="danger" @click="remove(d)">{{ t('common.delete') }}</el-button>
         </div>
       </div>
-      <div v-if="!devices.length" class="np-card np-empty">{{ t('common.noData') }}</div>
+      <div v-if="!devices.length" class="np-card np-dev-empty">
+        <div class="np-empty-box">
+          <div class="np-empty-icon"><el-icon><Monitor /></el-icon></div>
+          <div class="np-empty-title">{{ t('monitor.title') }}</div>
+          <div class="np-empty-desc">{{ t('common.noData') }}</div>
+        </div>
+      </div>
     </div>
 
     <!-- 设备管理表格 -->
@@ -390,7 +443,7 @@ onBeforeUnmount(() => {
         </el-form-item>
         <el-form-item label=" ">
           <el-button :loading="testing" @click="testConn">{{ t('monitor.testConn') }}</el-button>
-          <span v-if="testResult" :style="{ marginLeft:'12px', color: testResult.indexOf(t('monitor.testSuccess')) >= 0 ? '#67C23A' : '#F56C6C', fontSize:'13px' }">{{ testResult }}</span>
+          <span v-if="testResult" class="dev-test-result" :class="testResult.indexOf(t('monitor.testSuccess')) >= 0 ? 'is-ok' : 'is-fail'">{{ testResult }}</span>
         </el-form-item>
         <el-divider content-position="left">SSH 采集（Linux 系统运行时间 / BGP）</el-divider>
         <el-form-item :label="t('bgp.sshUser')">
@@ -402,7 +455,7 @@ onBeforeUnmount(() => {
         <el-form-item :label="t('bgp.sshPort')">
           <el-input-number v-model="form.ssh_port" :min="1" :max="65535" style="margin-right:12px" />
           <el-button :loading="sshTesting" @click="testSsh">{{ t('bgp.testBtn') }}</el-button>
-          <span v-if="sshTestResult" :style="{ marginLeft:'12px', color: sshTestResult.indexOf('OK') >= 0 ? '#67C23A' : '#F56C6C', fontSize:'13px' }">{{ sshTestResult }}</span>
+          <span v-if="sshTestResult" class="dev-test-result" :class="sshTestResult.indexOf('OK') >= 0 ? 'is-ok' : 'is-fail'">{{ sshTestResult }}</span>
         </el-form-item>
         <el-form-item :label="t('bgp.bgpEnable')">
           <el-switch v-model="form.bgp_enable" />
@@ -470,11 +523,28 @@ onBeforeUnmount(() => {
   .np-dev-metrics {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    .np-metric-label {
-      font-size: 12px;
-      color: var(--np-text-2);
-      margin-bottom: 2px;
+    gap: 10px;
+    padding: 12px;
+    border-radius: $radius-md;
+    background: var(--np-surface-1);
+    border: 1px solid var(--np-border);
+    .np-metric-top {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 4px;
+      .np-metric-label {
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--np-text-3);
+      }
+      .np-metric-value {
+        font-size: 18px;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        color: var(--np-text-1);
+      }
     }
   }
 
@@ -544,5 +614,16 @@ onBeforeUnmount(() => {
     border-top: 1px solid var(--np-border);
     padding-top: 6px;
   }
+}
+
+.dev-test-result {
+  margin-left: 12px;
+  font-size: 13px;
+  &.is-ok { color: var(--np-success); }
+  &.is-fail { color: var(--np-danger); }
+}
+
+.np-dev-empty {
+  padding: 0;
 }
 </style>

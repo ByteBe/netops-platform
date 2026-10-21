@@ -1,12 +1,16 @@
 <script setup lang="ts">
 // 流量监控：专线规则（带宽/上下行独立可配）+ 实时速率 + 历史
-import { ref, reactive, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import * as echarts from 'echarts'
 import { getEnc, postEnc, putEnc, delEnc } from '@/utils/request'
 import { WSClient } from '@/utils/ws'
-import { fmtBps, pickColor } from '@/utils'
+import { useAppStore } from '@/stores/app'
+import { fmtBps, pickColor, cssVar, chartAxisColors } from '@/utils'
+import { histTooltip } from '@/utils/histTooltip'
+
+const appStore = useAppStore()
 
 const fmtPct = (v: number) => {
   if (v < 0.01) return v.toFixed(3)
@@ -149,19 +153,27 @@ async function loadTrafficHistory() {
     out: number[][]
   }>(`/traffic/rules/${histRule.value.id}/history?hours=${histHours.value}`)
   histChart ??= echarts.init(histRef.value as HTMLDivElement)
+  const ca = chartAxisColors()
   histChart.setOption({
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis' },
-    legend: { data: [t('traffic.in'), t('traffic.out')] },
+    tooltip: histTooltip({ digits: 2, fmt: (v) => (v / 1e6).toFixed(2) + ' Mbps' }),
+    legend: { data: [t('traffic.in'), t('traffic.out')], textStyle: { color: ca.axis } },
     grid: { left: 80, right: 20, top: 36, bottom: 28 },
-    xAxis: { type: 'time' },
-    yAxis: { type: 'value', axisLabel: { formatter: (v: number) => (v / 1e6).toFixed(0) + 'M' } },
+    xAxis: { type: 'time', axisLabel: { color: ca.axis }, axisLine: { lineStyle: { color: ca.axisLine } } },
+    yAxis: { type: 'value', axisLabel: { color: ca.axis, formatter: (v: number) => (v / 1e6).toFixed(0) + 'M' }, splitLine: { lineStyle: { color: ca.split } } },
     series: [
-      { name: t('traffic.in'), type: 'line', showSymbol: false, smooth: true, lineStyle: { width: 2, color: '#06b6d4' }, itemStyle: { color: '#06b6d4' }, areaStyle: { opacity: 0.08 }, data: h.in },
-      { name: t('traffic.out'), type: 'line', showSymbol: false, smooth: true, lineStyle: { width: 2, color: '#f59e0b' }, itemStyle: { color: '#f59e0b' }, areaStyle: { opacity: 0.08 }, data: h.out }
+      { name: t('traffic.in'), type: 'line', showSymbol: false, smooth: true, lineStyle: { width: 2, color: cssVar('--np-info') }, itemStyle: { color: cssVar('--np-info') }, areaStyle: { opacity: 0.08 }, data: h.in },
+      { name: t('traffic.out'), type: 'line', showSymbol: false, smooth: true, lineStyle: { width: 2, color: cssVar('--np-warning') }, itemStyle: { color: cssVar('--np-warning') }, areaStyle: { opacity: 0.08 }, data: h.out }
     ]
   })
 }
+
+// 进度条信号色（ECharts/组件不解析 CSS 变量，显式取色）
+function inBarColor() { return cssVar('--np-info') }
+function outBarColor() { return cssVar('--np-warning') }
+
+// 主题切换时重绘历史曲线（canvas 不感知 CSS 变量变化）
+watch(() => appStore.theme, () => { if (histChart) void loadTrafficHistory() })
 
 let _timer: any = null
 onMounted(async () => {
@@ -191,17 +203,21 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="np-page">
-    <div class="np-toolbar">
-      <span class="np-page-desc">{{ t('traffic.desc') }}</span>
-      <div class="spacer"></div>
-      <el-button type="primary" @click="openAdd">
-        <el-icon><Plus /></el-icon>{{ t('traffic.addRule') }}
-      </el-button>
+    <div class="np-page-head">
+      <div class="np-page-head-info">
+        <div class="np-page-head-title">{{ t('traffic.title') }}</div>
+        <div class="np-page-head-desc">{{ t('traffic.desc') }}</div>
+      </div>
+      <div class="np-page-head-actions">
+        <el-button type="primary" @click="openAdd">
+          <el-icon><Plus /></el-icon>{{ t('traffic.addRule') }}
+        </el-button>
+      </div>
     </div>
 
     <!-- 实时流量卡片 -->
     <div class="np-traffic-grid">
-      <div v-for="r in rules" :key="r.id" class="np-card np-traffic-card" :style="{ borderLeft: `4px solid ${r.color}` }">
+      <div v-for="r in rules" :key="r.id" class="np-card np-traffic-card" :style="{ '--accent': r.color || undefined }">
         <div class="np-tc-head">
           <div class="np-tc-head-left">
             <div class="np-tc-devname">{{ r.device_name || t('traffic.unknownDevice') }}</div>
@@ -214,16 +230,16 @@ onBeforeUnmount(() => {
           <span class="np-tc-status" :class="{up: currents[r.id]?.up}">{{ currents[r.id]?.up ? t('traffic.online') : t('traffic.offline') }}</span>
         </div>
         <div class="np-tc-rates">
-          <div class="np-tc-item">
+          <div class="np-tc-item is-in">
             <div class="np-tc-label">↓ {{ t('traffic.in') }}</div>
-            <div class="np-tc-value" style="color: #06b6d4">{{ fmtBps(currents[r.id]?.in_bps || 0) }}</div>
-            <el-progress :percentage="Math.min(currents[r.id]?.in_pct || 0, 100)" :stroke-width="6" color="#06b6d4" :show-text="false" />
+            <div class="np-tc-value">{{ fmtBps(currents[r.id]?.in_bps || 0) }}</div>
+            <el-progress :percentage="Math.min(currents[r.id]?.in_pct || 0, 100)" :stroke-width="6" :color="inBarColor()" :show-text="false" />
             <div class="np-tc-pct">{{ fmtPct(currents[r.id]?.in_pct || 0) }}% / {{ r.down_rate }}M</div>
           </div>
-          <div class="np-tc-item">
+          <div class="np-tc-item is-out">
             <div class="np-tc-label">↑ {{ t('traffic.out') }}</div>
-            <div class="np-tc-value" style="color: #f59e0b">{{ fmtBps(currents[r.id]?.out_bps || 0) }}</div>
-            <el-progress :percentage="Math.min(currents[r.id]?.out_pct || 0, 100)" :stroke-width="6" color="#f59e0b" :show-text="false" />
+            <div class="np-tc-value">{{ fmtBps(currents[r.id]?.out_bps || 0) }}</div>
+            <el-progress :percentage="Math.min(currents[r.id]?.out_pct || 0, 100)" :stroke-width="6" :color="outBarColor()" :show-text="false" />
             <div class="np-tc-pct">{{ fmtPct(currents[r.id]?.out_pct || 0) }}% / {{ r.up_rate }}M</div>
           </div>
         </div>
@@ -233,7 +249,13 @@ onBeforeUnmount(() => {
           <el-button size="small" text type="danger" @click="remove(r)">{{ t('common.delete') }}</el-button>
         </div>
       </div>
-      <div v-if="!rules.length" class="np-card np-empty">{{ t('common.noData') }}</div>
+      <div v-if="!rules.length" class="np-card tc-empty">
+        <div class="np-empty-box">
+          <div class="np-empty-icon"><el-icon><TrendCharts /></el-icon></div>
+          <div class="np-empty-title">{{ t('traffic.title') }}</div>
+          <div class="np-empty-desc">{{ t('common.noData') }}</div>
+        </div>
+      </div>
     </div>
 
     <el-dialog v-model="dialogVisible" :title="editingId ? t('traffic.editRule') : t('traffic.addRule')" width="520px">
@@ -300,12 +322,10 @@ onBeforeUnmount(() => {
 }
 
 .np-traffic-card {
-  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
-  border: 1px solid #e6eef8;
-  border-radius: 12px;
-  box-shadow: 0 10px 28px rgba(47, 107, 255, 0.10), inset 0 1px 0 rgba(255,255,255,.9);
-  transition: transform .2s, box-shadow .2s;
-  &:hover { transform: translateY(-2px); box-shadow: 0 16px 36px rgba(47,107,255,.16); }
+  // 左侧信号标线：优先规则自带色（后端下发），否则中性发丝线
+  border-left: 2px solid var(--accent, var(--np-border-strong));
+  transition: border-color 0.2s ease-out, transform 0.2s ease-out;
+  &:hover { transform: translateY(-1px); }
   .np-tc-head {
     display: flex;
     align-items: flex-start;
@@ -313,7 +333,7 @@ onBeforeUnmount(() => {
     gap: 10px;
     margin-bottom: 12px;
     padding-bottom: 10px;
-    border-bottom: 1px solid var(--np-border, #eee);
+    border-bottom: 1px solid var(--np-border);
     .np-tc-head-left {
       min-width: 0;
     }
@@ -321,6 +341,7 @@ onBeforeUnmount(() => {
       font-size: 16px;
       font-weight: 700;
       margin-bottom: 6px;
+      color: var(--np-text-1);
     }
     .np-tc-meta {
       display: flex;
@@ -332,15 +353,18 @@ onBeforeUnmount(() => {
         font-size: 12px;
       }
     }
+    // 在线/离线徽标：语义弱底 + 语义文字，发丝边
     .np-tc-status {
+      flex: none;
       font-size: 12px;
-      padding: 2px 8px;
-      border-radius: 10px;
-      background: #fef0f0;
-      color: #f56c6c;
+      padding: 2px 10px;
+      border-radius: $radius-sm;
+      background: var(--np-danger-weak);
+      color: var(--np-danger);
+      border: 1px solid var(--np-border);
       &.up {
-        background: #f0f9eb;
-        color: #67c23a;
+        background: var(--np-success-weak);
+        color: var(--np-success);
       }
     }
   }
@@ -350,20 +374,36 @@ onBeforeUnmount(() => {
     .np-tc-item {
       flex: 1;
       .np-tc-label {
-        font-size: 12px;
-        color: var(--np-text-2);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--np-text-3);
+        // 方向信号小标线（颜色只出现在标线上，数值保持墨色）
+        &::before {
+          content: '';
+          width: 8px;
+          height: 2px;
+          border-radius: 1px;
+        }
       }
+      &.is-in .np-tc-label::before { background: var(--np-info); }
+      &.is-out .np-tc-label::before { background: var(--np-warning); }
       .np-tc-value {
         font-size: 20px;
         font-weight: 700;
         margin: 2px 0 6px;
         font-variant-numeric: tabular-nums;
+        color: var(--np-text-1);
       }
       .np-tc-pct {
         font-size: 11px;
-        color: var(--np-text-2);
+        color: var(--np-text-3);
         margin-top: 2px;
         text-align: right;
+        font-variant-numeric: tabular-nums;
       }
     }
   }
@@ -374,5 +414,9 @@ onBeforeUnmount(() => {
     margin-top: 10px;
     padding-top: 4px;
   }
+}
+
+.tc-empty {
+  padding: 0;
 }
 </style>

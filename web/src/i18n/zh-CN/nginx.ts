@@ -1,4 +1,9 @@
 export default {
+  title: 'Nginx 实例监控',
+  desc: '实时采集各 Nginx 状态页，监控活跃连接、QPS 与读/写/等待队列',
+  totalInstances: '实例总数',
+  onlineInstances: '在线实例',
+  offlineInstances: '离线实例',
   addInstance: '添加Nginx实例',
   editInstance: '编辑Nginx实例',
   instanceName: '实例名称',

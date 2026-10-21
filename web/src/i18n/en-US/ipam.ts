@@ -1,4 +1,5 @@
 export default {
+  title: 'IP Address Management',
   subnets: 'Subnets', subnet: 'Subnet', cidr: 'CIDR', vlan: 'VLAN', gateway: 'Gateway',
   desc: 'Description', used: 'Used', unused: 'Unused', free: 'Unused',
   status: 'Status', user: 'Owner', owner: 'Owner', mac: 'MAC Address', office: 'Office',

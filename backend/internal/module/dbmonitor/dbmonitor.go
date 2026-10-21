@@ -151,7 +151,11 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 	g.GET("/instances/:id/history", func(c *gin.Context) {
 		id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
 		end := time.Now()
-		start := end.Add(-24 * time.Hour)
+		dur := 24 * time.Hour
+		if h, err := strconv.Atoi(c.Query("hours")); err == nil && h >= 1 && h <= 72 {
+			dur = time.Duration(h) * time.Hour
+		}
+		start := end.Add(-dur)
 		tags := map[string]string{"db_id": strconv.FormatUint(id, 10)}
 		q := func(metric string) [][2]float64 {
 			s, _ := a.TSDB.Query(tsdb.Query{Metric: metric, Tags: tags, Start: start, End: end, Bucket: 5 * time.Minute, Agg: "avg"})

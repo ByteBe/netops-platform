@@ -7,11 +7,11 @@ export interface ApiBody<T = unknown> {
 
 export const OK = 0
 
-// 调色板：为链路/规则分配区分颜色
+// 调色板：为链路/规则分配区分颜色（精密仪表系列色：低饱和、灰底可读）
 export const PALETTE = [
-  '#2f6bff', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6',
-  '#06b6d4', '#ec4899', '#84cc16', '#f97316', '#14b8a6',
-  '#6366f1', '#e11d48', '#0ea5e9', '#a3e635', '#d946ef'
+  '#d95f1f', '#3a6fb0', '#4f9e63', '#b5893a', '#c0503d',
+  '#7a63c9', '#2f8f83', '#a8648f', '#5f7a99', '#8a9a3a',
+  '#c2733a', '#4f6fb8', '#9e5d3c', '#7f8f2f', '#9a6c4d'
 ]
 
 export function pickColor(index: number): string {
@@ -84,4 +84,20 @@ export function downloadText(filename: string, content: string, mime = 'text/pla
   a.click()
   document.body.removeChild(a)
   URL.revokeObjectURL(url)
+}
+
+// 读取 CSS 设计令牌（ECharts canvas 不解析 CSS 变量，需显式取色）
+export function cssVar(name: string, fallback = ''): string {
+  if (typeof document === 'undefined') return fallback
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  return v || fallback
+}
+
+// 图表暗/亮适配色：按主题从设计令牌取轴/网格线颜色
+export function chartAxisColors(): { axis: string; split: string; axisLine: string } {
+  return {
+    axis: cssVar('--np-chart-axis', '#6b7a96'),
+    split: cssVar('--np-chart-split', 'rgba(107, 122, 150, 0.25)'),
+    axisLine: cssVar('--np-chart-axisline', '#c9d2e0')
+  }
 }

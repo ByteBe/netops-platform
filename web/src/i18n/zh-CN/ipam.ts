@@ -1,4 +1,5 @@
 export default {
+  title: 'IP地址管理',
   subnets: '网段', subnet: '网段', cidr: 'CIDR', vlan: 'VLAN', gateway: '网关',
   desc: '用途说明', used: '已使用', unused: '未使用', free: '未使用',
   status: '使用状态', user: '使用人', owner: '使用人', mac: 'MAC地址',

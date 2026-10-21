@@ -1,4 +1,13 @@
 export default {
+  title: 'Database Monitor',
+  desc: 'Collects availability, capacity, connections, transactions and errors per instance',
+  totalInstances: 'Instances',
+  onlineInstances: 'Online',
+  offlineInstances: 'Offline',
+  cpuUsage: 'CPU Usage',
+  memUsage: 'Memory',
+  running: 'Running',
+  down: 'Offline',
   instanceName: 'Instance Name', dbType: 'Database Type', host: 'Host', port: 'Port',
   user: 'User', password: 'Password', addInstance: 'Add Instance', editInstance: 'Edit Instance',
   availability: 'Availability', status: 'Status', version: 'Version',

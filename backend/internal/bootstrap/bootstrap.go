@@ -10,6 +10,7 @@ import (
 	"netops/internal/config"
 	"netops/internal/core"
 	"netops/internal/module"
+	"netops/internal/module/tsarchive"
 )
 
 // AllModels 全部业务表
@@ -31,7 +32,6 @@ func InitMCPServer(a *core.App) { appinit.InitMCPServer(a) }
 func Init(cfg *config.Config) (*core.App, error) {
 	// 自动创建运行时目录（无论选择什么数据库）
 	os.MkdirAll("data", 0o755)
-	os.MkdirAll("data/uploads", 0o755)
 	os.MkdirAll("logs", 0o755)
 
 	if err := logger.Init("logs"); err != nil {
@@ -53,6 +53,7 @@ func Init(cfg *config.Config) (*core.App, error) {
 		app.InitRuntime()
 		appinit.InitMCPServer(app)
 		appinit.SyncManagers(app)
+		tsarchive.Start(app)
 		logger.Infof("平台初始化完成：数据库=%s 时序库=%s", cfg.Database.Type, cfg.TSDB.Type)
 	} else {
 		logger.Infof("平台尚未初始化，等待初始化向导（数据库/时序库/管理员）")

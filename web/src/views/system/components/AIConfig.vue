@@ -55,8 +55,11 @@ async function test(a: AIConfig) {
 </script>
 <template>
   <div>
-    <div class="np-toolbar"><div class="spacer"></div><el-button type="primary" @click="open()">{{ t('system.addAi') }}</el-button></div>
     <div class="np-card">
+      <div class="card-head-row">
+        <div class="np-card-title">{{ t('system.ai') }}</div>
+        <el-button type="primary" @click="open()">{{ t('system.addAi') }}</el-button>
+      </div>
       <el-table :data="list" stripe class="np-table">
         <el-table-column prop="name" :label="t('common.name')" min-width="120" />
         <el-table-column prop="provider" :label="t('system.provider')" width="110" />
@@ -97,6 +100,34 @@ async function test(a: AIConfig) {
       </el-form>
       <template #footer><el-button @click="dlg=false">{{ t('system.cancel') }}</el-button><el-button type="primary" @click="save">{{ t('system.save') }}</el-button></template>
     </el-dialog>
-    <el-dialog v-model="replyVisible" :title="t('system.testReply')" width="500px"><pre style="white-space:pre-wrap">{{ reply }}</pre></el-dialog>
+    <el-dialog v-model="replyVisible" :title="t('system.testReply')" width="500px">
+      <pre class="reply-pre">{{ reply }}</pre>
+    </el-dialog>
   </div>
 </template>
+
+<style scoped>
+.card-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.card-head-row .np-card-title { margin-bottom: 0; }
+.reply-pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--np-surface-1);
+  border: 1px solid var(--np-border);
+  color: var(--np-text-1);
+  font-size: 13px;
+  line-height: 1.7;
+  max-height: 360px;
+  overflow: auto;
+}
+</style>

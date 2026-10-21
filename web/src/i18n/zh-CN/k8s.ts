@@ -19,5 +19,13 @@ export default {
   mem: '内存', role: '角色',
   editCluster: '编辑集群', addClusterTitle: '添加集群',
   testConn: '测试连接',
-  cancel: '取消', save: '保存'
+  cancel: '取消', save: '保存',
+  cpu: 'CPU',
+  pageDesc: '接入 Kubernetes 集群，查看集群与节点运行状态与资源占用',
+  clusterTotal: '集群总数', onlineCluster: '在线集群',
+  nodeTotal: '节点总数', readyNode: '就绪节点',
+  clusterEmptyTitle: '暂无集群',
+  clusterEmptyDesc: '点击右上角「添加集群」接入 Kubernetes 集群',
+  nodeEmptyTitle: '暂无节点',
+  nodeEmptyDesc: '集群采集完成后，节点将在此展示'
 }

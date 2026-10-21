@@ -43,16 +43,16 @@ function flushRules() {
 
 <template>
   <div class="np-card">
-    <div v-if="!selected" style="text-align:center;padding:80px 0;color:#909399">
-      <div style="font-size:40px;margin-bottom:10px">👈</div>
-      <div>{{ t('script.selectFeature') }}</div>
+    <div v-if="!selected" class="np-empty-box">
+      <div class="np-empty-icon"><el-icon><Pointer /></el-icon></div>
+      <div class="np-empty-title">{{ t('script.selectFeature') }}</div>
     </div>
     <template v-else>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-        <span style="font-size:22px">{{ selected.icon }}</span>
-        <span style="font-size:15px;font-weight:600">{{ selected.name }}</span>
+      <div class="pf-head">
+        <span class="pf-icon">{{ selected.icon }}</span>
+        <span class="pf-name">{{ selected.name }}</span>
       </div>
-      <div style="font-size:12px;color:#909399;margin-bottom:14px">{{ selected.desc }}</div>
+      <div class="pf-desc">{{ selected.desc }}</div>
       <el-form v-if="selected.code !== 'route_policy'" :model="params" label-position="top" size="default">
         <el-form-item v-for="f in visibleFields" :key="f.key" :label="`${f.label}${required(f) ? ' *' : ''}`">
           <el-select v-if="f.type === 'select'" :model-value="params[f.key]" style="width:100%" @update:model-value="(v: any) => set(f.key, String(v))">
@@ -73,8 +73,8 @@ function flushRules() {
           </el-form-item>
         </el-form>
         <template v-if="params.enable_prefix === 'on'">
-          <div style="display:grid;grid-template-columns:100px 120px 90px 110px 200px 80px;gap:10px;align-items:center;margin-bottom:10px;padding:10px;background:var(--np-hover);border-radius:6px">
-            <span style="font-size:14px;color:#303133;font-weight:500">{{ t('script.prefixName') }}</span>
+          <div style="display:grid;grid-template-columns:100px 120px 90px 110px 200px 80px;gap:10px;align-items:center;margin-bottom:10px;padding:10px;background:var(--np-hover);border:1px solid var(--np-border);border-radius:6px">
+            <span style="font-size:14px;color:var(--np-text-1);font-weight:500">{{ t('script.prefixName') }}</span>
             <el-input size="default" :model-value="params.prefix" placeholder="如TO-beijing" @update:model-value="(v:any)=>set('prefix',v)" />
             <el-input size="default" :model-value="params.pfx_index" :placeholder="t('script.seq')" @update:model-value="(v:any)=>set('pfx_index',String(v))" />
             <el-select size="default" :model-value="params.pfx_action || 'permit'" @update:model-value="(v:any)=>set('pfx_action',String(v))">
@@ -83,8 +83,8 @@ function flushRules() {
             <el-input size="default" :model-value="params.pfx_net" :placeholder="t('script.matchNet')" @update:model-value="(v:any)=>set('pfx_net',v)" />
             <el-input size="default" :model-value="params.pfx_masklen" :placeholder="t('script.mask')" @update:model-value="(v:any)=>set('pfx_masklen',String(v))" />
           </div>
-          <div v-for="(r,i) in rules" :key="i" style="display:grid;grid-template-columns:100px 120px 90px 110px 200px 80px 40px;gap:10px;align-items:center;margin-bottom:8px;padding:8px 10px;background:var(--np-hover);border-radius:6px">
-            <span style="font-size:14px;color:#303133">{{ params.prefix || '' }}</span>
+          <div v-for="(r,i) in rules" :key="i" style="display:grid;grid-template-columns:100px 120px 90px 110px 200px 80px 40px;gap:10px;align-items:center;margin-bottom:8px;padding:8px 10px;background:var(--np-hover);border:1px solid var(--np-border);border-radius:6px">
+            <span style="font-size:14px;color:var(--np-text-1)">{{ params.prefix || '' }}</span>
             <el-input size="default" v-model="r.idx" :placeholder="t('script.seq')" />
             <el-select size="default" v-model="r.act">
               <el-option label="permit" value="permit"/><el-option label="deny" value="deny"/>
@@ -96,7 +96,15 @@ function flushRules() {
           <el-button size="small" style="margin-bottom:10px" @click="addRule">{{ t('script.addRow') }}</el-button>
         </template>
       </div>
-      <el-button type="success" size="large" style="width:100%" :loading="loading" @click="flushRules();emit('gen')">⚡ {{ t('script.generate') }}</el-button>
+      <el-button type="primary" size="large" class="gen-btn" :loading="loading" @click="flushRules();emit('gen')">⚡ {{ t('script.generate') }}</el-button>
     </template>
   </div>
 </template>
+
+<style scoped>
+.pf-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.pf-icon { font-size: 22px; line-height: 1; }
+.pf-name { font-size: 15px; font-weight: 600; color: var(--np-text-1); }
+.pf-desc { font-size: 12px; color: var(--np-text-2); margin-bottom: 14px; line-height: 1.6; }
+.gen-btn { width: 100%; }
+</style>

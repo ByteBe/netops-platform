@@ -21,5 +21,12 @@ export default {
   editHost: 'Edit Host', addHostTitle: 'Add Host',
   addrPlaceholder: 'Empty=local; remote tcp://IP:2375',
   testConn: 'Test Connection',
-  cancel: 'Cancel', save: 'Save'
+  cancel: 'Cancel', save: 'Save',
+  pageDesc: 'Manage Docker hosts; monitor container status and resource usage',
+  hostTotal: 'Hosts', onlineHosts: 'Online Hosts',
+  ctnTotal: 'Containers', runningCtn: 'Running',
+  hostEmptyTitle: 'No Docker hosts',
+  hostEmptyDesc: 'Click "Add Host" to register local or remote Docker hosts',
+  ctnEmptyTitle: 'No containers',
+  ctnEmptyDesc: 'Running containers appear here after host collection'
 }

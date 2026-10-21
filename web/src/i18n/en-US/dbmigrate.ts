@@ -1,5 +1,6 @@
 export default {
   title: 'Database Migration',
+  pageDesc: 'View current DB connection, switch business/TS database and run schema migration',
   runMigrate: 'Run Migration on Current DB',
   dbType: 'DB Type', tsdb: 'Time-Series DB', host: 'Host',
   dbNamePath: 'DB Name/Path', user: 'User', pool: 'Pool',
@@ -13,12 +14,14 @@ export default {
   migrateDone: 'Migration done', failed: 'Failed', saved: 'Saved',
   restarting: 'Restarting', restartMsg: 'Service is restarting, please refresh later',
   t_users: 'Users', t_audit: 'Audit Logs', t_groups: 'Device Groups', t_devices: 'Monitored Devices',
-  t_link: 'Link Check Tasks', t_topoDev: 'Topo Devices', t_topoLink: 'Topo Links', t_topoIp: 'Topo Link IPs',
+  t_link: 'Link Check Tasks',
   t_db: 'DB Instances', t_tpl: 'Script Templates', t_hist: 'Script History',
   t_subnet: 'Subnets', t_ip: 'IP Records', t_bind: 'Bind Devices', t_traffic: 'Traffic Rules',
   t_ai: 'AI Config', t_mcp: 'MCP Agents', t_email: 'Email Config',
   t_report: 'Report Records', t_setting: 'System Settings', t_docker: 'Docker Hosts',
   t_k8s: 'K8s Clusters', t_tskv: 'TS Data',
   t_nginx: 'Nginx Instances', t_backupDev: 'Config Backup Devices', t_taskLog: 'Task Logs', t_devLog: 'Device Logs', t_aiReport: 'AI Inspection Reports',
-  t_nodes: 'Nodes', t_backup: 'Config Backups', t_alertRule: 'Alert Rules', t_alertEvent: 'Alert Events', t_notify: 'Notify Channels'
+  t_nodes: 'Nodes', t_backup: 'Config Backups', t_alertRule: 'Alert Rules', t_alertEvent: 'Alert Events', t_notify: 'Notify Channels',
+  t_nodeContainer: 'Child Containers', t_nodeLink: 'Child Links', t_tsArchive: 'TS Archives', t_tsArchiveRetry: 'Archive Retries',
+  t_cert: 'Node Certificates'
 }

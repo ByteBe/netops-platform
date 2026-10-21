@@ -1,10 +1,11 @@
 <script setup lang="ts">
 // 资源管理：将纳管设备分组分类管理
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { getEnc, postEnc, putEnc, delEnc } from '@/utils/request'
 import { useAuthStore } from '@/stores/auth'
+import { pickColor } from '@/utils'
 
 const { t } = useI18n()
 
@@ -23,13 +24,14 @@ interface GroupDevice {
 }
 
 const groups = ref<DeviceGroup[]>([])
+const totalDevices = computed(() => groups.value.reduce((sum, g) => sum + (g.device_count || 0), 0))
 const groupTypeMap: Record<string, string> = {
   switch: t('resource.switch'), router: t('resource.router'), firewall: t('resource.firewall'),
   server: t('resource.server'), database: t('resource.database'), other: t('resource.other')
 }
 
 const dialogVisible = ref(false)
-const form = reactive<DeviceGroup>({ id: 0, name: '', type: 'other', color: '#2f6bff', remark: '', device_count: 0 })
+const form = reactive<DeviceGroup>({ id: 0, name: '', type: 'other', color: pickColor(0), remark: '', device_count: 0 })
 
 const devicesVisible = ref(false)
 const devicesLoading = ref(false)
@@ -43,7 +45,7 @@ async function load() {
 }
 
 function openAdd() {
-  Object.assign(form, { id: 0, name: '', type: 'other', color: '#2f6bff', remark: '', device_count: 0 })
+  Object.assign(form, { id: 0, name: '', type: 'other', color: pickColor(groups.value.length), remark: '', device_count: 0 })
   dialogVisible.value = true
 }
 function openEdit(g: DeviceGroup) {
@@ -131,26 +133,47 @@ onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
 
 <template>
   <div class="np-page">
-    <div class="np-toolbar">
-      <span class="np-page-desc">{{ t('resource.desc') }}</span>
-      <div class="spacer"></div>
-      <el-button @click="autoAssign">
-        <el-icon><MagicStick /></el-icon>{{ t('resource.autoAssign') }}
-      </el-button>
-      <el-button @click="triggerImport">
-        <el-icon><Upload /></el-icon>{{ t('resource.importCsv') }}
-      </el-button>
-      <el-button @click="downloadTemplate">
-        <el-icon><Download /></el-icon>{{ t('resource.downloadTemplate') }}
-      </el-button>
-      <input ref="importFile" type="file" accept=".csv" style="display:none" @change="onImport" />
-      <el-button type="primary" @click="openAdd">
-        <el-icon><Plus /></el-icon>{{ t('common.add') }}
-      </el-button>
+    <div class="np-page-head">
+      <div class="np-page-head-info">
+        <div class="np-page-head-title">{{ t('resource.title') }}</div>
+        <div class="np-page-head-desc">{{ t('resource.desc') }}</div>
+      </div>
+      <div class="np-page-head-actions">
+        <el-button @click="autoAssign">
+          <el-icon><MagicStick /></el-icon>{{ t('resource.autoAssign') }}
+        </el-button>
+        <el-button @click="triggerImport">
+          <el-icon><Upload /></el-icon>{{ t('resource.importCsv') }}
+        </el-button>
+        <el-button @click="downloadTemplate">
+          <el-icon><Download /></el-icon>{{ t('resource.downloadTemplate') }}
+        </el-button>
+        <input ref="importFile" type="file" accept=".csv" style="display:none" @change="onImport" />
+        <el-button type="primary" @click="openAdd">
+          <el-icon><Plus /></el-icon>{{ t('common.add') }}
+        </el-button>
+      </div>
     </div>
 
-    <div class="np-group-grid">
-      <div v-for="g in groups" :key="g.id" class="np-card np-group-card" :style="{ borderTop: `4px solid ${g.color}` }" @click="showDevices(g)" style="cursor:pointer">
+    <div class="np-kpi-grid">
+      <div class="np-kpi">
+        <div class="np-kpi-icon is-info"><el-icon><FolderOpened /></el-icon></div>
+        <div class="np-kpi-body">
+          <div class="np-kpi-value">{{ groups.length }}</div>
+          <div class="np-kpi-label">{{ t('resource.groups') }}</div>
+        </div>
+      </div>
+      <div class="np-kpi">
+        <div class="np-kpi-icon is-success"><el-icon><Monitor /></el-icon></div>
+        <div class="np-kpi-body">
+          <div class="np-kpi-value">{{ totalDevices }}</div>
+          <div class="np-kpi-label">{{ t('resource.devicesTotal') }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="groups.length" class="np-group-grid">
+      <div v-for="g in groups" :key="g.id" class="np-card np-group-card" :style="g.color ? { borderTop: '4px solid ' + g.color } : {}" @click="showDevices(g)">
         <div class="np-group-head">
           <el-icon :size="26" :color="g.color"><Folder /></el-icon>
           <div>
@@ -164,7 +187,13 @@ onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
           <el-button size="small" text type="danger" @click="remove(g)">{{ t('common.delete') }}</el-button>
         </div>
       </div>
-      <div v-if="!groups.length" class="np-card np-empty">{{ t('common.noData') }}</div>
+    </div>
+    <div v-else class="np-card">
+      <div class="np-empty-box">
+        <el-icon class="np-empty-icon"><FolderOpened /></el-icon>
+        <div class="np-empty-title">{{ t('common.noData') }}</div>
+        <div class="np-empty-desc">{{ t('resource.desc') }}</div>
+      </div>
     </div>
 
     <el-dialog v-model="dialogVisible" :title="form.id ? t('common.edit') : t('common.add')" width="460px">
@@ -191,12 +220,12 @@ onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
     </el-dialog>
 
     <el-dialog v-model="devicesVisible" :title="`${t('resource.groupDevices')} - ${currentGroup?.name}`" width="820px">
-      <div style="margin-bottom:10px;display:flex;gap:8px">
+      <div class="dialog-actions">
         <el-button size="small" @click="batchAction('enable')">{{ t('resource.batchEnable') }}</el-button>
         <el-button size="small" @click="batchAction('disable')">{{ t('resource.batchDisable') }}</el-button>
         <el-button size="small" type="success" @click="batchAction('test')">{{ t('resource.batchTest') }}</el-button>
       </div>
-      <el-table :data="groupDevices" v-loading="devicesLoading" size="small" stripe @selection-change="(v:any)=>selected=v">
+      <el-table :data="groupDevices" v-loading="devicesLoading" size="small" stripe class="np-table" @selection-change="(v:any)=>selected=v">
         <el-table-column type="selection" width="40" />
         <el-table-column prop="name" :label="t('resource.name')" min-width="140" />
         <el-table-column prop="ip" :label="t('resource.ipAddr')" min-width="130" />
@@ -215,13 +244,15 @@ onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
           </template>
         </el-table-column>
       </el-table>
-      <div v-if="!groupDevices.length && !devicesLoading" style="text-align:center;color:#999;padding:30px">{{ t('resource.empty') }}</div>
+      <div v-if="!groupDevices.length && !devicesLoading" class="np-empty-box">
+        <el-icon class="np-empty-icon"><Box /></el-icon>
+        <div class="np-empty-title">{{ t('resource.empty') }}</div>
+      </div>
     </el-dialog>
   </div>
 </template>
 
 <style lang="scss">
-.np-page-desc { color: var(--np-text-2); font-size: 13px; }
 .np-group-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -229,16 +260,27 @@ onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
 }
 .np-group-card {
   display: flex; flex-direction: column; gap: 10px;
-  transition: transform .15s, box-shadow .15s;
-  &:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,.1); }
+  cursor: pointer;
+  transition: border-color 0.18s ease-out, box-shadow 0.18s ease-out, transform 0.18s ease-out;
+  &:hover {
+    border-color: var(--np-border-strong);
+    box-shadow: var(--np-shadow-md);
+    transform: translateY(-1px);
+  }
   .np-group-head {
     display: flex; align-items: center; gap: 10px;
-    .np-group-name { font-size: 16px; font-weight: 600; }
+    .np-group-name { font-size: 16px; font-weight: 600; color: var(--np-text-1); }
   }
-  .np-group-count { font-size: 13px; color: var(--np-text-2); }
+  .np-group-count {
+    font-size: 13px; color: var(--np-text-2);
+    font-variant-numeric: tabular-nums;
+  }
   .np-group-actions {
     display: flex; justify-content: flex-end;
     border-top: 1px solid var(--np-border); padding-top: 6px;
   }
+}
+.dialog-actions {
+  display: flex; gap: 8px; margin-bottom: 10px;
 }
 </style>

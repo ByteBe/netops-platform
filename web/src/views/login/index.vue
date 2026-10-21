@@ -97,11 +97,12 @@ onMounted(async () => {
 
 <template>
   <div class="np-login">
-    <div class="np-login-bg"></div>
     <div class="np-login-card">
       <div class="np-login-head">
         <div class="np-login-logo">
-          <el-icon :size="34" color="#2f6bff"><Monitor /></el-icon>
+          <span class="np-login-mark">
+            <el-icon :size="24"><Monitor /></el-icon>
+          </span>
         </div>
         <h1>{{ t('app.name') }}</h1>
         <p>{{ t('login.title') }}</p>

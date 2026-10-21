@@ -1,5 +1,7 @@
 export default {
   title: '日志中心',
+  pageDesc: '设备日志与采集任务日志的集中查询、检索与详情查看',
+  detailTitle: '日志详情',
   tabDevice: '设备日志',
   tabTask: '采集任务日志',
   refresh: '刷新',

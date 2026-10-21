@@ -1,5 +1,8 @@
 export default {
+  title: 'Resource Management',
   desc: 'Group monitored devices by resource',
+  groups: 'Resource Groups',
+  devicesTotal: 'Managed Devices',
   autoAssign: 'Auto Assign',
   devices: 'devices',
   color: 'Color',

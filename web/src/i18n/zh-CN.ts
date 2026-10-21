@@ -4,7 +4,6 @@ import common from './zh-CN/common'
 import login from './zh-CN/login'
 import dashboard from './zh-CN/dashboard'
 import link from './zh-CN/link'
-import topo from './zh-CN/topo'
 import monitor from './zh-CN/monitor'
 import container from './zh-CN/container'
 import report from './zh-CN/report'
@@ -27,9 +26,10 @@ import bgp from './zh-CN/bgp'
 import tasklog from './zh-CN/tasklog'
 import devicelog from './zh-CN/devicelog'
 import nginx from './zh-CN/nginx'
+import topology from './zh-CN/topology'
 
 export default {
-  app, nav, common, login, dashboard, link, topo, monitor, container,
+  app, nav, common, login, dashboard, link, monitor, container,
   report, alert, resource, subnet, node, dbmon, script, ipam, traffic,
-  system, profile, theme, lang, k8s, dbmigrate, setup, bgp, tasklog, devicelog, nginx
+  system, profile, theme, lang, k8s, dbmigrate, setup, bgp, tasklog, devicelog, nginx, topology
 }

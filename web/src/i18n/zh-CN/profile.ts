@@ -4,5 +4,6 @@ export default {
   admin: '管理员', user: '普通用户',
   pwdMismatch: '两次输入的新密码不一致',
   pwdStrength: '密码强度要求：大于 12 位，且必须包含大写字母、小写字母、数字、符号',
-  oldPwd: '旧密码', newPwd: '新密码', confirmPwd: '确认新密码'
+  oldPwd: '旧密码', newPwd: '新密码', confirmPwd: '确认新密码',
+  pageDesc: '查看账号资料，管理登录密码'
 }

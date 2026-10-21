@@ -1,5 +1,7 @@
 export default {
   title: 'Log Center',
+  pageDesc: 'Centralized query, search and detail view for device and task logs',
+  detailTitle: 'Log Detail',
   tabDevice: 'Device Logs',
   tabTask: 'Task Logs',
   refresh: 'Refresh',

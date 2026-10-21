@@ -1,5 +1,11 @@
-// SCSS 设计令牌（亮/暗主题通过 CSS 变量覆盖）
-$font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+// =============================================================
+// NetOps Platform 设计令牌 —— 设计语言：精密仪表（Precision Instrument）
+// 石墨墨色冷中性（蓝灰倾向）+ 单一信号橙强调色；发丝级描边；表格数字对齐
+// 禁止：玻璃拟态（半透明模糊层/光斑/粒子）、渐变文字、纯黑/纯白
+// 全部使用 oklch / color-mix，暗色下靠表面亮度分层而非阴影
+// =============================================================
+
+$font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
 
 @mixin ellipsis {
   overflow: hidden;
@@ -7,51 +13,97 @@ $font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
   white-space: nowrap;
 }
 
-$color-primary: #2f6bff;
-$color-success: #22c55e;
-$color-warning: #f59e0b;
-$color-danger: #ef4444;
-$color-info: #64748b;
-
+// 圆角（仪表风格：紧凑、克制）
 $radius-sm: 6px;
-$radius-md: 10px;
-$radius-lg: 16px;
+$radius-md: 8px;
+$radius-lg: 12px;
 
-$shadow-card: 0 6px 20px rgba(47, 107, 255, 0.08), inset 0 1px 0 rgba(255,255,255,.8);
-$shadow-float: 0 16px 40px rgba(47, 107, 255, 0.16), inset 0 1px 0 rgba(255,255,255,.9);
-
-$sidebar-width: 220px;
+$sidebar-width: 228px;
 $header-height: 56px;
 
-// 主题变量（默认亮色，暗色在 html.dark 下覆盖）
+// ===== 亮色主题：冷石墨纸面 =====
 :root {
-  --np-bg: #f5f7fb;
-  --np-bg-elevated: #ffffff;
-  --np-text-1: #1e293b;
-  --np-text-2: #64748b;
-  --np-border: #e2e8f0;
-  --np-primary: #{$color-primary};
-  --np-primary-weak: rgba(47, 107, 255, 0.08);
-  --np-sidebar-bg: #ffffff;
-  --np-card-bg: #ffffff;
-  --np-header-bg: rgba(255, 255, 255, 0.82);
-  --np-shadow: #{$shadow-card};
-  --np-hover: rgba(15, 23, 42, 0.04);
-  --np-monitor-bg: #0b1220;
-  --np-monitor-text: #e2e8f0;
+  // 表面与背景
+  --np-bg: oklch(96.6% 0.007 255);           // 页面底色：冷灰纸
+  --np-bg-elevated: oklch(99.1% 0.003 255);  // 抬升表面：卡片 / 顶栏 / 侧栏
+  --np-surface-1: oklch(97.9% 0.005 255);    // 表格行 / 次级表面
+  --np-surface-2: oklch(93.6% 0.011 255);    // 悬浮 / 凹陷区
+  // 文字层次（墨色，蓝灰倾向，非纯黑）
+  --np-text-1: oklch(22% 0.021 260);         // 主文字
+  --np-text-2: oklch(46% 0.025 255);         // 次级文字
+  --np-text-3: oklch(61% 0.02 255);          // 弱化 / 占位
+  // 描边（发丝线）
+  --np-border: oklch(88.4% 0.012 255);
+  --np-border-strong: oklch(78.5% 0.019 255);
+  // 强调色：信号橙（工程仪表），用量克制
+  --np-primary: oklch(59% 0.19 42);
+  --np-primary-strong: oklch(53% 0.2 42);
+  --np-primary-weak: oklch(94.5% 0.045 42);  // 橙色弱底（图标 / 激活态）
+  --np-primary-fg: oklch(99% 0.005 42);      // 橙色上的前景文字
+  // 语义色（成功/警告/危险/信息）
+  --np-success: oklch(54% 0.14 152);
+  --np-warning: oklch(70% 0.14 85);
+  --np-danger: oklch(53% 0.21 27);
+  --np-info: oklch(52% 0.09 258);
+  --np-success-weak: oklch(94.5% 0.03 152);
+  --np-warning-weak: oklch(95% 0.035 85);
+  --np-danger-weak: oklch(94.5% 0.04 27);
+  --np-info-weak: oklch(94.5% 0.025 258);
+  // 阴影（亮色：轻、有界）
+  --np-shadow-sm: 0 1px 2px oklch(20% 0.02 260 / 0.07);
+  --np-shadow-md: 0 1px 3px oklch(20% 0.02 260 / 0.06), 0 10px 28px oklch(20% 0.02 260 / 0.07);
+  // 组件表面（兼容旧类名语义，全部指向新表面）
+  --np-card-bg: var(--np-bg-elevated);
+  --np-sidebar-bg: var(--np-bg-elevated);
+  --np-header-bg: var(--np-bg-elevated);
+  --np-table-bg: var(--np-surface-1);
+  --np-hover: var(--np-surface-2);
+  // 数据大屏（统一走主题，不再自带暗色底）
+  --np-monitor-bg: var(--np-bg);
+  --np-monitor-text: var(--np-text-1);
+  // 焦点环
+  --np-focus: oklch(62% 0.17 42);
+  // 图表取色（ECharts 不解析 CSS 变量，由 chartAxisColors() 显式读取）
+  --np-chart-axis: oklch(46% 0.025 255);
+  --np-chart-split: oklch(78.5% 0.019 255 / 0.5);
+  --np-chart-axisline: oklch(78.5% 0.019 255);
 }
 
+// ===== 暗色主题：深石墨蓝（非纯黑），深度靠表面亮度分层 =====
 html.dark {
-  --np-bg: #0f172a;
-  --np-bg-elevated: #1e293b;
-  --np-text-1: #e2e8f0;
-  --np-text-2: #94a3b8;
-  --np-border: #334155;
-  --np-primary: #5b8cff;
-  --np-primary-weak: rgba(91, 140, 255, 0.14);
-  --np-sidebar-bg: #0f172a;
-  --np-card-bg: #1e293b;
-  --np-header-bg: rgba(15, 23, 42, 0.82);
-  --np-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
-  --np-hover: rgba(148, 163, 184, 0.1);
+  --np-bg: oklch(15.6% 0.016 262);
+  --np-bg-elevated: oklch(19.6% 0.018 262);
+  --np-surface-1: oklch(19% 0.017 262);
+  --np-surface-2: oklch(23.8% 0.02 262);
+  --np-text-1: oklch(90% 0.007 255);
+  --np-text-2: oklch(69% 0.014 255);
+  --np-text-3: oklch(56% 0.016 255);
+  --np-border: oklch(27.6% 0.02 262);
+  --np-border-strong: oklch(35.5% 0.022 262);
+  --np-primary: oklch(71% 0.155 42);         // 暗色：提亮 + 略降饱和
+  --np-primary-strong: oklch(76% 0.15 42);
+  --np-primary-weak: oklch(29% 0.05 42);
+  --np-primary-fg: oklch(18% 0.02 262);
+  --np-success: oklch(68% 0.13 152);
+  --np-warning: oklch(77% 0.12 85);
+  --np-danger: oklch(63% 0.18 28);
+  --np-info: oklch(67% 0.08 258);
+  --np-success-weak: oklch(24% 0.03 152);
+  --np-warning-weak: oklch(25% 0.03 85);
+  --np-danger-weak: oklch(25% 0.04 28);
+  --np-info-weak: oklch(24% 0.03 258);
+  // 暗色无阴影：深度靠表面亮度
+  --np-shadow-sm: none;
+  --np-shadow-md: none;
+  --np-card-bg: var(--np-bg-elevated);
+  --np-sidebar-bg: var(--np-bg-elevated);
+  --np-header-bg: var(--np-bg-elevated);
+  --np-table-bg: var(--np-surface-1);
+  --np-hover: var(--np-surface-2);
+  --np-monitor-bg: var(--np-bg);
+  --np-monitor-text: var(--np-text-1);
+  --np-focus: oklch(74% 0.14 42);
+  --np-chart-axis: oklch(69% 0.014 255);
+  --np-chart-split: oklch(69% 0.014 255 / 0.14);
+  --np-chart-axisline: oklch(35.5% 0.022 262);
 }

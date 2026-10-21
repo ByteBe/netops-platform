@@ -4,7 +4,6 @@ import common from './en-US/common'
 import login from './en-US/login'
 import dashboard from './en-US/dashboard'
 import link from './en-US/link'
-import topo from './en-US/topo'
 import monitor from './en-US/monitor'
 import container from './en-US/container'
 import report from './en-US/report'
@@ -27,9 +26,10 @@ import bgp from './en-US/bgp'
 import tasklog from './en-US/tasklog'
 import devicelog from './en-US/devicelog'
 import nginx from './en-US/nginx'
+import topology from './en-US/topology'
 
 export default {
-  app, nav, common, login, dashboard, link, topo, monitor, container,
+  app, nav, common, login, dashboard, link, monitor, container,
   report, alert, resource, subnet, node, dbmon, script, ipam, traffic,
-  system, profile, theme, lang, k8s, dbmigrate, setup, bgp, tasklog, devicelog, nginx
+  system, profile, theme, lang, k8s, dbmigrate, setup, bgp, tasklog, devicelog, nginx, topology
 }

@@ -41,13 +41,29 @@ async function changePwd() {
 </script>
 
 <template>
-  <div class="np-page" style="max-width: 720px">
-    <div class="np-card">
-      <div class="np-card-title">
-        <el-icon><User /></el-icon>
-        <span>{{ t('profile.info') }}</span>
+  <div class="np-page np-profile">
+    <!-- 统一页头 -->
+    <div class="np-page-head">
+      <div class="np-page-head-info">
+        <div class="np-page-head-title"><el-icon><User /></el-icon>{{ t('profile.info') }}</div>
+        <div class="np-page-head-desc">{{ t('profile.pageDesc') }}</div>
       </div>
-      <el-descriptions :column="2" border>
+    </div>
+
+    <!-- 个人信息 -->
+    <div class="np-card">
+      <div class="np-profile-hero">
+        <el-avatar :size="56" class="np-profile-avatar">
+          {{ (auth.user?.username || '?').slice(0, 1).toUpperCase() }}
+        </el-avatar>
+        <div class="np-profile-hero-info">
+          <div class="np-profile-name">{{ auth.user?.username }}</div>
+          <el-tag size="small" type="primary" class="np-profile-role">
+            {{ auth.user?.role === 'admin' ? t('profile.admin') : t('profile.user') }}
+          </el-tag>
+        </div>
+      </div>
+      <el-descriptions :column="2" border class="np-profile-desc">
         <el-descriptions-item :label="t('profile.username')">{{ auth.user?.username }}</el-descriptions-item>
         <el-descriptions-item :label="t('profile.employeeNo')">{{ auth.user?.employee_no || '—' }}</el-descriptions-item>
         <el-descriptions-item :label="t('profile.email')">{{ auth.user?.email || '—' }}</el-descriptions-item>
@@ -57,13 +73,14 @@ async function changePwd() {
       </el-descriptions>
     </div>
 
+    <!-- 修改密码 -->
     <div class="np-card">
       <div class="np-card-title">
         <el-icon><Lock /></el-icon>
         <span>{{ t('profile.changePwd') }}</span>
       </div>
-      <el-alert type="info" :closable="false" :title="t('profile.pwdStrength')" style="margin-bottom: 14px" />
-      <el-form :model="pwdForm" label-width="120px" style="max-width: 460px">
+      <el-alert type="info" :closable="false" :title="t('profile.pwdStrength')" class="np-pwd-alert" />
+      <el-form :model="pwdForm" label-width="120px" class="np-pwd-form">
         <el-form-item :label="t('profile.oldPwd')">
           <el-input v-model="pwdForm.old_password" type="password" show-password />
         </el-form-item>
@@ -81,4 +98,50 @@ async function changePwd() {
   </div>
 </template>
 
-<style lang="scss"></style>
+<style lang="scss" scoped>
+.np-profile {
+  max-width: 720px;
+}
+
+.np-profile-hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--np-border);
+}
+
+.np-profile-avatar {
+  flex: none;
+  background: var(--np-primary);
+  color: var(--np-primary-fg);
+  font-size: 22px;
+  font-weight: 700;
+  border: 1px solid var(--np-primary);
+}
+
+.np-profile-hero-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.np-profile-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--np-text-1);
+}
+
+.np-profile-desc {
+  margin-top: 4px;
+}
+
+.np-pwd-alert {
+  margin-bottom: 16px;
+}
+
+.np-pwd-form {
+  max-width: 460px;
+}
+</style>

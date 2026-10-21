@@ -39,7 +39,7 @@ func main() {
   ██║╚██╗██║██╔══╝     ██║       ██║  ██║██║   ██║██║  ██║██╔══╝
   ██║ ╚████║███████╗   ██║       ██████╔╝╚██████╔╝██████╔╝███████╗
   ╚═╝  ╚═══╝╚══════╝   ╚═╝       ╚═════╝  ╚═════╝ ╚═════╝ ╚══════╝
-  NetOps 网络运维监控平台 v2.2.1 | AI巡检 · 日志中心 · 告警通知
+  NetOps 网络运维监控平台 v2.2.2 | AI巡检 · 日志中心 · 告警通知
 `)
 
 	// 1. 加载配置（支持 --config 指定，缺省自动探测 ./config.yaml 与可执行文件同目录）
@@ -58,9 +58,6 @@ func main() {
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
 	engine.Use(gin.Recovery())
-
-	// 3.1 上传文件静态服务（/uploads/ 映射到 data/uploads/）
-	engine.Static("/uploads", "./data/uploads")
 
 	// 3.2 前端资源：默认由 API 端口提供；配置了独立前端端口(web_port>0)时改由独立端口提供
 	webDir := "./web"
@@ -180,6 +177,8 @@ func mountFrontend(engine *gin.Engine, webDir string) {
 					return
 				}
 			}
+			// SPA 入口：禁止强缓存，确保升级后刷新即拿到最新版本
+			c.Header("Cache-Control", "no-cache, must-revalidate")
 			c.FileFromFS("/", http.FS(sub))
 		})
 	} else {
@@ -207,7 +206,6 @@ func validateWebPort(cfg *config.Config) error {
 
 // buildWebHandler 构建独立前端服务 handler：
 //   - 前端 SPA 静态资源（./web，回退 index.html）
-//   - /uploads 上传文件静态资源
 //   - /api /ws /mcp 反向代理到 API 端口（TLS 模式下走 https 并信任本机证书）
 func buildWebHandler(webDir string, apiPort int, useTLS bool) http.Handler {
 	mux := http.NewServeMux()
@@ -229,9 +227,6 @@ func buildWebHandler(webDir string, apiPort int, useTLS bool) http.Handler {
 		}
 	}
 
-	// 上传文件静态资源
-	mux.Handle("/uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir("./data/uploads"))))
-
 	// 前端 SPA 静态资源（回退 index.html）
 	if st, err := os.Stat(webDir); err == nil && st.IsDir() {
 		sub := os.DirFS(webDir)
@@ -250,6 +245,8 @@ func buildWebHandler(webDir string, apiPort int, useTLS bool) http.Handler {
 					return
 				}
 			}
+			// SPA 入口：禁止强缓存，确保升级后刷新即拿到最新版本
+			w.Header().Set("Cache-Control", "no-cache, must-revalidate")
 			http.ServeFileFS(w, r, sub, "index.html")
 		}))
 	} else {

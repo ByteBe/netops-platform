@@ -1,3 +1,5 @@
+// 登录页：精密仪表风格（与全局同一语言体系）
+// 平面冷石墨底 + 发丝描边面板 + 工程角标框架 + 信号橙品牌块
 .np-login {
   height: 100%;
   display: flex;
@@ -7,30 +9,65 @@
   background: var(--np-bg);
   overflow: hidden;
 
-  &-bg {
-    position: absolute;
+  // 细网格底纹：仪表坐标纸意象（发丝线，低可见度）
+  &::before {
+    content: '';
+    position: fixed;
     inset: 0;
-    background:
-      radial-gradient(600px 400px at 15% 20%, rgba(47, 107, 255, 0.18), transparent 60%),
-      radial-gradient(500px 380px at 85% 80%, rgba(109, 91, 255, 0.16), transparent 60%);
+    z-index: 0;
+    background-image:
+      linear-gradient(to right, var(--np-border) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--np-border) 1px, transparent 1px);
+    background-size: 56px 56px;
+    opacity: 0.4;
+    pointer-events: none;
   }
 
   &-card {
     position: relative;
+    z-index: 1;
     width: 400px;
-    background: var(--np-card-bg);
+    background: var(--np-bg-elevated);
     border: 1px solid var(--np-border);
-    border-radius: $radius-lg;
-    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.16);
+    border-radius: 12px;
+    box-shadow: var(--np-shadow-md);
     padding: 36px 32px 24px;
+
+    // 工程角标框架：左上 / 右下信号橙 L 形角标
+    &::before {
+      content: '';
+      position: absolute;
+      left: -7px;
+      top: -7px;
+      width: 24px;
+      height: 24px;
+      border-left: 1px solid var(--np-primary);
+      border-top: 1px solid var(--np-primary);
+      opacity: 0.8;
+    }
+    &::after {
+      content: '';
+      position: absolute;
+      right: -7px;
+      bottom: -7px;
+      width: 24px;
+      height: 24px;
+      border-right: 1px solid var(--np-primary);
+      border-bottom: 1px solid var(--np-primary);
+      opacity: 0.8;
+    }
   }
 
   &-head {
     text-align: center;
     margin-bottom: 24px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--np-border);
     h1 {
       font-size: 20px;
-      margin: 10px 0 4px;
+      margin: 12px 0 4px;
+      letter-spacing: -0.01em;
+      color: var(--np-text-1);
     }
     p {
       color: var(--np-text-2);
@@ -41,6 +78,17 @@
   &-logo {
     display: flex;
     justify-content: center;
+    .np-login-mark {
+      width: 46px;
+      height: 46px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      background: var(--np-primary);
+      color: var(--np-primary-fg);
+      box-shadow: var(--np-shadow-sm);
+    }
   }
 
   &-btn {
@@ -64,7 +112,7 @@
     line-height: 1.6;
   }
   .np-pwd-rule {
-    color: var(--np-warning, #f59e0b);
+    color: var(--np-warning);
     font-size: 12px;
     margin-bottom: 12px;
   }

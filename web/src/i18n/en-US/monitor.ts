@@ -1,4 +1,9 @@
 export default {
+  title: 'Device Monitor',
+  desc: 'Collects CPU, memory, disk and interface traffic from servers and network devices via SNMP / SSH',
+  totalDevices: 'Devices',
+  onlineDevices: 'Online',
+  offlineDevices: 'Offline',
   deviceName: 'Device Name', ip: 'IP Address', deviceType: 'Device Type',
   snmpVersion: 'SNMP Version', community: 'Community', username: 'SNMPv3 Username',
   authProto: 'Auth Proto', privProto: 'Priv Proto', authPass: 'Auth Pass', privPass: 'Priv Pass',

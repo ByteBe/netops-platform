@@ -21,5 +21,12 @@ export default {
   editHost: '编辑主机', addHostTitle: '添加主机',
   addrPlaceholder: '空=本机；远程 tcp://IP:2375',
   testConn: '测试连接',
-  cancel: '取消', save: '保存'
+  cancel: '取消', save: '保存',
+  pageDesc: '统一纳管 Docker 主机，实时查看容器运行状态与资源占用',
+  hostTotal: '主机总数', onlineHosts: '在线主机',
+  ctnTotal: '容器总数', runningCtn: '运行中',
+  hostEmptyTitle: '暂无 Docker 主机',
+  hostEmptyDesc: '点击右上角「添加主机」接入本机或远程 Docker 主机',
+  ctnEmptyTitle: '暂无容器',
+  ctnEmptyDesc: '主机采集完成后，运行中的容器将在此展示'
 }

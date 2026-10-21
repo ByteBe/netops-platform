@@ -19,5 +19,13 @@ export default {
   mem: 'Memory', role: 'Role',
   editCluster: 'Edit Cluster', addClusterTitle: 'Add Cluster',
   testConn: 'Test Connection',
-  cancel: 'Cancel', save: 'Save'
+  cancel: 'Cancel', save: 'Save',
+  cpu: 'CPU',
+  pageDesc: 'Register Kubernetes clusters; monitor cluster and node status and usage',
+  clusterTotal: 'Clusters', onlineCluster: 'Online Clusters',
+  nodeTotal: 'Nodes', readyNode: 'Ready Nodes',
+  clusterEmptyTitle: 'No clusters',
+  clusterEmptyDesc: 'Click "Add Cluster" to register a Kubernetes cluster',
+  nodeEmptyTitle: 'No nodes',
+  nodeEmptyDesc: 'Nodes appear here after cluster collection'
 }

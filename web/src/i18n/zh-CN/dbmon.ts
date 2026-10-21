@@ -1,4 +1,13 @@
 export default {
+  title: '数据库实例监控',
+  desc: '采集各数据库实例的可用性、容量、连接、事务与错误指标',
+  totalInstances: '实例总数',
+  onlineInstances: '在线实例',
+  offlineInstances: '离线实例',
+  cpuUsage: 'CPU 使用率',
+  memUsage: '内存使用',
+  running: '运行中',
+  down: '离线',
   instanceName: '实例名称', dbType: '数据库类型', host: '主机', port: '端口',
   user: '用户名', password: '密码', addInstance: '新增实例', editInstance: '编辑实例',
   availability: '可用性', status: '运行状态', version: '版本', connections: '连接数',

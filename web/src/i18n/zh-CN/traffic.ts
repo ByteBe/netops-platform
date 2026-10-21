@@ -1,4 +1,5 @@
 export default {
+  title: '流量监控',
   ruleName: '规则名称', device: '监控设备', interface: '接口',
   lineRate: '专线带宽(Mbps)', ifSpeed: '接口带宽(Mbps)', upRate: '上行速率(Mbps)', downRate: '下行速率(Mbps)',
   current: '实时速率', history: '历史流量', in: '下行', out: '上行',

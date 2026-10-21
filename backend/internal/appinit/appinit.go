@@ -23,6 +23,7 @@ import (
 	"netops/internal/model"
 	"netops/internal/module/alert"
 	"netops/internal/module/distributed"
+	"netops/internal/module/tsarchive"
 	"netops/internal/service/mcp"
 	"netops/internal/storage"
 	"netops/internal/tsdb"
@@ -35,8 +36,8 @@ import (
 func AllModels() []any {
 	return []any{
 		&model.User{}, &model.AuditLog{}, &model.DeviceGroup{},
-		&model.MonitorDevice{}, &model.LinkTask{}, &model.TopoDevice{},
-		&model.TopoLink{}, &model.TopoLinkIP{}, &model.DBInstance{}, &model.NginxInstance{},
+		&model.MonitorDevice{}, &model.LinkTask{},
+		&model.DBInstance{}, &model.NginxInstance{},
 		&model.ScriptTemplate{}, &model.ScriptHistory{}, &model.Subnet{},
 		&model.IPRecord{}, &model.BindDevice{}, &model.TrafficRule{},
 		&model.AIConfig{}, &model.MCPAgent{}, &model.EmailConfig{},
@@ -45,6 +46,10 @@ func AllModels() []any {
 		&model.AlertRule{}, &model.AlertEvent{}, &model.NotifyConfig{}, &model.TaskLog{},
 		&model.DeviceLog{},
 		&model.AIInspectReport{},
+		&model.TsArchive{},
+		&model.TsArchiveRetry{},
+		&model.NodeContainer{}, &model.NodeLink{},
+		&model.Certificate{},
 	}
 }
 
@@ -72,6 +77,7 @@ func InitRuntimeAndDB(a *core.App) error {
 	a.InitRuntime()
 	alert.StartEvaluator(a)
 	InitMCPServer(a)
+	tsarchive.Start(a)
 	return nil
 }
 

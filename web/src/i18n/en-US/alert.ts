@@ -1,5 +1,7 @@
 export default {
   title: 'Alert Center', rules: 'Alert Rules', events: 'Alert Events', notify: 'Notify Channels',
+  desc: 'View alert events and manage trigger rules',
+  duration: 'Duration', unitSec: 'Seconds', unitMin: 'Minutes',
   newRule: 'New Rule', metric: 'Metric', threshold: 'Threshold', level: 'Level',
   high: 'Critical', medium: 'Warning', low: 'Info', enabled: 'Enabled', confirm: 'Confirm',
   time: 'Time', nodeOffline: 'Node Offline', cpuHigh: 'CPU High',

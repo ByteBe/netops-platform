@@ -4,5 +4,6 @@ export default {
   admin: 'Admin', user: 'User',
   pwdMismatch: 'New passwords do not match',
   pwdStrength: 'Password must be >12 chars with uppercase, lowercase, digits and symbols',
-  oldPwd: 'Current Password', newPwd: 'New Password', confirmPwd: 'Confirm New Password'
+  oldPwd: 'Current Password', newPwd: 'New Password', confirmPwd: 'Confirm New Password',
+  pageDesc: 'View account details and manage your password'
 }

@@ -49,23 +49,35 @@ onMounted(load)
 </script>
 
 <template>
-  <div style="display:flex;flex-direction:column;gap:12px">
-    <div style="display:flex;align-items:center">
-      <span style="font-size:16px;font-weight:700">⚡ {{ t('script.scriptGen') }}</span>
-      <el-radio-group v-model="vendor" size="default" style="margin-left:16px">
-        <el-radio-button value="huawei">{{ t('script.huawei') }}</el-radio-button>
-        <el-radio-button value="h3c">{{ t('script.h3c') }}</el-radio-button>
-        <el-radio-button value="cisco">{{ t('script.cisco') }}</el-radio-button>
-      </el-radio-group>
-      <div style="flex:1"></div>
-      <el-button size="small" @click="output='';outputClean=''">{{ t('script.clear') }}</el-button>
+  <div class="np-page sg-page">
+    <div class="np-page-head">
+      <div class="np-page-head-info">
+        <div class="np-page-head-title">⚡ {{ t('script.scriptGen') }}</div>
+        <div class="np-page-head-desc">{{ t('script.pageDesc') }}</div>
+      </div>
+      <div class="np-page-head-actions">
+        <el-radio-group v-model="vendor" size="default">
+          <el-radio-button value="huawei">{{ t('script.huawei') }}</el-radio-button>
+          <el-radio-button value="h3c">{{ t('script.h3c') }}</el-radio-button>
+          <el-radio-button value="cisco">{{ t('script.cisco') }}</el-radio-button>
+        </el-radio-group>
+        <el-button size="small" @click="output='';outputClean=''">{{ t('script.clear') }}</el-button>
+      </div>
     </div>
-    <div style="display:grid;grid-template-columns:220px 1fr;gap:12px;align-items:start">
+    <div class="sg-grid">
       <CateList :groups="groups" :selected="selected" @pick="pick" />
-      <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="sg-right">
         <ParamForm :selected="selected" :params="params" :loading="loading" @gen="gen" />
         <ScriptOutput :output="output" :output-clean="outputClean" />
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+.sg-grid { display: grid; grid-template-columns: 220px 1fr; gap: 16px; align-items: start; }
+.sg-right { display: flex; flex-direction: column; gap: 16px; }
+@media (max-width: 900px) {
+  .sg-grid { grid-template-columns: 1fr; }
+}
+</style>

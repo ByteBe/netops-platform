@@ -42,6 +42,7 @@ type Engine interface {
 	Name() string
 	Write(rows []Row) error
 	Query(q Query) ([]Series, error)
+	Delete(q Query) (int64, error) // 删除匹配时间范围的数据，返回删除条数
 	Ping() error
 	Close() error
 }
@@ -77,4 +78,67 @@ func Sanitize(s string) string {
 		}
 	}
 	return sb.String()
+}
+
+// AggregatePoints 按 bucket 对 [ts_ms, value] 点做窗口聚合，返回每个非空窗口一个点 [windowStartMs, 聚合值]
+// bucket<=0 或 agg 为空时原样返回；agg 支持 avg|min|max|sum|count|last，其余按 avg 处理
+// 窗口与 TDengine INTERVAL 一致按 epoch 对齐，输出保持时间升序
+func AggregatePoints(points [][2]float64, bucket time.Duration, agg string) [][2]float64 {
+	if bucket <= 0 || len(points) == 0 {
+		return points
+	}
+	bms := int64(bucket / time.Millisecond)
+	if bms <= 0 {
+		bms = 1
+	}
+	type acc struct {
+		start int64
+		sum   float64
+		cnt   int
+		minV  float64
+		maxV  float64
+		lastV float64
+	}
+	buckets := map[int64]*acc{}
+	order := make([]int64, 0, len(points))
+	for _, p := range points {
+		b := int64(p[0]) / bms
+		a, ok := buckets[b]
+		if !ok {
+			a = &acc{start: b * bms, minV: p[1], maxV: p[1]}
+			buckets[b] = a
+			order = append(order, b)
+		}
+		a.sum += p[1]
+		a.cnt++
+		a.lastV = p[1]
+		if p[1] < a.minV {
+			a.minV = p[1]
+		}
+		if p[1] > a.maxV {
+			a.maxV = p[1]
+		}
+	}
+	out := make([][2]float64, 0, len(order))
+	agg = strings.ToLower(agg)
+	for _, b := range order {
+		a := buckets[b]
+		var v float64
+		switch agg {
+		case "min":
+			v = a.minV
+		case "max":
+			v = a.maxV
+		case "sum":
+			v = a.sum
+		case "count":
+			v = float64(a.cnt)
+		case "last":
+			v = a.lastV
+		default:
+			v = a.sum / float64(a.cnt)
+		}
+		out = append(out, [2]float64{float64(a.start), v})
+	}
+	return out
 }

@@ -6,16 +6,29 @@ const props = defineProps<{ self: any }>()
 const visible = ref(false)
 </script>
 <template>
-  <el-card shadow="never" class="mb-4">
-    <template #header><b>{{ t('node.selfInfo') }}</b></template>
+  <div class="np-card">
+    <div class="np-card-title">{{ t('node.selfInfo') }}</div>
     <el-descriptions :column="2" border>
-      <el-descriptions-item :label="t('node.uuid')"><code>{{ self.node_uuid || '-' }}</code></el-descriptions-item>
+      <el-descriptions-item :label="t('node.uuid')"><code class="mono">{{ self.node_uuid || '-' }}</code></el-descriptions-item>
       <el-descriptions-item :label="t('node.name')">{{ self.name || '-' }}</el-descriptions-item>
       <el-descriptions-item :label="t('node.parent')">{{ self.parent || t('node.parentNone') }}</el-descriptions-item>
       <el-descriptions-item :label="t('node.token')">
-        <code>{{ visible ? self.token : '••••••••' }}</code>
-        <el-button link type="primary" size="small" @click="visible=!visible" style="margin-left:6px">{{ visible ? t('node.hide') : t('node.show') }}</el-button>
+        <code class="mono">{{ visible ? self.token : '••••••••' }}</code>
+        <el-button link type="primary" size="small" class="ml-6" @click="visible = !visible">{{ visible ? t('node.hide') : t('node.show') }}</el-button>
       </el-descriptions-item>
     </el-descriptions>
-  </el-card>
+  </div>
 </template>
+
+<style scoped>
+.mono {
+  font-family: Consolas, monospace;
+  font-size: 12px;
+  background: var(--np-surface-1);
+  border: 1px solid var(--np-border);
+  padding: 2px 6px;
+  border-radius: 4px;
+  word-break: break-all;
+}
+.ml-6 { margin-left: 6px; }
+</style>

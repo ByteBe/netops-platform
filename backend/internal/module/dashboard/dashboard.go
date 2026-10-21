@@ -44,15 +44,13 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		a.DB.Model(&model.User{}).Count(&userTotal)
 		var ipUsed int64
 		a.DB.Model(&model.IPRecord{}).Count(&ipUsed)
-		var containerCnt int64
-		a.DB.Model(&model.TopoDevice{}).Count(&containerCnt)
 
 		response.OK(c, gin.H{
 			"kpi": gin.H{
 				"link_total": linkTotal, "link_up": linkUp, "link_down": linkTotal - linkUp,
 				"device_total": devTotal, "device_online": devOnline, "device_offline": devTotal - devOnline,
 				"db_total": dbTotal, "db_up": dbUp, "db_down": dbTotal - dbUp,
-				"user_total": userTotal, "ip_used": ipUsed, "topo_devices": containerCnt,
+				"user_total": userTotal, "ip_used": ipUsed,
 			},
 			"links":      a.PingMgr.Snapshot(),
 			"devices":    a.SnmpMgr.Snapshot(),

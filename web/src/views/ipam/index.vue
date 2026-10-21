@@ -281,16 +281,44 @@ onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
 
 <template>
   <div class="np-page">
-    <div class="np-toolbar">
-      <span class="np-page-desc">{{ t('ipam.pageDesc') }}</span>
-      <div class="spacer"></div>
-      <el-switch v-model="bindingEnable" @change="toggleBinding" :active-text="t('ipam.bindingEnabled')" />
-      <el-button type="primary" @click="openBindDevice()">
-        <el-icon><Connection /></el-icon>{{ t('ipam.bindDevice') }}
-      </el-button>
-      <el-button type="primary" @click="subnetDialog = true">
-        <el-icon><Plus /></el-icon>{{ t('ipam.addSubnet') }}
-      </el-button>
+    <div class="np-page-head">
+      <div class="np-page-head-info">
+        <div class="np-page-head-title">{{ t('ipam.title') }}</div>
+        <div class="np-page-head-desc">{{ t('ipam.pageDesc') }}</div>
+      </div>
+      <div class="np-page-head-actions">
+        <el-switch v-model="bindingEnable" @change="toggleBinding" :active-text="t('ipam.bindingEnabled')" />
+        <el-button type="primary" @click="openBindDevice()">
+          <el-icon><Connection /></el-icon>{{ t('ipam.bindDevice') }}
+        </el-button>
+        <el-button type="primary" @click="subnetDialog = true">
+          <el-icon><Plus /></el-icon>{{ t('ipam.addSubnet') }}
+        </el-button>
+      </div>
+    </div>
+
+    <div class="np-kpi-grid">
+      <div class="np-kpi">
+        <div class="np-kpi-icon is-info"><el-icon><MapLocation /></el-icon></div>
+        <div class="np-kpi-body">
+          <div class="np-kpi-value">{{ subnets.length }}</div>
+          <div class="np-kpi-label">{{ t('ipam.subnets') }}</div>
+        </div>
+      </div>
+      <div class="np-kpi">
+        <div class="np-kpi-icon"><el-icon><Connection /></el-icon></div>
+        <div class="np-kpi-body">
+          <div class="np-kpi-value">{{ bindDevices.length }}</div>
+          <div class="np-kpi-label">{{ t('ipam.bindDevice') }}</div>
+        </div>
+      </div>
+      <div class="np-kpi">
+        <div class="np-kpi-icon is-success"><el-icon><Position /></el-icon></div>
+        <div class="np-kpi-body">
+          <div class="np-kpi-value">{{ ipTotal }}</div>
+          <div class="np-kpi-label">{{ t('ipam.ipList') }}</div>
+        </div>
+      </div>
     </div>
 
     <!-- 子网列表 -->
@@ -312,7 +340,11 @@ onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
             <el-button size="small" text type="danger" @click.stop="removeSubnet(s)">{{ t('common.delete') }}</el-button>
           </div>
         </div>
-        <div v-if="!subnets.length" class="np-empty">{{ t('common.noData') }}</div>
+        <div v-if="!subnets.length" class="np-empty-box">
+          <el-icon class="np-empty-icon"><MapLocation /></el-icon>
+          <div class="np-empty-title">{{ t('common.noData') }}</div>
+          <div class="np-empty-desc">{{ t('ipam.addSubnet') }}</div>
+        </div>
       </div>
     </div>
 
@@ -321,14 +353,15 @@ onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
       <div class="np-card-title">
         <el-icon><Position /></el-icon>
         <span>{{ currentSubnet?.name || t('ipam.subnets') }} · {{ t('ipam.ipList') }}（{{ ipTotal }}）</span>
-        <div class="spacer"></div>
+      </div>
+      <div class="np-toolbar ip-filter-bar">
         <el-radio-group v-model="ipStatus" @change="ipPage = 1; loadIps()" size="small">
           <el-radio-button value="all">{{ t('ipam.all') }}</el-radio-button>
           <el-radio-button value="used">{{ t('ipam.used') }}</el-radio-button>
           <el-radio-button value="unused">{{ t('ipam.unused') }}</el-radio-button>
         </el-radio-group>
-        <el-input v-model="ipKeyword" :placeholder="t('ipam.searchIp')" size="small" style="width: 200px; margin-left: 10px" clearable @change="ipPage = 1; loadIps()" />
-        <el-button size="small" type="warning" style="margin-left: 10px" :disabled="!bindDevices.length" @click="importARP">
+        <el-input v-model="ipKeyword" :placeholder="t('ipam.searchIp')" size="small" clearable class="ip-search" @change="ipPage = 1; loadIps()" />
+        <el-button size="small" type="warning" :disabled="!bindDevices.length" @click="importARP">
           <el-icon><Download /></el-icon> {{ t('ipam.readArp') }}
         </el-button>
       </div>
@@ -362,6 +395,11 @@ onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
           </template>
         </el-table-column>
       </el-table>
+      <div v-if="!ipItems.length" class="np-empty-box">
+        <el-icon class="np-empty-icon"><Position /></el-icon>
+        <div class="np-empty-title">{{ t('common.noData') }}</div>
+        <div class="np-empty-desc">{{ t('ipam.searchIp') }}</div>
+      </div>
       <div class="np-pager">
         <el-pagination background layout="prev, pager, next, total" :total="ipTotal" :page-size="20" v-model:current-page="ipPage" @current-change="loadIps" />
       </div>
@@ -389,6 +427,11 @@ onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
           </template>
         </el-table-column>
       </el-table>
+      <div v-if="!bindDevices.length" class="np-empty-box">
+        <el-icon class="np-empty-icon"><Connection /></el-icon>
+        <div class="np-empty-title">{{ t('common.noData') }}</div>
+        <div class="np-empty-desc">{{ t('ipam.bindSwitchTitle') }}</div>
+      </div>
       <div v-if="testOut" class="np-test-out">{{ testOut }}</div>
     </div>
 
@@ -528,16 +571,24 @@ onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
     padding: 10px 14px;
     min-width: 180px;
     cursor: pointer;
-    transition: all 0.2s;
+    background: var(--np-card-bg);
+    transition: border-color 0.18s ease-out, background-color 0.18s ease-out;
+
+    &:hover {
+      border-color: var(--np-border-strong);
+      background: var(--np-hover);
+    }
 
     &.active {
       border-color: var(--np-primary);
       background: var(--np-primary-weak);
+      &:hover { background: var(--np-primary-weak); }
     }
 
     .np-st-name {
       font-weight: 600;
       font-size: 14px;
+      color: var(--np-text-1);
     }
     .np-st-cidr {
       color: var(--np-text-2);
@@ -554,6 +605,11 @@ onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
   }
 }
 
+.ip-filter-bar {
+  margin-bottom: 12px;
+  .ip-search { width: 220px; }
+}
+
 .row-unused {
   color: var(--np-text-2);
 }
@@ -566,11 +622,13 @@ onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
 
 .np-test-out {
   margin-top: 10px;
-  background: #0b1220;
-  color: #7dd3fc;
+  background: var(--np-surface-1);
+  color: var(--np-text-1);
+  border: 1px solid var(--np-border);
   border-radius: $radius-sm;
   padding: 10px;
   font-size: 12px;
+  font-family: 'Consolas', monospace;
   white-space: pre-wrap;
   word-break: break-all;
   max-height: 180px;

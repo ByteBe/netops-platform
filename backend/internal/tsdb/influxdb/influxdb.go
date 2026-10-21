@@ -164,7 +164,7 @@ func (e *Engine) Query(q tsdb.Query) ([]tsdb.Series, error) {
 		conds = append(conds, "time <= "+strconv.FormatInt(q.End.UnixNano(), 10))
 	}
 	for k, v := range q.Tags {
-		conds = append(conds, fmt.Sprintf("\"%s\" = '%s'", k, strings.ReplaceAll(v, "'", "")))
+		conds = append(conds, fmt.Sprintf("\"%s\" = '%s'", tsdb.Sanitize(k), strings.ReplaceAll(v, "'", "")))
 	}
 	if len(conds) > 0 {
 		sql += " WHERE " + strings.Join(conds, " AND ")
@@ -238,6 +238,41 @@ func (e *Engine) Query(q tsdb.Query) ([]tsdb.Series, error) {
 	return out, nil
 }
 
+// Delete 按 metric + 时间范围删除（归档转存校验通过后清理已归档数据）
+func (e *Engine) Delete(q tsdb.Query) (int64, error) {
+	measurement := tsdb.Sanitize(q.Metric)
+	if q.Field != "" {
+		measurement += "_" + tsdb.Sanitize(q.Field)
+	}
+	sql := fmt.Sprintf("DELETE FROM \"%s\" WHERE time >= %d AND time <= %d", measurement, q.Start.UnixNano(), q.End.UnixNano())
+	for k, v := range q.Tags {
+		sql += fmt.Sprintf(" AND \"%s\" = '%s'", k, strings.ReplaceAll(v, "'", ""))
+	}
+	req, _ := http.NewRequest(http.MethodPost, e.base+"/query", strings.NewReader("q="+url.QueryEscape(sql)))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	e.auth(req)
+	resp, err := e.client.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	var ir struct {
+		Results []struct {
+			Error string `json:"error"`
+		} `json:"results"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(body, &ir); err != nil {
+		return 0, err
+	}
+	if ir.Error != "" {
+		return 0, fmt.Errorf("InfluxDB 删除错误: %s", ir.Error)
+	}
+	return 0, nil
+}
+
+// parseInfluxTime 把时间解析为纳秒
 func parseInfluxTime(s string) (time.Time, error) {
 	// RFC3339 或纳秒时间戳
 	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {

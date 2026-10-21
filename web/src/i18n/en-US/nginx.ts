@@ -1,4 +1,9 @@
 export default {
+  title: 'Nginx Monitor',
+  desc: 'Collects Nginx status pages in real time: active connections, QPS, read/write/wait queues',
+  totalInstances: 'Instances',
+  onlineInstances: 'Online',
+  offlineInstances: 'Offline',
   addInstance: 'Add Nginx Instance',
   editInstance: 'Edit Nginx Instance',
   instanceName: 'Instance Name',

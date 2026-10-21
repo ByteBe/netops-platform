@@ -176,6 +176,11 @@ func (e *Engine) tableName(metric string, tags map[string]string) string {
 
 // Query 查询
 func (e *Engine) Query(q tsdb.Query) ([]tsdb.Series, error) {
+	// 无 tags：遍历该 metric 的全部子表（t_<metric> 及 t_<metric>_<taghash>），合并返回
+	// 归档/全量查询场景使用；tags 非空时按单表查询
+	if len(q.Tags) == 0 {
+		return e.queryAllTables(q)
+	}
 	table := e.tableName(q.Metric, q.Tags)
 	where := ""
 	if q.Field != "" {
@@ -217,9 +222,131 @@ func (e *Engine) Query(q tsdb.Query) ([]tsdb.Series, error) {
 	}
 	out := make([]tsdb.Series, 0, len(order))
 	for _, k := range order {
-		out = append(out, *groups[k])
+		s := groups[k]
+		if q.Bucket > 0 {
+			s.Points = tsdb.AggregatePoints(s.Points, q.Bucket, q.Agg)
+		}
+		out = append(out, *s)
 	}
 	return out, nil
+}
+
+// queryAllTables 无 tags 查询：枚举该 metric 的全部表（含无标签主表 t_<metric>），逐表查询并合并
+// 不同标签组合以 Tags={"__table": 表名} 标记分组（TDengine 标签 hash 不可逆，无法还原原始标签）
+func (e *Engine) queryAllTables(q tsdb.Query) ([]tsdb.Series, error) {
+	prefix := "t_" + tsdb.Sanitize(q.Metric)
+	tables, err := e.listMetricTables(prefix)
+	if err != nil {
+		return nil, err
+	}
+	if len(tables) == 0 {
+		return nil, tsdb.ErrNoData
+	}
+	out := []tsdb.Series{}
+	for _, tbl := range tables {
+		where := ""
+		if q.Field != "" {
+			where = fmt.Sprintf(" AND fname = '%s'", tsdb.Sanitize(q.Field))
+		}
+		sql := fmt.Sprintf("SELECT ts, fname, val FROM %s WHERE ts >= %d AND ts <= %d%s",
+			tbl, q.Start.UnixMilli(), q.End.UnixMilli(), where)
+		if q.Limit > 0 {
+			sql += fmt.Sprintf(" LIMIT %d", q.Limit)
+		}
+		data, err := e.query(sql)
+		if err != nil {
+			// 表可能在枚举后被删除，跳过
+			if strings.Contains(err.Error(), "Table does not exist") {
+				continue
+			}
+			return nil, err
+		}
+		groups := map[string]*tsdb.Series{}
+		order := []string{}
+		for _, row := range data {
+			if len(row) < 3 {
+				continue
+			}
+			tsMs := parseTsMs(row[0])
+			field := fmt.Sprint(row[1])
+			val, _ := strconv.ParseFloat(fmt.Sprint(row[2]), 64)
+			key := field + "|" + tbl
+			s, ok := groups[key]
+			if !ok {
+				s = &tsdb.Series{Metric: q.Metric, Field: field, Tags: map[string]string{"__table": tbl}}
+				groups[key] = s
+				order = append(order, key)
+			}
+			s.Points = append(s.Points, [2]float64{float64(tsMs), val})
+		}
+		for _, k := range order {
+			s := groups[k]
+			if q.Bucket > 0 {
+				s.Points = tsdb.AggregatePoints(s.Points, q.Bucket, q.Agg)
+			}
+			out = append(out, *s)
+		}
+	}
+	if len(out) == 0 {
+		return nil, tsdb.ErrNoData
+	}
+	return out, nil
+}
+
+// Delete 按 metric + 时间范围删除（归档转存校验通过后清理已归档数据）
+func (e *Engine) Delete(q tsdb.Query) (int64, error) {
+	tables := []string{}
+	if tbl, ok := q.Tags["__table"]; ok {
+		// 无 tags 查询返回的序列带 __table 标记：直接按表名删除
+		tables = []string{tbl}
+	} else if len(q.Tags) > 0 {
+		tables = []string{e.tableName(q.Metric, q.Tags)}
+	} else {
+		t, err := e.listMetricTables("t_" + tsdb.Sanitize(q.Metric))
+		if err != nil {
+			return 0, err
+		}
+		tables = t
+	}
+	var total int64
+	for _, tbl := range tables {
+		sql := fmt.Sprintf("DELETE FROM %s WHERE ts >= %d AND ts <= %d", tbl, q.Start.UnixMilli(), q.End.UnixMilli())
+		if _, err := e.query(sql); err != nil {
+			// 表可能已被删除，跳过
+			if strings.Contains(err.Error(), "Table does not exist") {
+				continue
+			}
+			return total, err
+		}
+		total++
+	}
+	return total, nil
+}
+
+// listMetricTables 枚举前缀匹配的表名（TDengine 3.x information_schema，失败回退 SHOW TABLES）
+func (e *Engine) listMetricTables(prefix string) ([]string, error) {
+	rows, err := e.query(fmt.Sprintf(
+		"SELECT table_name FROM information_schema.ins_tables WHERE db_name = '%s' AND table_name LIKE '%s%%'",
+		e.db, prefix))
+	if err != nil {
+		// 兼容旧版本：SHOW TABLES 后过滤前缀
+		rows, err = e.query("SHOW TABLES")
+		if err != nil {
+			return nil, err
+		}
+	}
+	names := []string{}
+	for _, r := range rows {
+		if len(r) == 0 {
+			continue
+		}
+		name := fmt.Sprint(r[0])
+		if strings.HasPrefix(name, prefix) {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names, nil
 }
 
 // Close 关闭

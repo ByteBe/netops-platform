@@ -6,9 +6,11 @@ import { useI18n } from 'vue-i18n'
 import * as echarts from 'echarts'
 import { getEnc, postEnc, putEnc, delEnc } from '@/utils/request'
 import { WSClient } from '@/utils/ws'
-import { fmtBytes, fmtDuration, fmtTime } from '@/utils'
+import { fmtBytes, fmtDuration, fmtTime, chartAxisColors, cssVar } from '@/utils'
+import { useAppStore } from '@/stores/app'
 
 const { t } = useI18n()
+const appStore = useAppStore()
 
 interface DBInstance {
   id: number
@@ -73,6 +75,7 @@ const testing = ref(false)
 const testResult = ref('')
 const histInstance = ref<DBInstance | null>(null)
 const histRef = ref<HTMLDivElement>()
+const histData = ref<{ conn: number[][]; tx: number[][] }>({ conn: [], tx: [] })
 let histChart: echarts.ECharts | null = null
 let ws: WSClient | null = null
 
@@ -157,20 +160,71 @@ async function showHistory(d: DBInstance) {
     conn: number[][]
     tx: number[][]
   }>(`/dbmonitor/instances/${d.id}/history?hours=6`)
+  histData.value = h
   histChart ??= echarts.init(histRef.value as HTMLDivElement)
+  renderHist()
+}
+
+function renderHist() {
+  if (!histRef.value || !histChart) return
+  const ca = chartAxisColors()
   histChart.setOption({
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis' },
-    legend: { data: ['Connections', 'Tx/s'] },
+    tooltip: {
+      trigger: 'axis',
+      confine: true,
+      axisPointer: { type: 'line', label: { backgroundColor: 'rgba(30,32,36,0.85)' } },
+      backgroundColor: cssVar('--np-bg-raise', 'rgba(255,255,255,0.96)'),
+      borderColor: cssVar('--np-border', '#d0d4da'),
+      borderWidth: 1,
+      padding: [8, 12],
+      textStyle: { color: cssVar('--np-text', '#1a1d23'), fontSize: 12 },
+      formatter: (params: any) => {
+        const arr = Array.isArray(params) ? params : [params]
+        if (!arr.length) return ''
+        const rawTs = arr[0].axisValue
+        let time = arr[0].axisValueLabel || ''
+        if (!time && rawTs != null) {
+          const d = new Date(Number(rawTs))
+          if (!Number.isNaN(d.getTime())) {
+            const p = (n: number) => String(n).padStart(2, '0')
+            time = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+          } else {
+            time = String(rawTs)
+          }
+        }
+        let html = `<div style="font-size:12px;line-height:1.6;margin-bottom:2px;color:${cssVar('--np-text-2', '#5a6070')}">${time}</div>`
+        for (const p of arr) {
+          const raw = Array.isArray(p.value) ? p.value[1] : p.value
+          const v = raw == null || !Number.isFinite(Number(raw)) ? '--' : Number(raw).toFixed(2)
+          const color = typeof p.color === 'string' ? p.color : '#999'
+          html += `<div style="display:flex;align-items:center;gap:8px;font-size:12px;line-height:1.7">
+            <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color}"></span>
+            <span>${p.seriesName}</span>
+            <span style="margin-left:auto;padding-left:12px;font-variant-numeric:tabular-nums;font-weight:600">${v}</span>
+          </div>`
+        }
+        return html
+      }
+    },
+    legend: { data: ['Connections', 'Tx/s'], textStyle: { color: ca.axis } },
     grid: { left: 60, right: 20, top: 36, bottom: 28 },
-    xAxis: { type: 'time' },
-    yAxis: [{ type: 'value', name: 'Conn' }, { type: 'value', name: 'Tx/s', splitLine: { show: false } }],
+    xAxis: { type: 'time', axisLabel: { color: ca.axis }, axisLine: { lineStyle: { color: ca.axisLine } } },
+    yAxis: [
+      { type: 'value', name: 'Conn', nameTextStyle: { color: ca.axis }, axisLabel: { color: ca.axis }, splitLine: { lineStyle: { color: ca.split } } },
+      { type: 'value', name: 'Tx/s', nameTextStyle: { color: ca.axis }, axisLabel: { color: ca.axis }, splitLine: { show: false } }
+    ],
     series: [
-      { name: 'Connections', type: 'line', showSymbol: false, smooth: true, lineStyle: { width: 2, color: '#2f6bff' }, itemStyle: { color: '#2f6bff' }, data: h.conn || [] },
-      { name: 'Tx/s', type: 'line', yAxisIndex: 1, showSymbol: false, smooth: true, lineStyle: { width: 2, color: '#22c55e' }, itemStyle: { color: '#22c55e' }, data: h.tx || [] }
+      { name: 'Connections', type: 'line', showSymbol: false, smooth: true, lineStyle: { width: 2, color: cssVar('--np-primary', '#d95f1f') }, itemStyle: { color: cssVar('--np-primary', '#d95f1f') }, data: histData.value.conn || [] },
+      { name: 'Tx/s', type: 'line', yAxisIndex: 1, showSymbol: false, smooth: true, lineStyle: { width: 2, color: cssVar('--np-success', '#3f9e63') }, itemStyle: { color: cssVar('--np-success', '#3f9e63') }, data: histData.value.tx || [] }
     ]
-  })
+  }, true)
 }
+
+// 主题切换时重绘历史图表（ECharts canvas 不感知 CSS 变量变化）
+watch(() => appStore.theme, () => {
+  nextTick(() => { if (histChart && histVisible.value) renderHist() })
+})
 
 let autoTimer: number | undefined
 onMounted(async () => {
@@ -198,35 +252,74 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="np-page">
-    <div class="np-toolbar">
-      <div class="spacer"></div>
-      <el-button type="primary" @click="openAdd">
-        <el-icon><Plus /></el-icon>{{ t('dbmon.addInstance') }}
-      </el-button>
+    <div class="np-page-head">
+      <div class="np-page-head-info">
+        <div class="np-page-head-title">{{ t('dbmon.title') }}</div>
+        <div class="np-page-head-desc">{{ t('dbmon.desc') }}</div>
+      </div>
+      <div class="np-page-head-actions">
+        <el-button type="primary" @click="openAdd">
+          <el-icon><Plus /></el-icon>{{ t('dbmon.addInstance') }}
+        </el-button>
+      </div>
     </div>
 
-    <div class="np-db-grid">
-      <div v-for="d in instances" :key="d.id" class="np-card np-db-card">
-        <div class="np-db-head">
+    <div class="np-kpi-grid">
+      <div class="np-kpi">
+        <div class="np-kpi-icon"><el-icon><Coin /></el-icon></div>
+        <div class="np-kpi-body">
+          <div class="np-kpi-value">{{ instances.length }}</div>
+          <div class="np-kpi-label">{{ t('dbmon.totalInstances') }}</div>
+        </div>
+      </div>
+      <div class="np-kpi">
+        <div class="np-kpi-icon is-success"><el-icon><Connection /></el-icon></div>
+        <div class="np-kpi-body">
+          <div class="np-kpi-value">{{ instances.filter(i => snaps[i.id]?.up).length }}</div>
+          <div class="np-kpi-label">{{ t('dbmon.onlineInstances') }}</div>
+        </div>
+      </div>
+      <div class="np-kpi">
+        <div class="np-kpi-icon is-danger"><el-icon><CircleClose /></el-icon></div>
+        <div class="np-kpi-body">
+          <div class="np-kpi-value">{{ instances.length - instances.filter(i => snaps[i.id]?.up).length }}</div>
+          <div class="np-kpi-label">{{ t('dbmon.offlineInstances') }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="db-grid">
+      <div v-for="d in instances" :key="d.id" class="np-card db-card">
+        <div class="db-head">
           <span class="np-dot" :class="(snaps[d.id] && snaps[d.id].up) ? 'up' : 'down'"></span>
-          <span class="np-db-name">{{ d.name }}</span>
+          <span class="db-name">{{ d.name }}</span>
           <el-tag size="small" effect="plain">{{ d.type }}</el-tag>
-          <span class="np-db-host">{{ d.host }}:{{ d.port }}</span>
+          <span class="db-host np-ellipsis">{{ d.host }}:{{ d.port }}</span>
         </div>
-        <div class="np-db-body">
-          <div class="np-db-metrics">
-            <div class="np-db-m"><span class="np-db-label">{{ t('dbmon.version') }}</span><span>{{ snaps[d.id]?.version || '--' }}</span></div>
-            <div class="np-db-m"><span class="np-db-label">数据库数</span><span>{{ snaps[d.id]?.conns ?? '--' }}</span></div>
-            <div class="np-db-m"><span class="np-db-label">{{ t('dbmon.capacity') }}</span><span>{{ snaps[d.id] ? fmtBytes(snaps[d.id].size_bytes) : '--' }}</span></div>
-            <div class="np-db-m"><span class="np-db-label">{{ t('dbmon.tables') }}</span><span>{{ snaps[d.id]?.table_count ?? '--' }}</span></div>
-            <div class="np-db-m"><span class="np-db-label">存活状态</span><span :style="{ color: snaps[d.id]?.up ? '#22c55e' : '#ef4444' }">{{ snaps[d.id]?.up ? '运行中' : '离线' }}</span></div>
-            <div class="np-db-m"><span class="np-db-label">CPU 使用率</span><span>{{ snaps[d.id] && snaps[d.id].cpu_percent != null && !isNaN(snaps[d.id].cpu_percent) ? snaps[d.id].cpu_percent.toFixed(1) + '%' : '--' }}</span></div>
-            <div class="np-db-m"><span class="np-db-label">内存使用</span><span>{{ snaps[d.id] && snaps[d.id].mem_used > 0 ? fmtBytes(snaps[d.id].mem_used) : '--' }}</span></div>
-            <div class="np-db-m"><span class="np-db-label">运行时长</span><span>{{ fmtDuration(snaps[d.id]?.uptime_s || 0) }}</span></div>
+
+        <div class="db-stats">
+          <div class="db-stat">
+            <div class="db-stat-value">{{ snaps[d.id] ? fmtBytes(snaps[d.id].size_bytes) : '--' }}</div>
+            <div class="db-stat-label">{{ t('dbmon.capacity') }}</div>
           </div>
-          <div class="np-db-msg" v-if="snaps[d.id]?.message">{{ snaps[d.id]!.message }}</div>
+          <div class="db-stat">
+            <div class="db-stat-value">{{ snaps[d.id]?.conns ?? '--' }}</div>
+            <div class="db-stat-label">{{ t('dbmon.connections') }}</div>
+          </div>
         </div>
-        <div class="np-db-foot">
+
+        <div class="db-mini">
+          <span class="db-mini-item"><em>{{ t('dbmon.version') }}</em><b>{{ snaps[d.id]?.version || '--' }}</b></span>
+          <span class="db-mini-item"><em>{{ t('dbmon.tables') }}</em><b>{{ snaps[d.id]?.table_count ?? '--' }}</b></span>
+          <span class="db-mini-item"><em>{{ t('dbmon.cpuUsage') }}</em><b>{{ snaps[d.id] && snaps[d.id].cpu_percent != null && !isNaN(snaps[d.id].cpu_percent) ? snaps[d.id].cpu_percent.toFixed(1) + '%' : '--' }}</b></span>
+          <span class="db-mini-item"><em>{{ t('dbmon.memUsage') }}</em><b>{{ snaps[d.id] && snaps[d.id].mem_used > 0 ? fmtBytes(snaps[d.id].mem_used) : '--' }}</b></span>
+          <span class="db-mini-item"><em>{{ t('dbmon.uptime') }}</em><b>{{ fmtDuration(snaps[d.id]?.uptime_s || 0) }}</b></span>
+          <span class="db-mini-item"><em>{{ t('dbmon.status') }}</em><b :class="snaps[d.id]?.up ? 'np-text-success' : 'np-text-danger'">{{ snaps[d.id]?.up ? t('dbmon.running') : t('dbmon.down') }}</b></span>
+        </div>
+
+        <div class="db-msg" v-if="snaps[d.id]?.message">{{ snaps[d.id]!.message }}</div>
+
+        <div class="db-foot">
           <span>{{ snaps[d.id] ? fmtTime(snaps[d.id].ts) : '--' }}</span>
           <div>
             <el-button size="small" text type="primary" @click="probe(d)">{{ t('common.test') }}</el-button>
@@ -236,7 +329,13 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </div>
-      <div v-if="!instances.length" class="np-card np-empty">{{ t('common.noData') }}</div>
+      <div v-if="!instances.length" class="np-card db-empty">
+        <div class="np-empty-box">
+          <div class="np-empty-icon"><el-icon><Coin /></el-icon></div>
+          <div class="np-empty-title">{{ t('dbmon.title') }}</div>
+          <div class="np-empty-desc">{{ t('common.noData') }}</div>
+        </div>
+      </div>
     </div>
 
     <el-dialog v-model="dialogVisible" :title="editingId ? t('dbmon.editInstance') : t('dbmon.addInstance')" width="520px">
@@ -266,7 +365,7 @@ onBeforeUnmount(() => {
         </el-form-item>
         <el-form-item label=" ">
           <el-button :loading="testing" @click="testConn">{{ t('dbmon.testConn') }}</el-button>
-          <span v-if="testResult" :style="{ marginLeft:'12px', color: testResult.indexOf(t('dbmon.testSuccess')) >= 0 ? '#67C23A' : '#F56C6C', fontSize:'13px' }">{{ testResult }}</span>
+          <span v-if="testResult" class="db-test-result" :class="testResult.indexOf(t('dbmon.testSuccess')) >= 0 ? 'is-ok' : 'is-fail'">{{ testResult }}</span>
         </el-form-item>
         <el-form-item :label="t('monitor.interval')">
           <el-input-number v-model="form.interval" :min="10" :max="3600" />
@@ -288,54 +387,88 @@ onBeforeUnmount(() => {
 </template>
 
 <style lang="scss">
-.np-db-grid {
+.db-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
   gap: 14px;
 }
 
-.np-db-card {
-  .np-db-head {
+.db-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+
+  .db-head {
     display: flex;
     align-items: center;
     gap: 8px;
-    .np-db-name {
+    .db-name {
       font-size: 15px;
       font-weight: 600;
     }
-    .np-db-host {
+    .db-host {
       margin-left: auto;
       color: var(--np-text-2);
       font-size: 12px;
+      max-width: 200px;
     }
   }
-  .np-db-body {
-    margin-top: 10px;
-  }
-  .np-db-metrics {
+
+  .db-stats {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 6px 16px;
-    .np-db-m {
-      display: flex;
-      justify-content: space-between;
-      font-size: 13px;
-      border-bottom: 1px dashed var(--np-border);
-      padding-bottom: 4px;
-      .np-db-label {
+    gap: 12px;
+    .db-stat {
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: var(--np-surface-1);
+      border: 1px solid var(--np-border);
+      .db-stat-value {
+        font-size: 22px;
+        font-weight: 700;
+        line-height: 1.2;
+        font-variant-numeric: tabular-nums;
+        color: var(--np-text-1);
+        word-break: break-all;
+      }
+      .db-stat-label {
+        margin-top: 2px;
+        font-size: 12px;
         color: var(--np-text-2);
       }
     }
   }
-  .np-db-msg {
-    margin-top: 8px;
-    color: #ef4444;
+
+  .db-mini {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    .db-mini-item {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      font-size: 12px;
+      em {
+        font-style: normal;
+        color: var(--np-text-2);
+      }
+      b {
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        color: var(--np-text-1);
+      }
+    }
+  }
+
+  .db-msg {
+    color: var(--np-danger);
     font-size: 12px;
     word-break: break-all;
   }
-  .np-db-foot {
-    margin-top: 10px;
-    padding-top: 8px;
+
+  .db-foot {
+    margin-top: auto;
+    padding-top: 10px;
     border-top: 1px solid var(--np-border);
     display: flex;
     justify-content: space-between;
@@ -343,5 +476,16 @@ onBeforeUnmount(() => {
     color: var(--np-text-2);
     font-size: 12px;
   }
+}
+
+.db-test-result {
+  margin-left: 12px;
+  font-size: 13px;
+  &.is-ok { color: var(--np-success); }
+  &.is-fail { color: var(--np-danger); }
+}
+
+.db-empty {
+  padding: 0;
 }
 </style>

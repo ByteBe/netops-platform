@@ -15,6 +15,7 @@ export default {
   seq: '序号', matchNet: '匹配网段', mask: '掩码',
   addRow: '+ 添加一行',
   scriptGen: '脚本生成器',
+  pageDesc: '选择厂商与功能模板，填写参数后生成可下发的设备配置脚本',
   cisco: '思科',
   clear: '清空',
   fillRequired: '请填写',

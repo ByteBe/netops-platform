@@ -31,4 +31,4 @@ tsdb:
 crypto:
     sm2_private_key: f441ee61fe9990c6b75f53d0b80108838c6bd5e254e300c29fbef5ecb05a188c
     sm2_public_key: 04d8e320c5bc607a0af576ef5ef6509bd3b4aa22c0108e744181a8992c80c697c169cd05cb1ef5e615ecd8c1792b7506cc2bc9a47b49378c60c37b92bbbea376ce
-initialized: true
+initialized: false

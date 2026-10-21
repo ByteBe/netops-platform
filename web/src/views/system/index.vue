@@ -7,6 +7,7 @@ import { getEnc, postEnc, putEnc, delEnc } from '@/utils/request'
 import { fmtTime } from '@/utils'
 import UserManagement from './components/UserManagement.vue'
 import AIConfig from './components/AIConfig.vue'
+import CertificatePanel from './components/CertificatePanel.vue'
 
 const route = useRoute()
 const { t } = useI18n()
@@ -150,19 +151,9 @@ function moduleFromPath(p?: string): string {
   const parts = p.split('/').filter(Boolean)
   let seg = parts[0] || ''
   if (seg === 'api' && parts[1] === 'v1') seg = parts[2] || ''
-  const map: Record<string, string> = { auth:'modAuth', linkdetect:'modLinkdetect', topo:'modTopo', monitor:'modMonitor', dbmonitor:'modDbmonitor', resource:'modResource', script:'modScript', ipam:'modIpam', report:'modReport', traffic:'modTraffic', system:'modSystem', docker:'modDocker', k8s:'modK8s', dashboard:'modDashboard', user:'modUser', containermon:'modContainermon', nginxmon:'modNginxmon', bgpmon:'modBgpmon', alert:'modAlert', distributed:'modDistributed', devicelog:'modDevicelog', tasklog:'modTasklog', subnet:'modSubnet', setup:'modSetup', aiinspect:'modAiinspect' }
+  const map: Record<string, string> = { auth:'modAuth', linkdetect:'modLinkdetect', monitor:'modMonitor', dbmonitor:'modDbmonitor', resource:'modResource', script:'modScript', ipam:'modIpam', report:'modReport', traffic:'modTraffic', system:'modSystem', docker:'modDocker', k8s:'modK8s', dashboard:'modDashboard', user:'modUser', containermon:'modContainermon', nginxmon:'modNginxmon', bgpmon:'modBgpmon', alert:'modAlert', distributed:'modDistributed', devicelog:'modDevicelog', tasklog:'modTasklog', subnet:'modSubnet', setup:'modSetup', aiinspect:'modAiinspect' }
   const k = map[seg]
   return k ? t('system.' + k) : seg || '-'
-}
-
-// Security
-const secForm = reactive({ tls_cert: '', tls_key: '', pwd_max_days: 90, login_max_fail: 5, login_lock_min: 15, audit_retention_days: 180, max_session_per_user: 1 })
-async function loadSec() { try { Object.assign(secForm, await getEnc('/system/security')) } catch {} }
-async function saveSec() { await putEnc('/system/security', secForm); ElMessage.success(t('system.saved')) }
-async function downloadBackup() {
-  const r = await fetch('/api/v1/system/backup', { headers: { Authorization: 'Bearer ' + localStorage.getItem('np-token') } })
-  const blob = await r.blob(); const a = document.createElement('a')
-  a.href = URL.createObjectURL(blob); a.download = 'netops-backup.zip'; a.click()
 }
 
 // Update
@@ -174,17 +165,17 @@ const applying = ref(false)
 
 const roleList = ref([
   { key: 'admin', name: 'admin', desc: 'adminDesc', perms: ['*'] },
-  { key: 'operator', name: 'operator', desc: 'operatorDesc', perms: ['monitor', 'alert:ack', 'config:backup', 'report:view', 'topo:edit'] },
+  { key: 'operator', name: 'operator', desc: 'operatorDesc', perms: ['monitor', 'alert:ack', 'config:backup', 'report:view'] },
   { key: 'viewer', name: 'viewer', desc: 'viewerDesc', perms: ['dashboard:view', 'monitor:view', 'report:view'] }
 ])
 const allPerms = ['dashboard:view', 'monitor:view', 'monitor:edit', 'alert:view', 'alert:ack', 'alert:edit',
-  'config:backup', 'config:rollback', 'report:view', 'report:edit', 'topo:edit', 'user:edit', 'system:edit', 'node:edit']
+  'config:backup', 'config:rollback', 'report:view', 'report:edit', 'user:edit', 'system:edit', 'node:edit']
 const permKeys: Record<string, string> = {
   'dashboard:view': 'permDashboardView', 'monitor:view': 'permMonitorView', 'monitor:edit': 'permMonitorEdit',
   'alert:view': 'permAlertView', 'alert:ack': 'permAlertAck', 'alert:edit': 'permAlertEdit',
   'config:backup': 'permConfigBackup', 'config:rollback': 'permConfigRollback',
   'report:view': 'permReportView', 'report:edit': 'permReportEdit',
-  'topo:edit': 'permTopoEdit', 'user:edit': 'permUserEdit', 'system:edit': 'permSystemEdit', 'node:edit': 'permNodeEdit'
+  'user:edit': 'permUserEdit', 'system:edit': 'permSystemEdit', 'node:edit': 'permNodeEdit'
 }
 function permLabel(p: string): string {
   const key = permKeys[p]
@@ -238,17 +229,24 @@ async function doRollback() {
 }
 
 let autoTimer: number | undefined
-onMounted(() => { loadMCP(); loadEmails(); loadNotify(); loadAudits(); loadSec(); loadVersion(); autoTimer = window.setInterval(loadAudits, 30000) })
+onMounted(() => { loadMCP(); loadEmails(); loadNotify(); loadAudits(); loadVersion(); autoTimer = window.setInterval(loadAudits, 30000) })
 onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
 </script>
 
 <template>
   <div class="np-page">
+    <div class="np-page-head">
+      <div class="np-page-head-info">
+        <div class="np-page-head-title">{{ t('system.modSystem') }}</div>
+        <div class="np-page-head-desc">{{ t('system.pageDesc') }}</div>
+      </div>
+    </div>
     <el-tabs v-model="activeTab">
       <el-tab-pane :label="t('system.users')" name="users"><UserManagement /></el-tab-pane>
       <el-tab-pane :label="t('system.roles')" name="roles">
         <div class="np-card">
-          <el-table :data="roleList" stripe>
+          <div class="np-card-title">{{ t('system.roles') }}</div>
+          <el-table :data="roleList" stripe class="np-table">
             <el-table-column prop="key" :label="t('system.roleKey')" width="120" />
             <el-table-column :label="t('system.roleName')" width="140">
               <template #default="{ row }">{{ t('system.' + row.name) }}</template>
@@ -270,10 +268,12 @@ onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
       <el-tab-pane :label="t('system.ai')" name="ai"><AIConfig /></el-tab-pane>
 
       <el-tab-pane :label="t('system.mcp')" name="mcp">
-        <div class="np-toolbar"><span class="np-page-desc">{{ t('system.mcpTitle') }}</span><div class="spacer"></div>
-          <el-button type="primary" @click="openMCP()">{{ t('system.add') }}</el-button></div>
-        <el-alert v-if="mcpInfo" :closable="false" type="info" style="margin-bottom:12px" :title="t('system.mcpEndpoint', { s: mcpInfo.server, e: mcpInfo.tools_endpoint })" />
         <div class="np-card">
+          <div class="card-head-row">
+            <div class="np-card-title">{{ t('system.mcpTitle') }}</div>
+            <el-button type="primary" @click="openMCP()">{{ t('system.add') }}</el-button>
+          </div>
+          <el-alert v-if="mcpInfo" :closable="false" type="info" style="margin-bottom:12px" :title="t('system.mcpEndpoint', { s: mcpInfo.server, e: mcpInfo.tools_endpoint })" />
           <el-table :data="mcpAgents" stripe class="np-table">
             <el-table-column prop="name" :label="t('common.name')" min-width="110" />
             <el-table-column prop="server_url" :label="t('system.serverUrl')" min-width="220" />
@@ -287,25 +287,28 @@ onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
               </template>
             </el-table-column>
           </el-table>
-          <div v-if="mcpOut" style="margin-top:10px;background:#0b1220;color:#7dd3fc;padding:10px;border-radius:4px;font-size:12px;white-space:pre-wrap">{{ mcpOut }}</div>
+          <div v-if="mcpOut" class="code-out">{{ mcpOut }}</div>
         </div>
 
-        <div class="np-card" style="margin-top:12px">
-          <h4 style="margin:0 0 8px">{{ t('system.mcpConnect') }}</h4>
-          <p style="color:#888;font-size:12px;margin:0 0 12px">{{ t('system.mcpConnectTip') }}</p>
+        <div class="np-card card-gap">
+          <div class="np-card-title">{{ t('system.mcpConnect') }}</div>
+          <p class="card-sub">{{ t('system.mcpConnectTip') }}</p>
           <el-tabs v-model="mcpAgentTab">
             <el-tab-pane v-for="a in mcpAgentTypes" :key="a" :label="a" :name="a" />
           </el-tabs>
-          <div style="position:relative">
-            <pre style="background:#0b1220;color:#7dd3fc;padding:14px;padding-right:80px;border-radius:6px;font-size:13px;overflow:auto;margin:0">{{ mcpConfigJson }}</pre>
-            <el-button size="small" style="position:absolute;right:8px;top:8px" @click="copyMcp">{{ t('system.copy') }}</el-button>
+          <div class="code-wrap">
+            <pre class="code-pre">{{ mcpConfigJson }}</pre>
+            <el-button size="small" class="code-copy-btn" @click="copyMcp">{{ t('system.copy') }}</el-button>
           </div>
         </div>
       </el-tab-pane>
 
       <el-tab-pane :label="t('system.notifyChannel')" name="email">
-        <div class="np-toolbar"><span class="np-title">{{ t('system.channels') }}</span><div class="spacer"></div><el-button type="primary" @click="openNotify()">{{ t('system.add') }}</el-button></div>
         <div class="np-card">
+          <div class="card-head-row">
+            <div class="np-card-title">{{ t('system.channels') }}</div>
+            <el-button type="primary" @click="openNotify()">{{ t('system.add') }}</el-button>
+          </div>
           <el-table :data="notifyList" stripe class="np-table">
             <el-table-column prop="name" :label="t('common.name')" min-width="110" />
             <el-table-column :label="t('system.channelType')" width="120"><template #default="{ row }">{{ notifyTypeLabel(row.type) }}</template></el-table-column>
@@ -319,8 +322,11 @@ onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
             </el-table-column>
           </el-table>
         </div>
-        <div class="np-toolbar" style="margin-top:12px"><span class="np-title">{{ t('system.smtpAccounts') }}</span><div class="spacer"></div><el-button type="primary" @click="openEmail()">{{ t('system.add') }}</el-button></div>
-        <div class="np-card">
+        <div class="np-card card-gap">
+          <div class="card-head-row">
+            <div class="np-card-title">{{ t('system.smtpAccounts') }}</div>
+            <el-button type="primary" @click="openEmail()">{{ t('system.add') }}</el-button>
+          </div>
           <el-table :data="emailList" stripe class="np-table">
             <el-table-column prop="name" :label="t('common.name')" min-width="110" />
             <el-table-column prop="smtp_host" label="SMTP" min-width="180" />
@@ -338,29 +344,13 @@ onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
         </div>
       </el-tab-pane>
 
-      <el-tab-pane :label="t('system.security')" name="security">
-        <div class="np-card" style="max-width:720px">
-          <h3 style="margin:0 0 16px">HTTPS / TLS</h3>
-          <el-form :model="secForm" label-width="140px">
-            <el-form-item :label="t('system.certPath')"><el-input v-model="secForm.tls_cert" /></el-form-item>
-            <el-form-item :label="t('system.keyPath')"><el-input v-model="secForm.tls_key" /></el-form-item>
-          </el-form>
-          <el-divider /><h3 style="margin:0 0 16px">{{ t('system.pwdPolicy') }}</h3>
-          <el-form :model="secForm" label-width="140px">
-            <el-form-item :label="t('system.pwdMaxDays')"><el-input-number v-model="secForm.pwd_max_days" :min="30" :max="365" /></el-form-item>
-          </el-form>
-          <el-divider /><h3 style="margin:0 0 16px">{{ t('system.loginGuard') }}</h3>
-          <el-form :model="secForm" label-width="140px">
-            <el-form-item :label="t('system.maxFail')"><el-input-number v-model="secForm.login_max_fail" :min="3" :max="10" /></el-form-item>
-            <el-form-item :label="t('system.lockMin')"><el-input-number v-model="secForm.login_lock_min" :min="5" :max="60" /></el-form-item>
-          </el-form>
-          <el-button type="warning" @click="downloadBackup">{{ t('system.downloadBackup') }}</el-button>
-          <el-button type="primary" @click="saveSec" style="margin-left:10px">{{ t('system.save') }}</el-button>
-        </div>
+      <el-tab-pane :label="t('system.nodeCert')" name="cert">
+        <CertificatePanel />
       </el-tab-pane>
 
       <el-tab-pane :label="t('system.audit')" name="audit">
         <div class="np-card">
+          <div class="np-card-title">{{ t('system.audit') }}</div>
           <el-table :data="audits" stripe size="small" class="np-table">
             <el-table-column prop="id" label="ID" width="70" />
             <el-table-column prop="username" :label="t('system.auditUser')" width="110" />
@@ -372,23 +362,27 @@ onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
       </el-tab-pane>
 
       <el-tab-pane :label="t('system.sysUpdate')" name="update">
-        <div class="np-card" style="padding:24px">
+        <div class="np-card update-card">
+          <div class="np-card-title">{{ t('system.sysUpdate') }}</div>
           <el-descriptions :column="2" border size="small">
             <el-descriptions-item :label="t('system.version')">{{ ver.version || '--' }}</el-descriptions-item>
             <el-descriptions-item :label="t('system.buildTime')">{{ ver.build || '--' }}</el-descriptions-item>
           </el-descriptions>
           <el-divider />
-          <el-button :loading="checking" @click="checkUpdate">{{ t('system.checkUpdate') }}</el-button>
-          <el-button type="warning" style="margin-left:10px" @click="doRollback">{{ t('system.rollbackUpdate') }}</el-button>
-          <div v-if="latest" style="margin-top:12px;padding:12px;background:#f0f9ff;border-radius:6px">
-            <div>{{ t('system.latestVer') }}: <b>{{ latest.latest }}</b></div>
-            <el-button v-if="latest.has_update" type="primary" style="margin-top:10px" :loading="upgrading" @click="doOnline">{{ t('system.upgradeNow') }}</el-button>
+          <div class="update-actions">
+            <el-button :loading="checking" @click="checkUpdate">{{ t('system.checkUpdate') }}</el-button>
+            <el-button type="warning" @click="doRollback">{{ t('system.rollbackUpdate') }}</el-button>
           </div>
-          <el-upload :http-request="doUpload" :show-file-list="false" accept=".zip" style="margin-top:20px" drag>
+          <div v-if="latest" class="latest-box">
+            <div>{{ t('system.latestVer') }}: <b>{{ latest.latest }}</b></div>
+            <el-button v-if="latest.has_update" type="primary" class="mt-8" :loading="upgrading" @click="doOnline">{{ t('system.upgradeNow') }}</el-button>
+          </div>
+          <el-upload :http-request="doUpload" :show-file-list="false" accept=".zip" class="mt-16" drag>
             <div>{{ t('system.uploadHint') }}</div>
           </el-upload>
-          <el-progress v-if="uploading || uploadPercent > 0" :percentage="uploadPercent" style="margin-top:12px" />
-          <div v-if="uploadResult" style="margin-top:8px;color:#67c23a;font-size:13px">
+          <el-progress v-if="uploading || uploadPercent > 0" :percentage="uploadPercent" class="mt-12" />
+          <div v-if="uploadResult" class="upload-ok">
+            已上传 {{ uploadResult.filename }}，大小 {{ (uploadResult.size/1024/1024).toFixed(2) }} MB，ZIP 完整性校验通过
             已上传 {{ uploadResult.filename }}，大小 {{ (uploadResult.size/1024/1024).toFixed(2) }} MB，ZIP 完整性校验通过
           </div>
           <el-button v-if="uploadResult" type="danger" style="margin-top:10px" :loading="applying" @click="doApply">{{ t('system.confirmApply') }}</el-button>
@@ -451,3 +445,57 @@ onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
     </el-dialog>
   </div>
 </template>
+
+<style scoped>
+.card-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.card-head-row .np-card-title { margin-bottom: 0; }
+.card-gap { margin-top: 12px; }
+.card-sub { color: var(--np-text-2); font-size: 12px; margin: 0 0 12px; }
+.mt-12 { margin-top: 12px; }
+
+/* 代码块（输出/配置 JSON）：中性次级表面 + 发丝描边，走主题变量 */
+.code-out {
+  margin-top: 10px;
+  background: var(--np-surface-1);
+  color: var(--np-text-1);
+  border: 1px solid var(--np-border);
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: Consolas, 'Courier New', monospace;
+}
+.code-wrap { position: relative; }
+.code-pre {
+  background: var(--np-surface-1);
+  color: var(--np-text-1);
+  border: 1px solid var(--np-border);
+  padding: 14px 84px 14px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.7;
+  overflow: auto;
+  margin: 0;
+  font-family: Consolas, 'Courier New', monospace;
+}
+.code-copy-btn { position: absolute; right: 8px; top: 8px; }
+
+.update-card { padding: 20px 24px; }
+.update-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.latest-box {
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: var(--np-primary-weak);
+  border: 1px solid var(--np-border);
+  border-radius: 8px;
+}
+.upload-ok { margin-top: 8px; color: var(--np-success); font-size: 13px; }
+</style>

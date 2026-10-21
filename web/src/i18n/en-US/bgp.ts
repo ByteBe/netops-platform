@@ -1,6 +1,9 @@
 export default {
   title: 'BGP / VPNv4 Neighbor Monitor',
   readOnly: 'Read-only via SSH, no configuration changes on devices',
+  totalPeers: 'Total Peers',
+  establishedPeers: 'Established',
+  downPeers: 'Not Established',
   device: 'Device', peerIp: 'Peer IP', outIface: 'Out Interface', state: 'State',
   upDown: 'Up/Down', prefixRcvd: 'Prefix Rcvd', prefixSent: 'Prefix Sent',
   updatedAt: 'Updated',

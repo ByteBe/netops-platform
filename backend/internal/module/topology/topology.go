@@ -1,11 +1,10 @@
+// Package topology 网络拓扑总览（华为 eSight 风格数据源）
+// 节点 = 纳管监控设备 + 本机核心 + 检测目标外部节点；链路 = 链路检测任务
+// 实时指标：设备 CPU/内存取 TSDB 最近点，链路时延/丢包取 PingMgr 实时缓存
 package topology
 
 import (
 	"fmt"
-	"math"
-	"os"
-	"path/filepath"
-	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -14,182 +13,90 @@ import (
 	"netops/internal/core"
 	"netops/internal/model"
 	"netops/internal/modreg"
+	"netops/internal/tsdb"
 )
 
+func init() {
+	modreg.RegisterProtected("topology", RegisterProtected)
+}
+
+// RegisterProtected 路由
 func RegisterProtected(a *core.App, g *gin.RouterGroup) {
-	g.GET("/graph", func(c *gin.Context) {
-		var devices []model.TopoDevice
-		a.DB.Order("id asc").Find(&devices)
-		for i := range devices {
-			if devices[i].X == 0 && devices[i].Y == 0 {
-				devices[i].X, devices[i].Y = autoPosition(float64(devices[i].ID))
-				a.DB.Model(&devices[i]).Updates(map[string]any{"x": devices[i].X, "y": devices[i].Y})
+	g.GET("/overview", func(c *gin.Context) {
+		var devs []model.MonitorDevice
+		a.DB.Order("id asc").Find(&devs)
+		var tasks []model.LinkTask
+		a.DB.Order("id asc").Find(&tasks)
+
+		devIP := map[string]uint{}
+		nodes := []gin.H{}
+		hostID := ""
+		for _, d := range devs {
+			devIP[d.IP] = d.ID
+			n := gin.H{
+				"id": fmt.Sprintf("dev_%d", d.ID), "name": d.Name, "ip": d.IP,
+				"type": d.Type, "vendor": d.Vendor, "status": d.Status,
+				"cpu": latestVal(a, "dev_cpu", map[string]string{"device_id": fmt.Sprint(d.ID)}),
+				"mem": latestVal(a, "dev_mem", map[string]string{"device_id": fmt.Sprint(d.ID)}),
+				"node_uuid": d.NodeUUID,
 			}
+			if d.NodeUUID == "" && hostID == "" {
+				hostID = fmt.Sprintf("dev_%d", d.ID)
+			}
+			nodes = append(nodes, n)
 		}
-		var links []model.TopoLink
-		a.DB.Order("id asc").Find(&links)
-		nodes := make([]gin.H, 0, len(devices))
-		for _, d := range devices {
-			nodes = append(nodes, gin.H{"id": d.ID, "name": d.Name, "ip": d.IP, "vendor": d.Vendor, "type": d.Type, "layer": d.Layer, "status": d.Status, "x": d.X, "y": d.Y, "z": d.Z, "icon": d.Icon, "remark": d.Remark})
+		if hostID == "" {
+			hostID = "host"
+			nodes = append(nodes, gin.H{"id": "host", "name": "本机", "ip": "", "type": "server", "vendor": "", "status": "up", "cpu": 0, "mem": 0, "node_uuid": ""})
 		}
-		edges := make([]gin.H, 0, len(links))
-		for _, l := range links {
-			var ips []string
-			a.DB.Model(&model.TopoLinkIP{}).Where("link_id=?", l.ID).Pluck("ip", &ips)
-			edges = append(edges, gin.H{"id": l.ID, "name": l.Name, "source": l.SourceID, "target": l.TargetID, "color": l.Color, "bandwidth": l.Bandwidth, "utilization": l.Utilization, "status": l.Status, "ips": ips})
-		}
-		response.OK(c, gin.H{"nodes": nodes, "edges": edges})
-	})
 
-	g.GET("/devices", func(c *gin.Context) {
-		var list []model.TopoDevice
-		a.DB.Order("id asc").Find(&list)
-		response.OK(c, list)
-	})
-	g.POST("/devices", func(c *gin.Context) {
-		var d model.TopoDevice
-		if err := c.ShouldBindJSON(&d); err != nil || d.Name == "" {
-			response.Bad(c, "参数错误")
-			return
+		ext := map[string]string{} // 外部目标节点 id -> target
+		links := []gin.H{}
+		for _, t := range tasks {
+			if !t.Enabled {
+				continue
+			}
+			rt, loss, up := 0.0, 0.0, false
+			if s, ok := a.PingMgr.Get(t.ID); ok {
+				rt, loss, up = s.RT, s.Loss, s.Up
+			}
+			status := "down"
+			if up {
+				status = "up"
+			} else if rt == 0 && loss == 0 {
+				status = "unknown"
+			}
+			dst := ""
+			if did, ok := devIP[t.Target]; ok {
+				dst = fmt.Sprintf("dev_%d", did)
+			} else if t.Target != "" {
+				nid := "ext_" + tsdb.Sanitize(t.Target)
+				ext[nid] = t.Target
+				dst = nid
+			}
+			if dst == "" {
+				continue // 无目标的链路不渲染
+			}
+			links = append(links, gin.H{
+				"id": fmt.Sprintf("link_%d", t.ID), "name": t.Name,
+				"source": hostID, "target": dst,
+				"method": t.Method, "port": t.Port,
+				"status": status, "rt": rt, "loss": loss,
+			})
 		}
-		if d.Vendor == "" {
-			d.Vendor = "h3c"
+		for nid, target := range ext {
+			nodes = append(nodes, gin.H{"id": nid, "name": target, "ip": target, "type": "target", "vendor": "", "status": "unknown", "cpu": 0, "mem": 0, "node_uuid": ""})
 		}
-		if d.Layer == "" {
-			d.Layer = "access"
-		}
-		if d.Status == "" {
-			d.Status = "up"
-		}
-		if d.X == 0 && d.Y == 0 {
-			var cnt int64
-			a.DB.Model(&model.TopoDevice{}).Count(&cnt)
-			d.X, d.Y = autoPosition(float64(cnt + 1))
-		}
-		a.DB.Create(&d)
-		response.OK(c, d)
-	})
-	g.PUT("/devices/:id", func(c *gin.Context) {
-		id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
-		var d model.TopoDevice
-		if a.DB.First(&d, id).Error != nil {
-			response.NotFound(c, "设备不存在")
-			return
-		}
-		var req model.TopoDevice
-		c.ShouldBindJSON(&req)
-		a.DB.Model(&d).Updates(map[string]any{"name": req.Name, "ip": req.IP, "vendor": req.Vendor, "type": req.Type, "layer": req.Layer, "status": req.Status, "icon": req.Icon, "x": req.X, "y": req.Y, "z": req.Z, "remark": req.Remark})
-		response.OK(c, gin.H{"ok": true})
-	})
-	g.DELETE("/devices/:id", func(c *gin.Context) {
-		id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
-		var lids []uint
-		a.DB.Model(&model.TopoLink{}).Where("source_id=? OR target_id=?", id, id).Pluck("id", &lids)
-		if len(lids) > 0 {
-			a.DB.Where("link_id IN ?", lids).Delete(&model.TopoLinkIP{})
-			a.DB.Delete(&model.TopoLink{}, lids)
-		}
-		a.DB.Delete(&model.TopoDevice{}, id)
-		response.OK(c, gin.H{"ok": true})
-	})
 
-	g.POST("/links", func(c *gin.Context) {
-		var req struct {
-			Name        string   `json:"name"`
-			SourceID    uint     `json:"source_id"`
-			TargetID    uint     `json:"target_id"`
-			Color       string   `json:"color"`
-			Bandwidth   string   `json:"bandwidth"`
-			Utilization float64  `json:"utilization"`
-			Status      string   `json:"status"`
-			IPs         []string `json:"ips"`
-		}
-		if c.ShouldBindJSON(&req) != nil || req.SourceID == 0 || req.TargetID == 0 {
-			response.Bad(c, "连线两端必填")
-			return
-		}
-		l := model.TopoLink{Name: req.Name, SourceID: req.SourceID, TargetID: req.TargetID, Color: req.Color, Bandwidth: req.Bandwidth, Utilization: req.Utilization, Status: req.Status}
-		if l.Color == "" {
-			l.Color = "#22c55e"
-		}
-		if l.Status == "" {
-			l.Status = "up"
-		}
-		a.DB.Create(&l)
-		saveIPs(a, l.ID, req.IPs)
-		response.OK(c, l)
-	})
-	g.PUT("/links/:id", func(c *gin.Context) {
-		id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
-		var l model.TopoLink
-		if a.DB.First(&l, id).Error != nil {
-			response.NotFound(c, "连线不存在")
-			return
-		}
-		var req struct {
-			Name        string   `json:"name"`
-			SourceID    uint     `json:"source_id"`
-			TargetID    uint     `json:"target_id"`
-			Color       string   `json:"color"`
-			Bandwidth   string   `json:"bandwidth"`
-			Utilization float64  `json:"utilization"`
-			Status      string   `json:"status"`
-			IPs         []string `json:"ips"`
-		}
-		c.ShouldBindJSON(&req)
-		a.DB.Model(&l).Updates(map[string]any{"name": req.Name, "source_id": req.SourceID, "target_id": req.TargetID, "color": req.Color, "bandwidth": req.Bandwidth, "utilization": req.Utilization, "status": req.Status})
-		saveIPs(a, l.ID, req.IPs)
-		response.OK(c, gin.H{"ok": true})
-	})
-	g.DELETE("/links/:id", func(c *gin.Context) {
-		id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
-		a.DB.Where("link_id=?", id).Delete(&model.TopoLinkIP{})
-		a.DB.Delete(&model.TopoLink{}, id)
-		response.OK(c, gin.H{"ok": true})
-	})
-
-	g.POST("/auto-layout", func(c *gin.Context) {
-		var devs []model.TopoDevice
-		a.DB.Find(&devs)
-		n := len(devs)
-		if n == 0 {
-			response.OK(c, gin.H{"updated": 0})
-			return
-		}
-		for i, d := range devs {
-			angle := 2 * math.Pi * float64(i) / float64(n)
-			a.DB.Model(&d).Updates(map[string]any{"x": 160 * math.Cos(angle), "y": 100 * math.Sin(angle)})
-		}
-		response.OK(c, gin.H{"updated": n})
-	})
-
-	g.POST("/upload", func(c *gin.Context) {
-		f, err := c.FormFile("file")
-		if err != nil {
-			response.Bad(c, "未选择文件")
-			return
-		}
-		ext := filepath.Ext(f.Filename)
-		dir := filepath.Join("data", "uploads")
-		os.MkdirAll(dir, 0755)
-		name := fmt.Sprintf("topo_%d%s", time.Now().UnixNano(), ext)
-		c.SaveUploadedFile(f, filepath.Join(dir, name))
-		response.OK(c, gin.H{"url": "/uploads/" + name})
+		response.OK(c, gin.H{"nodes": nodes, "links": links})
 	})
 }
 
-func saveIPs(a *core.App, linkID uint, ips []string) {
-	a.DB.Where("link_id=?", linkID).Delete(&model.TopoLinkIP{})
-	for _, ip := range ips {
-		if ip != "" {
-			a.DB.Create(&model.TopoLinkIP{LinkID: linkID, IP: ip})
-		}
+// latestVal 取 TSDB 最近 10 分钟窗口内的最后一条值
+func latestVal(a *core.App, metric string, tags map[string]string) float64 {
+	s, err := a.TSDB.Query(tsdb.Query{Metric: metric, Tags: tags, Start: time.Now().Add(-10 * time.Minute), End: time.Now(), Agg: "last"})
+	if err != nil || len(s) == 0 || len(s[0].Points) == 0 {
+		return 0
 	}
+	return s[0].Points[len(s[0].Points)-1][1]
 }
-
-func autoPosition(seed float64) (float64, float64) {
-	angle := 2 * math.Pi * float64(int64(seed)%12) / 12
-	return 220 + 180*math.Cos(angle), 180 + 110*math.Sin(angle)
-}
-
-func init() { modreg.RegisterProtected("topology", RegisterProtected) }
