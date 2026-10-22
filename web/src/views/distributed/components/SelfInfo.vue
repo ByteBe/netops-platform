@@ -11,7 +11,6 @@ const visible = ref(false)
     <el-descriptions :column="2" border>
       <el-descriptions-item :label="t('node.uuid')"><code class="mono">{{ self.node_uuid || '-' }}</code></el-descriptions-item>
       <el-descriptions-item :label="t('node.name')">{{ self.name || '-' }}</el-descriptions-item>
-      <el-descriptions-item :label="t('node.parent')">{{ self.parent || t('node.parentNone') }}</el-descriptions-item>
       <el-descriptions-item :label="t('node.token')">
         <code class="mono">{{ visible ? self.token : '••••••••' }}</code>
         <el-button link type="primary" size="small" class="ml-6" @click="visible = !visible">{{ visible ? t('node.hide') : t('node.show') }}</el-button>

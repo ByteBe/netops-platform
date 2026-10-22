@@ -23,8 +23,12 @@ export function histTooltip(opts: HistTooltipOpts = {}) {
   return {
     trigger: 'axis',
     confine: true,
-    axisPointer: { type: 'line', label: { backgroundColor: 'rgba(30,32,36,0.85)' } },
-    backgroundColor: cssVar('--np-bg-raise', 'rgba(255,255,255,0.96)'),
+    // 固定显示在图表右上角，不跟随鼠标：无论 hover 任何位置，曲线区域零遮挡
+    position: ['right', 'top'],
+    // 禁用 canvas 轴指针：hover 仅显示 DOM tooltip，不触发画布重绘（避免部分环境重绘导致曲线消失）
+    axisPointer: { type: 'none' },
+    // 半透明背景：即使 tooltip 覆盖到曲线区域，曲线仍透过可见，避免"曲线消失"
+    backgroundColor: cssVar('--np-bg-raise', 'rgba(255,255,255,0.72)'),
     borderColor: cssVar('--np-border', '#d0d4da'),
     borderWidth: 1,
     padding: [8, 12],

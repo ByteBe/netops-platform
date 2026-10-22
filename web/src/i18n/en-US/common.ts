@@ -6,5 +6,6 @@ export default {
   copy: 'Copy', export: 'Export', refresh: 'Refresh', generate: 'Generate', test: 'Test',
   back: 'Back', tip: 'Notice', success: 'Operation succeeded', failed: 'Operation failed',
   confirmDelete: 'Are you sure to delete this record? This cannot be undone.',
-  loading: 'Loading...', noData: 'No data', enable: 'Enable', disable: 'Disable'
+  loading: 'Loading...', noData: 'No data', enable: 'Enable', disable: 'Disable',
+  required: 'is required', warning: 'Notice'
 }

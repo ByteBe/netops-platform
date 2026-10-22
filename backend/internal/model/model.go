@@ -577,3 +577,39 @@ type Certificate struct {
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
 }
+
+// TopoNode 拓扑手工节点：用户手工添加的画布节点（非纳管设备、非检测目标）
+type TopoNode struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	Name      string    `gorm:"size:128;not null" json:"name"`
+	IP        string    `gorm:"size:64" json:"ip"`
+	Type      string    `gorm:"size:32;default:other" json:"type"` // server/switch/router/firewall/other
+	Status    string    `gorm:"size:16;default:unknown" json:"status"` // up/down/unknown
+	X         float64   `gorm:"default:0" json:"x"`
+	Y         float64   `gorm:"default:0" json:"y"`
+	Remark    string    `gorm:"size:256" json:"remark"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// TopoLink 拓扑手工链路：用户手工添加的节点间连线（不依赖链路检测任务）
+type TopoLink struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	Name      string    `gorm:"size:128;not null" json:"name"`
+	Source    string    `gorm:"size:64;not null;index" json:"source"` // 节点 id：dev_x / host / ext_x / tn_x
+	Target    string    `gorm:"size:64;not null;index" json:"target"`
+	Method    string    `gorm:"size:16;default:manual" json:"method"` // manual/icmp/tcp
+	Port      int       `gorm:"default:0" json:"port"`
+	Status    string    `gorm:"size:16;default:unknown" json:"status"` // up/down/unknown
+	Color     string    `gorm:"size:16;default:#3d9df2" json:"color"`
+	Remark    string    `gorm:"size:256" json:"remark"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// TopoPos 拓扑节点位置记忆：记录任意节点（dev_x/host/ext_x/tn_x）的画布坐标，拖拽后持久化
+type TopoPos struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	NodeID    string    `gorm:"size:64;uniqueIndex;not null" json:"node_id"`
+	X         float64   `gorm:"default:0" json:"x"`
+	Y         float64   `gorm:"default:0" json:"y"`
+	UpdatedAt time.Time `json:"updated_at"`
+}

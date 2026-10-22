@@ -36,6 +36,13 @@ func mqttCfg(a *core.App) (broker, user, pass, ca string) {
 	return
 }
 
+// isMqttTlsScheme 判断 MQTT Broker 地址是否 TLS 传输（支持 mqtts/ssl/tls/wss scheme；
+// ws 明文无需 TLS；paho 对 wss 自动使用 SetTLSConfig 的配置）
+func isMqttTlsScheme(broker string) bool {
+	return strings.HasPrefix(broker, "ssl://") || strings.HasPrefix(broker, "tls://") ||
+		strings.HasPrefix(broker, "mqtts://") || strings.HasPrefix(broker, "wss://")
+}
+
 // tlsConfig 构建 MQTT TLS 配置：配置了自定义 CA（PEM）时用其校验服务端证书，
 // 否则使用系统根证书池验证；不再跳过校验
 func tlsConfig(caPEM string) (*tls.Config, error) {
@@ -170,8 +177,18 @@ func StartMQTT(a *core.App) {
 	mqttOnce.Do(func() {
 		broker, user, pass, ca := mqttCfg(a)
 		if broker == "" {
-			logger.Infof("[mqtt] broker 未配置，跳过 MQTT 启动")
-			return
+			// 上级/根节点场景：未配置远程 broker，回退连接本地 mosquitto，
+			// 否则无法订阅 netops/+/up，将收不到下级经 MQTT 上报的数据。
+			// 凭据回退本地 mosquitto 部署默认（与云端 mosquitto 配置一致）。
+			broker = "tcp://127.0.0.1:1883"
+			if user == "" {
+				user = "admin"
+			}
+			if pass == "" {
+				pass = "tssbs@2026"
+			}
+			ca = ""
+			logger.Infof("[mqtt] broker 未配置，回退本地 %s（上级/根节点接收下级上报）", broker)
 		}
 		opts := mqtt.NewClientOptions()
 		opts.AddBroker(broker)
@@ -183,8 +200,8 @@ func StartMQTT(a *core.App) {
 		opts.SetAutoReconnect(true)
 		opts.SetConnectRetry(true)
 		opts.SetConnectTimeout(5 * time.Second)
-		// TLS（mqtts:// 自动启用）：按配置的 CA（或系统根证书）校验服务端证书
-		if strings.HasPrefix(broker, "ssl://") || strings.HasPrefix(broker, "tls://") {
+		// TLS（mqtts/ssl/tls/wss 自动启用）：按配置的 CA（或系统根证书）校验服务端证书
+		if isMqttTlsScheme(broker) {
 			tc, terr := tlsConfig(ca)
 			if terr != nil {
 				logger.Warnf("[mqtt] TLS 配置无效（%v），改用系统根证书校验", terr)
@@ -227,6 +244,11 @@ func onIngest(c mqtt.Client, msg mqtt.Message) {
 	if activeApp == nil {
 		return
 	}
+	// 防自循环：本机订阅 netops/+/up 也会收到自己发布/转发的消息，
+	// 若不拦截会导致"收到→转发→再收到"无限风暴（本机自身消息无处理价值）
+	if req.NodeUUID == SelfUUID(activeApp) {
+		return
+	}
 	if !verifyIngestToken(activeApp, req.NodeUUID, req.Token) {
 		logger.Warnf("[mqtt] token invalid from %s", req.NodeUUID)
 		return
@@ -241,16 +263,37 @@ func onIngest(c mqtt.Client, msg mqtt.Message) {
 		logger.Warnf("[mqtt] cert fingerprint mismatch from %s", req.NodeUUID)
 		return
 	}
-	// 证书交换：登记下级公证书（若携带），再维护待导入时限（导入即停止计时）
+	// 证书交换：登记下级公证书（若携带），再维护待导入时限（导入即停止计时）；
+	// 与 HTTP ingest 一致：仅直接下级（via_uuid 为空）做 3 分钟证书强制，间接节点由转发节点互认
 	savePeerCert(activeApp, req.NodeUUID, req.Name, req.CertPEM)
-	touchCertWait(activeApp, req.NodeUUID)
+	if req.ViaUUID == "" {
+		touchCertWait(activeApp, req.NodeUUID)
+	}
 	// 更新或创建节点（心跳更新不覆盖已注册层级）
 	upsertNode(activeApp, req.NodeUUID, req.Name, req.Level, len(req.Devices), len(req.Containers))
 	// 与 HTTP 通道一致：持久化下级上报的明细，保证上级可查看
 	upsertNodeDevices(activeApp, req.NodeUUID, req.Devices)
 	upsertNodeContainers(activeApp, req.NodeUUID, req.Containers)
 	upsertNodeLinks(activeApp, req.NodeUUID, req.Links)
+	// 多级转发（MQTT 通道承载，HTTPS 级联已移除）：本机也是下级（配置了上级地址）
+	// 且已连上级 broker 时，把收到的下级数据转发给上级（via_uuid=本机，上级对直接下级做证书强制）。
+	// 注意：转发使用本机 MQTT 连接；多级组网时本机应连接上级的 broker 才能完成转发。
+	forwardViaMQTT(activeApp, req)
 	logger.Infof("[mqtt] ingest from %s: devices=%d containers=%d", req.Name, len(req.Devices), len(req.Containers))
+}
+
+// forwardViaMQTT 把下级上报的数据经 MQTT 转发给本节点的上级（多级级联，HTTP 通道已移除）
+func forwardViaMQTT(a *core.App, req IngestRequest) {
+	if parent := getSetting(a, "parent_url"); parent == "" || mqttClient == nil || !mqttClient.IsConnected() {
+		return
+	}
+	// 双保险：本机自身消息不参与转发（防收到自己消息后再次转发形成风暴）
+	if req.NodeUUID == SelfUUID(a) {
+		return
+	}
+	fwd := req
+	fwd.ViaUUID = SelfUUID(a)
+	PublishSnapshot(a, fwd.toPayload())
 }
 
 func upsertNode(a *core.App, uuid, name string, level, devCnt, ctnCnt int) {

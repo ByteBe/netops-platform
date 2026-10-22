@@ -129,13 +129,17 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		}
 	})
 
-	// 历史指标（24 小时，5 分钟聚合）
+	// 历史指标（默认 24 小时，5 分钟聚合；支持 ?hours= 指定窗口 1-720）
 	// 注意：查询 tags 只传 nginx_id，依赖 builtin 引擎对 tags 做 LIKE 子串匹配（写入含 name），
 	// 更换其他 tsdb 引擎时需保证同样的子串匹配语义或补全 tags。
 	g.GET("/instances/:id/history", func(c *gin.Context) {
 		id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+		hours := 24
+		if h, err := strconv.Atoi(c.Query("hours")); err == nil && h >= 1 && h <= 720 {
+			hours = h
+		}
 		end := time.Now()
-		start := end.Add(-24 * time.Hour)
+		start := end.Add(-time.Duration(hours) * time.Hour)
 		tags := map[string]string{"nginx_id": strconv.FormatUint(id, 10)}
 		q := func(metric string) [][2]float64 {
 			s, _ := a.TSDB.Query(tsdb.Query{Metric: metric, Tags: tags, Start: start, End: end, Bucket: 5 * time.Minute, Agg: "avg"})

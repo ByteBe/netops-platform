@@ -360,6 +360,15 @@ func registerCertHandlers(a *core.App, g *gin.RouterGroup) {
 		}
 		response.OK(c, gin.H{"ok": true, "fingerprint": selfFP(a)})
 	})
+	// 导出本机私有证书（私钥 PEM）：用于备份或离线迁移；导出即持有节点身份，前端需二次确认
+	g.GET("/cert/self/private-key", func(c *gin.Context) {
+		pemKey, err := certsvc.ExportPrivateKey()
+		if err != nil {
+			response.OK(c, gin.H{"ok": false, "error": err.Error()})
+			return
+		}
+		response.OK(c, gin.H{"ok": true, "private_key_pem": pemKey})
+	})
 }
 
 func orStr(v, def string) string {

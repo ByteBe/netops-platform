@@ -5,7 +5,7 @@ import { ElMessage } from 'element-plus'
 import { Lock } from '@element-plus/icons-vue'
 import { putEnc, postEnc } from '@/utils/request'
 const { t } = useI18n()
-const props = defineProps<{ cfg: any }>()
+const props = defineProps<{ cfg: any; isRoot?: boolean }>()
 const emit = defineEmits(['saved'])
 const checking = ref(false)
 const status = ref('')
@@ -81,7 +81,6 @@ async function removeCa() {
 async function save() {
   try {
     await putEnc('/system/settings/self_node_name', { value: props.cfg.self_node_name })
-    await putEnc('/system/settings/parent_url', { value: props.cfg.parent_url })
     await putEnc('/system/settings/cluster_token', { value: props.cfg.cluster_token })
     await putEnc('/system/settings/mqtt_broker', { value: props.cfg.mqtt_broker })
     await putEnc('/system/settings/mqtt_username', { value: props.cfg.mqtt_username })
@@ -110,69 +109,77 @@ async function checkMqtt() {
     <div class="np-card-title">{{ t('node.cascadeConfig') }}</div>
     <el-form :model="cfg" inline>
       <el-form-item :label="t('node.selfNodeName')"><el-input v-model="cfg.self_node_name" :placeholder="t('node.selfNodePlaceholder')" /></el-form-item>
-      <el-form-item :label="t('node.parentUrl')"><el-input v-model="cfg.parent_url" :placeholder="t('node.parentPlaceholder')" /></el-form-item>
       <el-form-item label="Token"><el-input v-model="cfg.cluster_token" type="password" show-password /></el-form-item>
       <el-form-item>
         <el-button type="primary" @click="save">{{ t('node.save') }}</el-button>
-        <el-button @click="pushNow">{{ t('node.pushNow') }}</el-button>
+        <el-button v-if="!isRoot" @click="pushNow">{{ t('node.pushNow') }}</el-button>
       </el-form-item>
     </el-form>
-    <el-divider />
-    <el-form :model="cfg" label-width="110px">
-      <el-form-item :label="t('node.mqttBroker')"><el-input v-model="cfg.mqtt_broker" :placeholder="t('node.mqttBrokerPlaceholder')" style="width:320px" /></el-form-item>
-      <el-form-item :label="t('node.mqttUser')"><el-input v-model="cfg.mqtt_username" /></el-form-item>
-      <el-form-item :label="t('node.mqttPass')"><el-input v-model="cfg.mqtt_password" type="password" show-password /></el-form-item>
-      <el-form-item>
-        <el-button @click="save">{{ t('node.saveMqtt') }}</el-button>
-        <el-button type="success" :loading="checking" @click="checkMqtt">{{ t('node.checkMqtt') }}</el-button>
-      </el-form-item>
-    </el-form>
-    <!-- MQTT TLS 安全：证书与 MQTT 强关联面板 -->
-    <div class="mqtt-tls">
-      <div class="mqtt-tls-head">
-        <div class="mqtt-tls-title">
-          <el-icon class="mqtt-tls-icon"><Lock /></el-icon>
-          <span>{{ t('node.mqttTlsTitle') }}</span>
-          <el-tag :type="cfg.mqtt_tls_ca_set ? 'success' : 'info'" size="small" effect="light">
-            {{ cfg.mqtt_tls_ca_set ? t('node.mqttTlsEnabled') : t('node.mqttTlsDisabled') }}
-          </el-tag>
+    <div class="cascade-tip">{{ isRoot ? t('node.cascadeRootTip') : t('node.cascadeHttpRemoved') }}</div>
+    <template v-if="!isRoot">
+      <el-divider />
+      <el-form :model="cfg" label-width="110px">
+        <el-form-item :label="t('node.mqttBroker')"><el-input v-model="cfg.mqtt_broker" :placeholder="t('node.mqttBrokerPlaceholder')" style="width:320px" /></el-form-item>
+        <el-form-item :label="t('node.mqttUser')"><el-input v-model="cfg.mqtt_username" /></el-form-item>
+        <el-form-item :label="t('node.mqttPass')"><el-input v-model="cfg.mqtt_password" type="password" show-password /></el-form-item>
+        <el-form-item>
+          <el-button @click="save">{{ t('node.saveMqtt') }}</el-button>
+          <el-button type="success" :loading="checking" @click="checkMqtt">{{ t('node.checkMqtt') }}</el-button>
+        </el-form-item>
+      </el-form>
+      <!-- MQTT TLS 安全：证书与 MQTT 强关联面板 -->
+      <div class="mqtt-tls">
+        <div class="mqtt-tls-head">
+          <div class="mqtt-tls-title">
+            <el-icon class="mqtt-tls-icon"><Lock /></el-icon>
+            <span>{{ t('node.mqttTlsTitle') }}</span>
+            <el-tag :type="cfg.mqtt_tls_ca_set ? 'success' : 'info'" size="small" effect="light">
+              {{ cfg.mqtt_tls_ca_set ? t('node.mqttTlsEnabled') : t('node.mqttTlsDisabled') }}
+            </el-tag>
+          </div>
+          <span class="mqtt-tls-sub">{{ t('node.mqttTlsTip') }}</span>
         </div>
-        <span class="mqtt-tls-sub">{{ t('node.mqttTlsTip') }}</span>
-      </div>
-      <div class="mqtt-tls-body">
-        <div class="ca-box">
-          <template v-if="cfg.mqtt_tls_ca_set">
-            <div class="ca-state ok">
-              <span class="ca-dot ok-dot" />{{ t('node.certCaSet') }}
-            </div>
-            <div class="ca-meta">{{ cfg.mqtt_tls_ca_info }}</div>
-          </template>
-          <template v-else>
-            <div class="ca-state muted">{{ t('node.certCaNotSet') }}</div>
-          </template>
-        </div>
-        <div class="ca-actions">
-          <el-upload :auto-upload="false" :show-file-list="false" accept=".pem,.crt,.cer,.cert,.txt" :on-change="onCaFile" style="margin-bottom:8px">
-            <el-button size="small" :loading="uploading">{{ t('node.mqttCaUpload') }}</el-button>
-          </el-upload>
-          <el-button v-if="cfg.mqtt_tls_ca_set" size="small" type="danger" plain @click="removeCa">{{ t('node.certCaRemove') }}</el-button>
-          <div v-if="caStatus" class="ca-status" :class="caStatus.ok && caStatus.valid ? 'ok' : 'fail'">
-            <template v-if="caStatus.ok && caStatus.valid">
-              <div class="ca-dot ok-dot" />{{ t('node.mqttCaSaved') }}
-              <div v-if="caStatus.certs?.length" class="ca-meta">{{ caSummary(caStatus.certs) }}</div>
+        <div class="mqtt-tls-body">
+          <div class="ca-box">
+            <template v-if="cfg.mqtt_tls_ca_set">
+              <div class="ca-state ok">
+                <span class="ca-dot ok-dot" />{{ t('node.certCaSet') }}
+              </div>
+              <div class="ca-meta">{{ cfg.mqtt_tls_ca_info }}</div>
             </template>
             <template v-else>
-              <div class="ca-dot fail-dot" />{{ caStatus.message || t('node.mqttCaInvalid') }}
+              <div class="ca-state muted">{{ t('node.certCaNotSet') }}</div>
             </template>
+          </div>
+          <div class="ca-actions">
+            <el-upload :auto-upload="false" :show-file-list="false" accept=".pem,.crt,.cer,.cert,.txt" :on-change="onCaFile" style="margin-bottom:8px">
+              <el-button size="small" :loading="uploading">{{ t('node.mqttCaUpload') }}</el-button>
+            </el-upload>
+            <el-button v-if="cfg.mqtt_tls_ca_set" size="small" type="danger" plain @click="removeCa">{{ t('node.certCaRemove') }}</el-button>
+            <div v-if="caStatus" class="ca-status" :class="caStatus.ok && caStatus.valid ? 'ok' : 'fail'">
+              <template v-if="caStatus.ok && caStatus.valid">
+                <div class="ca-dot ok-dot" />{{ t('node.mqttCaSaved') }}
+                <div v-if="caStatus.certs?.length" class="ca-meta">{{ caSummary(caStatus.certs) }}</div>
+              </template>
+              <template v-else>
+                <div class="ca-dot fail-dot" />{{ caStatus.message || t('node.mqttCaInvalid') }}
+              </template>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </template>
     <div v-if="status" class="mqtt-check-status" :class="statusOk ? 'ok' : 'fail'">{{ status }}</div>
   </div>
 </template>
 
 <style scoped>
+.cascade-tip {
+  margin: -2px 0 10px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--np-text-2);
+}
 .mqtt-tls {
   margin-top: 4px;
   border: 1px solid var(--np-border);

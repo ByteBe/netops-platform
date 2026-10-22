@@ -42,8 +42,44 @@ const mcpConfigJson = computed(() => {  const srv = mcpInfo.value?.server || 'ht
   return map[mcpAgentTab.value] || url
 })
 async function copyMcp() {
-  try { await navigator.clipboard.writeText(mcpConfigJson.value); ElMessage.success(t('system.copied')) }
-  catch { ElMessage.warning(t('system.copyFail')) }
+  const text = mcpConfigJson.value
+  // 1) 安全上下文（https）下优先用剪贴板 API
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text)
+      ElMessage.success(t('system.copied'))
+      return
+    }
+    throw new Error('clipboard unavailable')
+  } catch {
+    // 2) 降级：隐藏 textarea + execCommand（http 可用）
+    try {
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      const ok = document.execCommand('copy')
+      document.body.removeChild(ta)
+      if (ok) {
+        ElMessage.success(t('system.copied'))
+        return
+      }
+      throw new Error('execCommand failed')
+    } catch {
+      // 3) 最终降级：自动选中代码内容，提示手动复制
+      const pre = document.querySelector('.code-pre') as HTMLElement | null
+      if (pre) {
+        const range = document.createRange()
+        range.selectNodeContents(pre)
+        const sel = window.getSelection()
+        sel?.removeAllRanges()
+        sel?.addRange(range)
+      }
+      ElMessage.warning(t('system.copyManual'))
+    }
+  }
 }
 async function loadMCP() {
   mcpAgents.value = await getEnc<MCPAgent[]>('/system/mcp/agents')
@@ -105,11 +141,11 @@ async function testEmail(e: EmailConfig) {
 interface NotifyConfig { id: number; name: string; type: string; addr: string; token?: string; enabled: boolean }
 const notifyList = ref<NotifyConfig[]>([])
 const notifyDialog = ref(false)
-const notifyForm = reactive<NotifyConfig>({ id: 0, name: '', type: 'email', addr: '', enabled: true })
+const notifyForm = reactive<NotifyConfig>({ id: 0, name: '', type: 'email', addr: '', token: '', enabled: true })
 async function loadNotify() { notifyList.value = await getEnc<NotifyConfig[]>('/alert/notify') }
 function openNotify(n?: NotifyConfig) {
   if (n) Object.assign(notifyForm, n)
-  else Object.assign(notifyForm, { id: 0, name: '', type: 'email', addr: '', enabled: true })
+  else Object.assign(notifyForm, { id: 0, name: '', type: 'email', addr: '', token: '', enabled: true })
   notifyDialog.value = true
 }
 async function saveNotify() {
@@ -191,7 +227,7 @@ function isRestartNetworkError(e: any) {
 }
 function redirectAfterRestart(delay = 6000) {
   ElMessage.success(t('system.upgrading'))
-  setTimeout(() => { localStorage.clear(); location.href = '/login' }, delay)
+  setTimeout(() => { sessionStorage.clear(); location.href = '/login' }, delay)
 }
 async function doOnline() { upgrading.value = true; try { await postEnc('/update/online', { url: latest.value.download_url }); redirectAfterRestart(6000) } catch(e:any){ if (isRestartNetworkError(e)) { redirectAfterRestart(6000) } else { ElMessage.error(e.message||t('system.upgradeFail')); upgrading.value = false } } }
 async function doUpload(opt: any) {
@@ -205,7 +241,7 @@ async function doUpload(opt: any) {
   const fd = new FormData(); fd.append('file', opt.file)
   const xhr = new XMLHttpRequest()
   xhr.open('POST', '/api/v1/update/upload')
-  xhr.setRequestHeader('Authorization', 'Bearer ' + (localStorage.getItem('np-token') || ''))
+  xhr.setRequestHeader('Authorization', 'Bearer ' + (sessionStorage.getItem('np-token') || ''))
   xhr.setRequestHeader('X-Timestamp', String(Math.floor(Date.now() / 1000)))
   xhr.setRequestHeader('X-Nonce', Math.random().toString(36).slice(2, 15) + Date.now().toString(36))
   xhr.upload.onprogress = (e) => { if (e.lengthComputable) uploadPercent.value = Math.round(e.loaded / e.total * 100) }
@@ -439,6 +475,9 @@ onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
           </el-select>
         </el-form-item>
         <el-form-item :label="t('system.channelAddr')"><el-input v-model="notifyForm.addr" :placeholder="notifyAddrPlaceholder()" /></el-form-item>
+        <el-form-item v-if="notifyForm.type==='feishu'||notifyForm.type==='dingtalk'" :label="t('system.notifySecret')">
+          <el-input v-model="notifyForm.token" type="password" show-password :placeholder="t('system.secretPlaceholder')" />
+        </el-form-item>
         <el-form-item :label="t('common.enabled')"><el-switch v-model="notifyForm.enabled" /></el-form-item>
       </el-form>
       <template #footer><el-button @click="notifyDialog=false">{{ t('system.cancel') }}</el-button><el-button type="primary" @click="saveNotify">{{ t('system.save') }}</el-button></template>

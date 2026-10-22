@@ -75,6 +75,7 @@ const testing = ref(false)
 const testResult = ref('')
 const histInstance = ref<DBInstance | null>(null)
 const histRef = ref<HTMLDivElement>()
+const histHours = ref(24)
 const histData = ref<{ conn: number[][]; tx: number[][] }>({ conn: [], tx: [] })
 let histChart: echarts.ECharts | null = null
 let ws: WSClient | null = null
@@ -155,15 +156,27 @@ async function testConn() {
 async function showHistory(d: DBInstance) {
   histInstance.value = d
   histVisible.value = true
+  histHours.value = 24
+  await loadDBHistory()
+}
+
+async function loadDBHistory() {
+  const d = histInstance.value
+  if (!d) return
   await nextTick()
   const h = await getEnc<{
     conn: number[][]
     tx: number[][]
-  }>(`/dbmonitor/instances/${d.id}/history?hours=6`)
+  }>(`/dbmonitor/instances/${d.id}/history?hours=${histHours.value}`)
   histData.value = h
-  histChart ??= echarts.init(histRef.value as HTMLDivElement)
+  if (!histRef.value) return
+  histChart?.dispose()
+  histChart = echarts.init(histRef.value as HTMLDivElement, null, { renderer: 'svg' })
   renderHist()
 }
+
+// 轴刻度数字格式化：整数不显示小数，避免右侧刻度过长被裁剪
+function fmtAxisNum(v: number) { return Number.isInteger(v) ? String(v) : String(Math.round(v * 100) / 100) }
 
 function renderHist() {
   if (!histRef.value || !histChart) return
@@ -173,8 +186,12 @@ function renderHist() {
     tooltip: {
       trigger: 'axis',
       confine: true,
-      axisPointer: { type: 'line', label: { backgroundColor: 'rgba(30,32,36,0.85)' } },
-      backgroundColor: cssVar('--np-bg-raise', 'rgba(255,255,255,0.96)'),
+      // 固定显示在图表右上角，不跟随鼠标：无论 hover 任何位置，曲线区域零遮挡
+      position: ['right', 'top'],
+      // 禁用 canvas 轴指针：hover 仅显示 DOM tooltip，不触发画布重绘（避免部分环境重绘导致曲线消失）
+      axisPointer: { type: 'none' },
+      // 半透明背景：即使 tooltip 覆盖到曲线区域，曲线仍透过可见，避免"曲线消失"
+      backgroundColor: cssVar('--np-bg-raise', 'rgba(255,255,255,0.72)'),
       borderColor: cssVar('--np-border', '#d0d4da'),
       borderWidth: 1,
       padding: [8, 12],
@@ -207,16 +224,30 @@ function renderHist() {
         return html
       }
     },
-    legend: { data: ['Connections', 'Tx/s'], textStyle: { color: ca.axis } },
-    grid: { left: 60, right: 20, top: 36, bottom: 28 },
+    legend: { data: [t('dbmon.connections'), t('dbmon.txRate')], textStyle: { color: ca.axis } },
+    grid: { left: 68, right: 56, top: 36, bottom: 60 },
     xAxis: { type: 'time', axisLabel: { color: ca.axis }, axisLine: { lineStyle: { color: ca.axisLine } } },
     yAxis: [
-      { type: 'value', name: 'Conn', nameTextStyle: { color: ca.axis }, axisLabel: { color: ca.axis }, splitLine: { lineStyle: { color: ca.split } } },
-      { type: 'value', name: 'Tx/s', nameTextStyle: { color: ca.axis }, axisLabel: { color: ca.axis }, splitLine: { show: false } }
+      { type: 'value', name: t('dbmon.connections'), nameTextStyle: { color: ca.axis }, axisLabel: { color: ca.axis, formatter: fmtAxisNum }, splitLine: { lineStyle: { color: ca.split } } },
+      { type: 'value', name: t('dbmon.txRate'), nameTextStyle: { color: ca.axis }, axisLabel: { color: ca.axis, formatter: fmtAxisNum }, splitLine: { show: false } }
+    ],
+    dataZoom: [
+      // moveOnMouseMove 必须为 false：否则鼠标悬停会被当作数据窗口平移，图表重绘导致曲线"消失"
+      { type: 'inside', start: 0, end: 100, moveOnMouseMove: false, zoomOnMouseWheel: true, moveOnMouseWheel: false },
+      {
+        type: 'slider', start: 0, end: 100, height: 24, bottom: 10,
+        textStyle: { color: ca.axis },
+        borderColor: ca.axisLine,
+        fillerColor: 'transparent',
+        handleStyle: { color: ca.axisLine },
+        moveHandleStyle: { color: ca.axisLine },
+        dataBackground: { lineStyle: { color: ca.axisLine }, areaStyle: { color: ca.split } }
+      }
     ],
     series: [
-      { name: 'Connections', type: 'line', showSymbol: false, smooth: true, lineStyle: { width: 2, color: cssVar('--np-primary', '#d95f1f') }, itemStyle: { color: cssVar('--np-primary', '#d95f1f') }, data: histData.value.conn || [] },
-      { name: 'Tx/s', type: 'line', yAxisIndex: 1, showSymbol: false, smooth: true, lineStyle: { width: 2, color: cssVar('--np-success', '#3f9e63') }, itemStyle: { color: cssVar('--np-success', '#3f9e63') }, data: histData.value.tx || [] }
+      // emphasis disabled：hover 时曲线不做任何重绘（不显示强调点），避免部分环境 hover 瞬间曲线闪烁消失
+      { name: t('dbmon.connections'), type: 'line', showSymbol: false, smooth: false, emphasis: { disabled: true }, lineStyle: { width: 2, color: cssVar('--np-primary', '#d95f1f') }, itemStyle: { color: cssVar('--np-primary', '#d95f1f') }, areaStyle: { opacity: 0.08 }, connectNulls: false, data: histData.value.conn || [] },
+      { name: t('dbmon.txRate'), type: 'line', yAxisIndex: 1, showSymbol: false, smooth: false, emphasis: { disabled: true }, lineStyle: { width: 2, color: cssVar('--np-success', '#3f9e63') }, itemStyle: { color: cssVar('--np-success', '#3f9e63') }, areaStyle: { opacity: 0.08 }, connectNulls: false, data: histData.value.tx || [] }
     ]
   }, true)
 }
@@ -381,7 +412,17 @@ onBeforeUnmount(() => {
     </el-dialog>
 
     <el-dialog v-model="histVisible" :title="`${t('link.history')} - ${histInstance?.name}`" width="780px">
-      <div ref="histRef" class="np-chart" style="height: 320px"></div>
+      <div style="margin-bottom:8px">
+        <el-select v-model="histHours" size="small" style="width:140px" @change="loadDBHistory">
+          <el-option :label="$t('monitor.lastNHours', {n: 1})" :value="1" />
+          <el-option :label="$t('monitor.lastNHours', {n: 6})" :value="6" />
+          <el-option :label="$t('monitor.lastNHours', {n: 12})" :value="12" />
+          <el-option :label="$t('monitor.lastNHours', {n: 24})" :value="24" />
+          <el-option :label="$t('monitor.lastNHours', {n: 72})" :value="72" />
+          <el-option :label="$t('monitor.lastNHours', {n: 168})" :value="168" />
+        </el-select>
+      </div>
+      <div ref="histRef" class="np-chart" style="height: 400px"></div>
     </el-dialog>
   </div>
 </template>

@@ -2,12 +2,9 @@
 package alert
 
 import (
-	"bytes"
 	"crypto/md5"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -15,12 +12,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"netops/internal/common/logger"
 	"netops/internal/common/response"
 	"netops/internal/core"
 	"netops/internal/middleware"
 	"netops/internal/model"
 	"netops/internal/modreg"
 	"netops/internal/service/email"
+	"netops/internal/service/webhook"
 )
 
 func RegisterProtected(a *core.App, g *gin.RouterGroup) {
@@ -174,7 +173,6 @@ func Notify(app *core.App, level, target, msg string) {
 }
 
 func sendNotify(app *core.App, level, target, msg string) {
-	client := &http.Client{Timeout: 8 * time.Second}
 	var ncs []model.NotifyConfig
 	app.DB.Where("enabled = ?", true).Find(&ncs)
 	for _, nc := range ncs {
@@ -193,24 +191,9 @@ func sendNotify(app *core.App, level, target, msg string) {
 		if url == "" {
 			continue
 		}
-		var out []byte
-		if nc.Type == "feishu" {
-			out, _ = json.Marshal(map[string]any{"msg_type": "text", "content": map[string]string{"text": "[" + level + "] " + target + "\n" + msg}})
-		} else {
-			out, _ = json.Marshal(map[string]any{"msgtype": "text", "text": map[string]string{"content": "[" + level + "] " + target + "\n" + msg}})
-		}
-		for i := 0; i < 3; i++ {
-			req, _ := http.NewRequest("POST", url, bytes.NewReader(out))
-			req.Header.Set("Content-Type", "application/json")
-			if nc.Token != "" {
-				req.Header.Set("X-Signature", nc.Token)
-			}
-			resp, err := client.Do(req)
-			if err == nil {
-				_ = resp.Body.Close()
-				break
-			}
-			time.Sleep(time.Second)
+		// 飞书/钉钉/企业微信 Webhook：由 webhook 包统一处理消息格式、平台加签与送达校验
+		if err := webhook.SendText(nc.Type, url, nc.Token, "["+level+"] "+target+"\n"+msg); err != nil {
+			logger.Warnf("[notify] 渠道 %s(%s) 发送失败: %v", nc.Name, nc.Type, err)
 		}
 	}
 }
@@ -229,9 +212,9 @@ func StartEvaluator(app *core.App) {
 			if app.DB == nil {
 				continue
 			}
-			// CPU/内存阈值告警
+			// CPU/内存/磁盘阈值告警
 			var rules []model.AlertRule
-			app.DB.Where("enabled = ? AND metric IN ?", true, []string{"cpu", "mem"}).Find(&rules)
+			app.DB.Where("enabled = ? AND metric IN ?", true, []string{"cpu", "mem", "disk"}).Find(&rules)
 			if len(rules) > 0 && app.SnmpMgr != nil {
 				var devices []model.MonitorDevice
 				app.DB.Where("enable = ?", true).Find(&devices)
@@ -242,6 +225,9 @@ func StartEvaluator(app *core.App) {
 						continue
 					}
 					for _, r := range rules {
+						if r.Metric != "cpu" && r.Metric != "mem" {
+							continue
+						}
 						val := snap.CPU
 						if r.Metric == "mem" {
 							val = snap.MemUsed
@@ -261,6 +247,30 @@ func StartEvaluator(app *core.App) {
 							}
 						} else {
 							delete(overSince, key)
+						}
+					}
+					// 磁盘阈值告警（按挂载点独立计时）
+					for _, r := range rules {
+						if r.Metric != "disk" {
+							continue
+						}
+						for _, disk := range snap.Disks {
+							if disk.UsedPct <= 0 {
+								continue
+							}
+							key := fmt.Sprintf("disk-%d|%s", d.ID, disk.Mount)
+							seen[key] = true
+							if disk.UsedPct >= r.Threshold {
+								if _, exists := overSince[key]; !exists {
+									overSince[key] = time.Now()
+								}
+								if time.Since(overSince[key]) >= time.Duration(r.Duration)*time.Minute {
+									Notify(app, r.Level, d.Name, fmt.Sprintf("%s %s 磁盘使用率 %.1f%% 超过阈值 %.1f%%", d.Name, disk.Mount, disk.UsedPct, r.Threshold))
+									delete(overSince, key)
+								}
+							} else {
+								delete(overSince, key)
+							}
 						}
 					}
 				}
@@ -298,6 +308,38 @@ func StartEvaluator(app *core.App) {
 					if strings.HasPrefix(k, "node-") {
 						fmt.Sscanf(k, "node-%d", &nid)
 						if !nodeSeen[nid] {
+							delete(overSince, k)
+						}
+					}
+				}
+			}
+			// 链路异常告警（ping 探活结果为 down 且持续超过 duration 分钟）
+			var linkRules []model.AlertRule
+			app.DB.Where("enabled = ? AND metric = ?", true, "link").Find(&linkRules)
+			if len(linkRules) > 0 {
+				var links []model.LinkTask
+				app.DB.Find(&links)
+				linkSeen := map[uint]bool{}
+				for _, l := range links {
+					linkSeen[l.ID] = true
+					key := fmt.Sprintf("link-%d", l.ID)
+					if l.Status == "down" {
+						if _, exists := overSince[key]; !exists {
+							overSince[key] = time.Now()
+						}
+						if time.Since(overSince[key]) >= time.Duration(linkRules[0].Duration)*time.Minute {
+							Notify(app, linkRules[0].Level, l.Name, fmt.Sprintf("链路异常: %s %s 不可达", l.Method, l.Target))
+							delete(overSince, key)
+						}
+					} else {
+						delete(overSince, key)
+					}
+				}
+				for k := range overSince {
+					var lid uint
+					if strings.HasPrefix(k, "link-") {
+						fmt.Sscanf(k, "link-%d", &lid)
+						if !linkSeen[lid] {
 							delete(overSince, k)
 						}
 					}

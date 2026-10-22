@@ -101,6 +101,39 @@ function downloadPem() {
   a.click()
   URL.revokeObjectURL(a.href)
 }
+const exportingKey = ref(false)
+// 导出本机私有证书（私钥）：导出即持有节点身份，需二次确认；用于备份或离线迁移
+async function downloadPrivateKey() {
+  if (!self.value?.private_key_exists) {
+    ElMessage.warning(t('node.certPrivateMissing'))
+    return
+  }
+  try {
+    await ElMessageBox.confirm(t('node.certPrivateExportConfirm'), t('node.certPrivateExport'), { type: 'warning', confirmButtonText: t('node.certPrivateExport'), cancelButtonText: t('common.cancel') })
+  } catch {
+    return
+  }
+  exportingKey.value = true
+  try {
+    const r: any = await getEnc('/distributed/cert/self/private-key')
+    if (!r.ok) {
+      ElMessage.error(r.error || t('node.certPrivateExportFail'))
+      return
+    }
+    const blob = new Blob([r.private_key_pem + '\n'], { type: 'application/x-pem-file' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    const safeName = (self.value.name || 'node').replace(/[\\/:*?"<>|]/g, '_')
+    a.download = `private-${safeName}.pem`
+    a.click()
+    URL.revokeObjectURL(a.href)
+    ElMessage.success(t('node.certPrivateExported'))
+  } catch (e: any) {
+    ElMessage.error(t('node.certPrivateExportFail') + ': ' + (e?.message || e))
+  } finally {
+    exportingKey.value = false
+  }
+}
 function fmt(tm: string) {
   return tm ? tm.replace('T', ' ').substring(0, 19) : '-'
 }
@@ -168,6 +201,10 @@ onUnmounted(() => { if (timer) clearInterval(timer) })
           <el-descriptions-item :label="t('node.certType')">{{ t('node.certPrivateType') }}</el-descriptions-item>
           <el-descriptions-item :label="t('node.certPrivateTip')" :span="2" class="node-info">{{ t('node.certPrivateTipText') }}</el-descriptions-item>
         </el-descriptions>
+        <div class="cert-pem" style="margin-top:6px">
+          <span>{{ t('node.certPrivateExportTip') }}</span>
+          <el-button v-if="self.private_key_exists" size="small" type="warning" plain :loading="exportingKey" @click="downloadPrivateKey">{{ t('node.certPrivateExport') }}</el-button>
+        </div>
 
         <!-- 上级公有证书：上传后生成本机私有证书 -->
         <div class="parent-box">

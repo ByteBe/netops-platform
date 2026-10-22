@@ -108,16 +108,16 @@ async function loadLinkHistory() {
   historyData.value = { name: row.name, color: row.color, points }
   if (!chartRef.value) return
   chart?.dispose()
-  chart = echarts.init(chartRef.value)
+  chart = echarts.init(chartRef.value, null, { renderer: 'svg' })
   const ca = chartAxisColors()
   chart.setOption({
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis', valueFormatter: (v: number) => v == null ? '--' : v.toFixed(1) + ' ms' },
+    tooltip: { trigger: 'axis', confine: true, axisPointer: { type: 'none' }, position: ['right', 'top'], valueFormatter: (v: number) => v == null ? '--' : v.toFixed(1) + ' ms' },
     grid: { left: 50, right: 16, top: 20, bottom: 60 },
     xAxis: { type: 'time', axisLabel: { color: ca.axis }, axisLine: { lineStyle: { color: ca.axisLine } } },
     yAxis: { type: 'value', min: 0, axisLabel: { color: ca.axis, formatter: (v: number) => v + ' ms' }, splitLine: { lineStyle: { color: ca.split } } },
     dataZoom: [
-      { type: 'inside', start: 0, end: 100, moveOnMouseMove: true, zoomOnMouseWheel: true, moveOnMouseWheel: false },
+      { type: 'inside', start: 0, end: 100, moveOnMouseMove: false, zoomOnMouseWheel: true, moveOnMouseWheel: false },
       {
         type: 'slider', start: 0, end: 100, height: 24, bottom: 10,
         textStyle: { color: ca.axis },
@@ -129,7 +129,7 @@ async function loadLinkHistory() {
       }
     ],
     series: [{
-      name: row.name, type: 'line', showSymbol: false, smooth: false,
+      name: row.name, type: 'line', showSymbol: false, smooth: false, emphasis: { disabled: true },
       lineStyle: { width: 2, color: row.color || cssVar('--np-primary') }, itemStyle: { color: row.color || cssVar('--np-primary') },
       areaStyle: { opacity: 0.08 }, connectNulls: false,
       data: historyData.value?.points || []
@@ -160,7 +160,7 @@ let renderTimer: number | null = null
 let pollTimer: any = null
 function renderRealtime() {
   if (!rtChartRef.value) return
-  rtChart ??= echarts.init(rtChartRef.value)
+  rtChart ??= echarts.init(rtChartRef.value, null, { renderer: 'svg' })
   // 节流：最多每秒渲染一次
   if (renderTimer) return
   renderTimer = window.setTimeout(() => {
@@ -181,7 +181,7 @@ function doRenderRealtime() {
   const ca = chartAxisColors()
   rtChart.setOption({
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis', valueFormatter: (v: number) => v == null ? '--' : v.toFixed(1) + ' ms' },
+    tooltip: { trigger: 'axis', confine: true, axisPointer: { type: 'none' }, position: ['right', 'top'], valueFormatter: (v: number) => v == null ? '--' : v.toFixed(1) + ' ms' },
     legend: { type: 'scroll', top: 0, textStyle: { color: ca.axis } },
     grid: { left: 60, right: 20, top: 40, bottom: 24 },
     xAxis: { type: 'time', min: axisStart, max: nowMs, axisLabel: { color: ca.axis, formatter: '{HH}:{mm}:{ss}' }, axisLine: { lineStyle: { color: ca.axisLine } } },
@@ -218,7 +218,7 @@ onMounted(async () => {
   await nextTick()
   if (rtChartRef.value) {
     rtChart?.dispose()
-    rtChart = echarts.init(rtChartRef.value)
+    rtChart = echarts.init(rtChartRef.value, null, { renderer: 'svg' })
   }
   renderRealtime()
   setTimeout(() => rtChart?.resize(), 100)

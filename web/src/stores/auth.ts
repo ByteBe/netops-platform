@@ -15,9 +15,9 @@ export interface UserInfo {
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
-    token: localStorage.getItem('np-token') || '',
-    sessionKey: (localStorage.getItem('np-session-key') || '') as SessionKey,
-    sm2PublicKey: localStorage.getItem('np-sm2-pub') || '',
+    token: sessionStorage.getItem('np-token') || '',
+    sessionKey: (sessionStorage.getItem('np-session-key') || '') as SessionKey,
+    sm2PublicKey: sessionStorage.getItem('np-sm2-pub') || '',
     user: null as UserInfo | null
   }),
   getters: {
@@ -28,13 +28,13 @@ export const useAuthStore = defineStore('auth', {
     saveCrypto(sessionKey: SessionKey, sm2PublicKey: string) {
       this.sessionKey = sessionKey
       this.sm2PublicKey = sm2PublicKey
-      localStorage.setItem('np-session-key', sessionKey)
-      localStorage.setItem('np-sm2-pub', sm2PublicKey)
+      sessionStorage.setItem('np-session-key', sessionKey)
+      sessionStorage.setItem('np-sm2-pub', sm2PublicKey)
     },
     setLogin(token: string, sessionKey: SessionKey, sm2PublicKey: string) {
       this.token = token
       this.saveCrypto(sessionKey, sm2PublicKey)
-      localStorage.setItem('np-token', token)
+      sessionStorage.setItem('np-token', token)
     },
     setUser(user: UserInfo) {
       this.user = user
@@ -43,9 +43,9 @@ export const useAuthStore = defineStore('auth', {
       this.token = ''
       this.user = null
       this.sessionKey = ''
-      localStorage.removeItem('np-token')
-      localStorage.removeItem('np-session-key')
-      localStorage.removeItem('np-sm2-pub')
+      sessionStorage.removeItem('np-token')
+      sessionStorage.removeItem('np-session-key')
+      sessionStorage.removeItem('np-sm2-pub')
     }
   }
 })

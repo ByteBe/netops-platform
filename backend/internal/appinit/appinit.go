@@ -50,6 +50,7 @@ func AllModels() []any {
 		&model.TsArchiveRetry{},
 		&model.NodeContainer{}, &model.NodeLink{},
 		&model.Certificate{},
+		&model.TopoNode{}, &model.TopoLink{}, &model.TopoPos{},
 	}
 }
 

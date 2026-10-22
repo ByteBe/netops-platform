@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { getEnc, postEnc, delEnc } from '@/utils/request'
@@ -15,6 +15,7 @@ const linkDlg = ref(false)
 const links = ref<any[]>([])
 // 证书：已导入集合 + 导入弹窗（按节点导入，每个下级节点各自生成自己的证书）
 const peersSet = ref<Set<string>>(new Set())
+const peersTimer = ref<number | null>(null)
 const importDlg = ref(false)
 const importTarget = ref<any>(null) // 行内导入绑定的目标节点；顶部入口为 null（不校验归属）
 const importPem = ref('')
@@ -22,6 +23,10 @@ const importing = ref(false)
 const importResult = ref<any>(null)
 onMounted(() => {
   loadPeers()
+  peersTimer.value = window.setInterval(loadPeers, 30 * 1000)
+})
+onUnmounted(() => {
+  if (peersTimer.value) window.clearInterval(peersTimer.value)
 })
 function openImport(row: any) {
   importTarget.value = row

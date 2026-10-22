@@ -11,7 +11,7 @@ const { t } = useI18n()
 
 const dist = reactive({
   self: { node_uuid: '', name: '', parent: '', token: '', mqtt_broker: '', mqtt_username: '', mqtt_password: '', mqtt_tls_ca_set: false, mqtt_tls_ca_info: '' },
-  cfg: { self_node_name: '', parent_url: '', cluster_token: '', mqtt_broker: '', mqtt_username: '', mqtt_password: '', mqtt_tls_ca_set: false, mqtt_tls_ca_info: '' },
+  cfg: { self_node_name: '', cluster_token: '', mqtt_broker: '', mqtt_username: '', mqtt_password: '', mqtt_tls_ca_set: false, mqtt_tls_ca_info: '' },
   nodes: [] as any[],
 })
 const deployMode = ref<'standalone' | 'distributed'>('standalone')
@@ -20,7 +20,6 @@ async function loadDist() {
     dist.self = await getEnc('/distributed/self')
     dist.nodes = await getEnc('/distributed/nodes')
     dist.cfg.self_node_name = dist.self.name || ''
-    dist.cfg.parent_url = dist.self.parent || ''
     dist.cfg.cluster_token = dist.self.token || ''
     dist.cfg.mqtt_broker = dist.self.mqtt_broker || ''
     dist.cfg.mqtt_username = dist.self.mqtt_username || ''
@@ -45,7 +44,7 @@ onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
     <DeployMode v-model="deployMode" />
     <template v-if="deployMode === 'distributed'">
       <SelfInfo :self="dist.self" />
-      <CascadeConfig :cfg="dist.cfg" @saved="loadDist" />
+      <CascadeConfig :cfg="dist.cfg" :is-root="!dist.self.parent" @saved="loadDist" />
       <NodeList :nodes="dist.nodes" @changed="loadDist" />
     </template>
   </div>

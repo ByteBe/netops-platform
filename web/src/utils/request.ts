@@ -52,22 +52,35 @@ export interface LoginResult {
   expires_in: number
 }
 
-export async function gmLogin(username: string, password: string): Promise<{ result: LoginResult; sessionKey: SessionKey }> {
+export async function gmLogin(username: string, password: string, captchaID: string, captchaCode: string): Promise<{ result: LoginResult; sessionKey: SessionKey }> {
   // 1. 获取 SM2 公钥
   const pub = await getEnc<{ public_key: string }>('/crypto/public-key')
   const sm2PublicKey = pub.public_key
   // 2. 生成 SM4 会话密钥并 SM2 加密
   const sessionKey = generateSessionKey()
   const key = sm2EncryptSessionKey(sm2PublicKey, sessionKey)
-  const data = sm4Encrypt(sessionKey, JSON.stringify({ username, password }))
+  const data = sm4Encrypt(sessionKey, JSON.stringify({ username, password, captcha_id: captchaID, captcha_code: captchaCode }))
   // 3. 提交登录（返回 SM4 加密信封）
-  const raw = await axios.post('/api/v1/auth/login', { key, data }, {
-    timeout: 30000,
-    headers: {
-      'X-Timestamp': String(Math.floor(Date.now() / 1000)),
-      'X-Nonce': Math.random().toString(36).substring(2, 15) + Date.now().toString(36)
+  let raw: any
+  try {
+    raw = await axios.post('/api/v1/auth/login', { key, data }, {
+      timeout: 30000,
+      headers: {
+        'X-Timestamp': String(Math.floor(Date.now() / 1000)),
+        'X-Nonce': Math.random().toString(36).substring(2, 15) + Date.now().toString(36)
+      }
+    })
+  } catch (e: any) {
+    // 提取后端错误信息（验证码错误/密码错误/防重放过期等）
+    const body = e?.response?.data
+    let msg: string | undefined
+    if (body && typeof body === 'object' && 'message' in body) {
+      msg = (body as { message?: string }).message
+    } else if (body && typeof body === 'object' && 'enc' in body) {
+      try { msg = sm4Decrypt(sessionKey, (body as { enc: string }).enc) } catch { /* 忽略 */ }
     }
-  })
+    throw new Error(msg || '登录失败，请检查用户名、密码和验证码')
+  }
   const result = parseEnvelope<ApiResult<LoginResult>>(raw.data, sessionKey)
   if (result.code !== OK) {
     throw new Error(result.message || '登录失败')

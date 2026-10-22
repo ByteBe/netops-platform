@@ -1,8 +1,17 @@
 import { gmLogin, postEnc, getEnc } from '@/utils/request'
 import type { LoginForm, ChangePwdForm, LoginResult } from './types/login'
 
-export async function login(form: LoginForm) {
-  return gmLogin(form.username, form.password)
+export interface CaptchaResult {
+  captcha_id: string
+  image_base64: string
+}
+
+export async function login(form: LoginForm & { captcha_id?: string; captcha_code?: string }) {
+  return gmLogin(form.username, form.password, form.captcha_id || '', form.captcha_code || '')
+}
+
+export async function fetchCaptcha() {
+  return getEnc<CaptchaResult>('/auth/captcha')
 }
 
 export async function changePassword(data: { old_password: string; new_password: string }) {

@@ -270,6 +270,16 @@ func PrivateKeyFingerprint() string {
 	return hex.EncodeToString(sum[:])
 }
 
+// ExportPrivateKey 返回本机私钥 PEM 内容（私有证书导出：用于备份/离线迁移；
+// 导出即代表持有节点身份，调用方须确认操作者权限，前端需二次确认）
+func ExportPrivateKey() (string, error) {
+	b, err := os.ReadFile(PrivateKeyPath)
+	if err != nil {
+		return "", fmt.Errorf("本机私有证书未生成")
+	}
+	return string(b), nil
+}
+
 // RemovePrivateKey 删除本机私钥文件（用于规则自愈：非法状态下的历史残留私钥）
 func RemovePrivateKey() error {
 	if err := os.Remove(PrivateKeyPath); err != nil && !os.IsNotExist(err) {

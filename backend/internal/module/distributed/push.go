@@ -1,11 +1,6 @@
 package distributed
 
 import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"net/http"
-	"strings"
 	"time"
 
 	"netops/internal/common/logger"
@@ -14,23 +9,10 @@ import (
 	"netops/internal/service/certsvc"
 )
 
-// httpClientForParent 构造上报用的 HTTP 客户端：
-// 配置了 MQTT TLS CA 时将其作为信任锚（自签上级也可验证），确保 https:// 上级地址
-// 的数据上报走 TLS 加密；未配置或 CA 无效时用系统根证书池（https 默认校验）。
-// 信任锚构建复用 tlsConfig()，与 MQTT 通道保持同一套 CA 校验逻辑。
-// 每次调用新建 client：TLS CA 可能运行时变更，不缓存。
-func httpClientForParent(a *core.App) *http.Client {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	if tc, err := tlsConfig(getSetting(a, "mqtt_tls_ca")); err == nil {
-		transport.TLSClientConfig = tc
-	}
-	return &http.Client{Timeout: 10 * time.Second, Transport: transport}
-}
-
 // lastNoCertWarn 无证书告警去抖：避免每 30 秒刷屏（上报周期内持续提示一次/5分钟）
 var lastNoCertWarn time.Time
 
-// PushOnce 把本机采集到的最新快照上报到上级
+// PushOnce 把本机采集到的最新快照上报到上级（全部经 MQTT 通道）
 func PushOnce(a *core.App) {
 	parent := getSetting(a, "parent_url")
 	if parent == "" {
@@ -110,80 +92,9 @@ func PushOnce(a *core.App) {
 	}
 	req.Links = linkArr
 
-	// 优先 MQTT 发布，再 HTTP 上报（MQTT 失败时 HTTP 兜底）
+	// 数据上报全部经 MQTT 通道（WebSocket 承载）；HTTPS 级联已移除——
+	// 证书是必须的，没有明文传输的通道，不再走 HTTP 上报
 	PublishSnapshot(a, req.toPayload())
-	postIngestToParent(a, req)
-}
-
-// postIngestToParent 把上报载荷 POST 到上级 ingest 接口（PushOnce 与 ForwardToParent 共用）
-func postIngestToParent(a *core.App, req IngestRequest) {
-	parent := getSetting(a, "parent_url")
-	if parent == "" {
-		return
-	}
-	// 证书是必须的，没有明文传输的通道：上报必须携带证书指纹（特征标签）
-	if req.CertFingerprint == "" {
-		logger.Warnf("[distributed] 上报缺少证书指纹（证书必须），拒绝明文通道 node=%s", shortFP(req.NodeUUID))
-		return
-	}
-	// 下级必须导入上级下发的公有证书后才能上传（含多级转发路径）
-	if getSetting(a, "parent_cert") == "" {
-		logger.Warnf("[distributed] 未导入上级下发的公有证书，拒绝上传（HTTPS）node=%s", shortFP(req.NodeUUID))
-		return
-	}
-	// 转发载荷：身份与证书必须一致——
-	// PushOnce 场景 req 为本机构造（node_uuid=本机+本机证书）；
-	// ForwardToParent 场景 req 为下级原始上报（node_uuid=下级+下级证书），
-	// 因此证书一律取自 req，保证上级按 node_uuid 校验指纹时匹配
-	payload := map[string]interface{}{
-		"node_uuid":        req.NodeUUID,
-		"token":            getSetting(a, "cluster_token"),
-		"name":             req.Name,
-		"cert_pem":         req.CertPEM,
-		"cert_fingerprint": req.CertFingerprint,
-		"via_uuid":         req.ViaUUID,
-		"devices":          req.Devices,
-		"containers":       req.Containers,
-		"links":            req.Links,
-	}
-	body, _ := json.Marshal(payload)
-	url := fmt.Sprintf("%s/api/v1/distributed/ingest", strings.TrimRight(parent, "/"))
-	client := httpClientForParent(a)
-	resp, err := client.Post(url, "application/json", bytes.NewReader(body))
-	if err != nil {
-		logger.Warnf("[distributed] push to parent failed: %v", err)
-		return
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		logger.Warnf("[distributed] push to parent http %d", resp.StatusCode)
-		return
-	}
-	// 证书交换：解析上级下发的公证书并保存，完成互信（上级→下级方向）
-	var ack struct {
-		ParentUUID        string `json:"parent_uuid"`
-		ParentCert        string `json:"parent_cert"`
-		ParentFingerprint string `json:"parent_fingerprint"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&ack); err != nil {
-		logger.Warnf("[distributed] 上级响应解析失败: %v", err)
-	} else if ack.ParentCert != "" {
-		if ack.ParentUUID != "" {
-			setSetting(a, "parent_node_uuid", ack.ParentUUID)
-		}
-		// 上级公钥同时写入 parent_cert 配置与 peer 证书表：
-		// parent_cert 是本机"上级公钥已导入"的权威判定，页面显示与上传强制均读它
-		setSetting(a, "parent_cert", ack.ParentCert)
-		savePeerCert(a, ack.ParentUUID, "上级节点", ack.ParentCert)
-	}
-	logger.Infof("[distributed] pushed to parent: devices=%d containers=%d links=%d", len(req.Devices), len(req.Containers), len(req.Links))
-}
-
-// ForwardToParent 把下级上报的数据再转发给本节点的上级（多级级联）
-func ForwardToParent(a *core.App, req IngestRequest) {
-	// 标记转发者：上级只对直接下级做 3 分钟证书强制，间接节点由本级互认
-	req.ViaUUID = SelfUUID(a)
-	postIngestToParent(a, req)
 }
 
 // StartPusher 启动定时上报 goroutine

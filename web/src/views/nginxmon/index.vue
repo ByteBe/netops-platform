@@ -63,6 +63,7 @@ const testing = ref(false)
 const testResult = ref('')
 const histInstance = ref<NginxInstance | null>(null)
 const histRef = ref<HTMLDivElement>()
+const histHours = ref(24)
 let histChart: echarts.ECharts | null = null
 let ws: WSClient | null = null
 
@@ -139,6 +140,16 @@ async function testConn() {
 async function showHistory(d: NginxInstance) {
   histInstance.value = d
   histVisible.value = true
+  histHours.value = 24
+  await loadNginxHistory()
+}
+
+// 轴刻度数字格式化：整数不显示小数，避免右侧刻度过长被裁剪
+function fmtAxisNum(v: number) { return Number.isInteger(v) ? String(v) : String(Math.round(v * 100) / 100) }
+
+async function loadNginxHistory() {
+  const d = histInstance.value
+  if (!d) return
   await nextTick()
   const h = await getEnc<{
     conn: number[][]
@@ -147,28 +158,43 @@ async function showHistory(d: NginxInstance) {
     reading: number[][]
     writing: number[][]
     waiting: number[][]
-  }>(`/nginxmon/instances/${d.id}/history`)
-  histChart ??= echarts.init(histRef.value as HTMLDivElement)
+  }>(`/nginxmon/instances/${d.id}/history?hours=${histHours.value}`)
+  if (!histRef.value) return
+  histChart?.dispose()
+  histChart = echarts.init(histRef.value as HTMLDivElement, null, { renderer: 'svg' })
   const ca = chartAxisColors()
   histChart.setOption({
     backgroundColor: 'transparent',
     tooltip: histTooltip({ digits: 0 }),
     legend: { data: [t('nginx.activeConns'), t('nginx.qps'), t('nginx.requests'), t('nginx.reading'), t('nginx.writing'), t('nginx.waiting')], textStyle: { color: ca.axis } },
-    grid: { left: 60, right: 20, top: 36, bottom: 28 },
+    grid: { left: 68, right: 56, top: 36, bottom: 60 },
     xAxis: { type: 'time', axisLabel: { color: ca.axis }, axisLine: { lineStyle: { color: ca.axisLine } } },
     yAxis: [
-      { type: 'value', name: t('nginx.activeConns'), nameTextStyle: { color: ca.axis }, axisLabel: { color: ca.axis }, splitLine: { lineStyle: { color: ca.split } } },
-      { type: 'value', name: t('nginx.qps'), nameTextStyle: { color: ca.axis }, axisLabel: { color: ca.axis }, splitLine: { show: false } }
+      { type: 'value', name: t('nginx.activeConns'), nameTextStyle: { color: ca.axis }, axisLabel: { color: ca.axis, formatter: fmtAxisNum }, splitLine: { lineStyle: { color: ca.split } } },
+      { type: 'value', name: t('nginx.qps'), nameTextStyle: { color: ca.axis }, axisLabel: { color: ca.axis, formatter: fmtAxisNum }, splitLine: { show: false } }
+    ],
+    dataZoom: [
+      // moveOnMouseMove 必须为 false：否则鼠标悬停会被当作数据窗口平移，图表重绘导致曲线"消失"
+      { type: 'inside', start: 0, end: 100, moveOnMouseMove: false, zoomOnMouseWheel: true, moveOnMouseWheel: false },
+      {
+        type: 'slider', start: 0, end: 100, height: 24, bottom: 10,
+        textStyle: { color: ca.axis },
+        borderColor: ca.axisLine,
+        fillerColor: 'transparent',
+        handleStyle: { color: ca.axisLine },
+        moveHandleStyle: { color: ca.axisLine },
+        dataBackground: { lineStyle: { color: ca.axisLine }, areaStyle: { color: ca.split } }
+      }
     ],
     series: [
-      { name: t('nginx.activeConns'), type: 'line', showSymbol: false, smooth: true, lineStyle: { width: 2, color: cssVar('--np-primary') }, itemStyle: { color: cssVar('--np-primary') }, data: h.conn || [] },
-      { name: t('nginx.qps'), type: 'line', yAxisIndex: 1, showSymbol: false, smooth: true, lineStyle: { width: 2, color: cssVar('--np-success') }, itemStyle: { color: cssVar('--np-success') }, data: h.qps || [] },
-      { name: t('nginx.requests'), type: 'line', showSymbol: false, smooth: true, lineStyle: { width: 2, color: cssVar('--np-warning') }, itemStyle: { color: cssVar('--np-warning') }, data: h.req || [] },
-      { name: t('nginx.reading'), type: 'line', showSymbol: false, smooth: true, lineStyle: { width: 2, color: cssVar('--np-info') }, itemStyle: { color: cssVar('--np-info') }, data: h.reading || [] },
-      { name: t('nginx.writing'), type: 'line', showSymbol: false, smooth: true, lineStyle: { width: 2, color: cssVar('--np-text-2') }, itemStyle: { color: cssVar('--np-text-2') }, data: h.writing || [] },
-      { name: t('nginx.waiting'), type: 'line', showSymbol: false, smooth: true, lineStyle: { width: 2, color: cssVar('--np-text-3') }, itemStyle: { color: cssVar('--np-text-3') }, data: h.waiting || [] }
+      { name: t('nginx.activeConns'), type: 'line', showSymbol: false, smooth: false, emphasis: { disabled: true }, lineStyle: { width: 2, color: cssVar('--np-primary') }, itemStyle: { color: cssVar('--np-primary') }, areaStyle: { opacity: 0.08 }, connectNulls: false, data: h.conn || [] },
+      { name: t('nginx.qps'), type: 'line', yAxisIndex: 1, showSymbol: false, smooth: false, emphasis: { disabled: true }, lineStyle: { width: 2, color: cssVar('--np-success') }, itemStyle: { color: cssVar('--np-success') }, areaStyle: { opacity: 0.08 }, connectNulls: false, data: h.qps || [] },
+      { name: t('nginx.requests'), type: 'line', showSymbol: false, smooth: false, emphasis: { disabled: true }, lineStyle: { width: 2, color: cssVar('--np-warning') }, itemStyle: { color: cssVar('--np-warning') }, areaStyle: { opacity: 0.08 }, connectNulls: false, data: h.req || [] },
+      { name: t('nginx.reading'), type: 'line', showSymbol: false, smooth: false, emphasis: { disabled: true }, lineStyle: { width: 2, color: cssVar('--np-info') }, itemStyle: { color: cssVar('--np-info') }, areaStyle: { opacity: 0.08 }, connectNulls: false, data: h.reading || [] },
+      { name: t('nginx.writing'), type: 'line', showSymbol: false, smooth: false, emphasis: { disabled: true }, lineStyle: { width: 2, color: cssVar('--np-text-2') }, itemStyle: { color: cssVar('--np-text-2') }, areaStyle: { opacity: 0.08 }, connectNulls: false, data: h.writing || [] },
+      { name: t('nginx.waiting'), type: 'line', showSymbol: false, smooth: false, emphasis: { disabled: true }, lineStyle: { width: 2, color: cssVar('--np-text-3') }, itemStyle: { color: cssVar('--np-text-3') }, areaStyle: { opacity: 0.08 }, connectNulls: false, data: h.waiting || [] }
     ]
-  })
+  }, true)
 }
 
 // 主题切换时重绘历史曲线（canvas 不感知 CSS 变量变化）
@@ -310,7 +336,17 @@ onBeforeUnmount(() => {
     </el-dialog>
 
     <el-dialog v-model="histVisible" :title="`${t('link.history')} - ${histInstance?.name}`" width="820px">
-      <div ref="histRef" class="np-chart" style="height: 340px"></div>
+      <div style="margin-bottom:8px">
+        <el-select v-model="histHours" size="small" style="width:140px" @change="loadNginxHistory">
+          <el-option :label="$t('monitor.lastNHours', {n: 1})" :value="1" />
+          <el-option :label="$t('monitor.lastNHours', {n: 6})" :value="6" />
+          <el-option :label="$t('monitor.lastNHours', {n: 12})" :value="12" />
+          <el-option :label="$t('monitor.lastNHours', {n: 24})" :value="24" />
+          <el-option :label="$t('monitor.lastNHours', {n: 72})" :value="72" />
+          <el-option :label="$t('monitor.lastNHours', {n: 168})" :value="168" />
+        </el-select>
+      </div>
+      <div ref="histRef" class="np-chart" style="height: 400px"></div>
     </el-dialog>
   </div>
 </template>

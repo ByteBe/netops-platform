@@ -175,9 +175,9 @@ func RegisterPublic(a *core.App, g *gin.RouterGroup) {
 		upsertNodeContainers(a, req.NodeUUID, req.Containers)
 		// 持久化下级链路明细（按 node_uuid+name upsert）
 		upsertNodeLinks(a, req.NodeUUID, req.Links)
-		// 多级转发：本节点如果也有上级，把收到的下级数据再转发给上级
+		// 多级转发（MQTT 通道承载，HTTPS 级联已移除）：本节点如果也有上级，把收到的下级数据经 MQTT 转发给上级
 		if parent := getSetting(a, "parent_url"); parent != "" {
-			go ForwardToParent(a, req)
+			go forwardViaMQTT(a, req)
 		}
 		response.OK(c, gin.H{
 			"ok": true, "devices": len(req.Devices), "containers": len(req.Containers), "links": len(req.Links),
@@ -367,8 +367,8 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		if user != "" {
 			opts.SetUsername(user).SetPassword(pass)
 		}
-		// TLS：按配置的 CA（或系统根证书）校验，与启动链路一致
-		if strings.HasPrefix(broker, "ssl://") || strings.HasPrefix(broker, "tls://") {
+		// TLS：按配置的 CA（或系统根证书）校验，与启动链路一致（支持 tls/mqtts/ssl/wss scheme）
+		if isMqttTlsScheme(broker) {
 			if tc, terr := tlsConfig(getSetting(a, "mqtt_tls_ca")); terr == nil {
 				opts.SetTLSConfig(tc)
 			}

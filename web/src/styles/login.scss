@@ -1,5 +1,5 @@
 // 登录页：精密仪表风格（与全局同一语言体系）
-// 平面冷石墨底 + 发丝描边面板 + 工程角标框架 + 信号橙品牌块
+// 柔和渐变光晕底 + 发丝描边面板 + 工程角标框架 + 信号橙品牌块
 .np-login {
   height: 100%;
   display: flex;
@@ -9,17 +9,27 @@
   background: var(--np-bg);
   overflow: hidden;
 
-  // 细网格底纹：仪表坐标纸意象（发丝线，低可见度）
+  // 品牌色光晕背景：四角柔和光斑 + 中央辉光 + 对角渐变（配合 canvas 粒子层）
   &::before {
     content: '';
     position: fixed;
     inset: 0;
     z-index: 0;
-    background-image:
-      linear-gradient(to right, var(--np-border) 1px, transparent 1px),
-      linear-gradient(to bottom, var(--np-border) 1px, transparent 1px);
-    background-size: 56px 56px;
-    opacity: 0.4;
+    background:
+      radial-gradient(720px 520px at 10% 16%, rgba(64, 158, 255, 0.28), transparent 60%),
+      radial-gradient(640px 520px at 90% 8%, rgba(138, 75, 255, 0.24), transparent 60%),
+      radial-gradient(760px 580px at 86% 92%, rgba(255, 154, 61, 0.22), transparent 60%),
+      radial-gradient(620px 500px at 4% 88%, rgba(61, 156, 242, 0.2), transparent 60%),
+      radial-gradient(900px 700px at 50% 50%, rgba(64, 158, 255, 0.08), transparent 65%),
+      linear-gradient(160deg, var(--np-bg) 0%, var(--np-bg-raise) 100%);
+    pointer-events: none;
+  }
+
+  // 网络粒子动画层（节点漂移 + 近距连线）
+  &-bg {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
     pointer-events: none;
   }
 
@@ -94,6 +104,27 @@
   &-btn {
     width: 100%;
     margin-top: 8px;
+  }
+
+  &-captcha {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+    .el-input {
+      flex: 1;
+    }
+    &-img {
+      width: 130px;
+      height: 45px;
+      border: 1px solid var(--np-border);
+      border-radius: 6px;
+      cursor: pointer;
+      user-select: none;
+      flex-shrink: 0;
+      &:hover {
+        border-color: var(--np-primary);
+      }
+    }
   }
 
   &-lang {

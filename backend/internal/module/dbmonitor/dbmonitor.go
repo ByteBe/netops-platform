@@ -152,7 +152,7 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
 		end := time.Now()
 		dur := 24 * time.Hour
-		if h, err := strconv.Atoi(c.Query("hours")); err == nil && h >= 1 && h <= 72 {
+		if h, err := strconv.Atoi(c.Query("hours")); err == nil && h >= 1 && h <= 720 {
 			dur = time.Duration(h) * time.Hour
 		}
 		start := end.Add(-dur)

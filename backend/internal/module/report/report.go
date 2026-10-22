@@ -1,11 +1,8 @@
 package report
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"html/template"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,9 +10,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 
+	"netops/internal/common/logger"
 	"netops/internal/common/response"
 	"netops/internal/collector/nginxprobe"
 	"netops/internal/core"
@@ -23,6 +22,7 @@ import (
 	"netops/internal/model"
 	"netops/internal/modreg"
 	"netops/internal/service/email"
+	"netops/internal/service/webhook"
 	"netops/internal/tsdb"
 )
 
@@ -215,8 +215,11 @@ func sendReportViaChannels(a *core.App, title, content string) error {
 			return err
 		}
 	}
-	// 推送 webhook 渠道（飞书/钉钉/企业微信）
-	client := &http.Client{Timeout: 10 * time.Second}
+	// 推送 webhook 渠道（飞书/钉钉/企业微信）：发送纯文本摘要而非完整 HTML——
+	// 各平台文本消息均有长度限制（企业微信 2048 字节、钉钉约 5000 字符），完整报告必被拒收；
+	// 飞书/钉钉开启加签时由 webhook 包自动签名，未配置密钥则明文发送
+	text := channelText(title, content)
+	var errs []string
 	for _, nc := range ncs {
 		if nc.Type == "email" {
 			continue
@@ -228,21 +231,14 @@ func sendReportViaChannels(a *core.App, title, content string) error {
 		if url == "" {
 			continue
 		}
-		var out []byte
-		if nc.Type == "feishu" {
-			out, _ = json.Marshal(map[string]any{"msg_type": "text", "content": map[string]string{"text": title + "\n" + content}})
-		} else {
-			out, _ = json.Marshal(map[string]any{"msgtype": "text", "text": map[string]string{"content": title + "\n" + content}})
+		if err := webhook.SendText(nc.Type, url, nc.Token, text); err != nil {
+			errs = append(errs, fmt.Sprintf("%s(%s): %v", nc.Name, nc.Type, err))
+			continue
 		}
-		req, _ := http.NewRequest("POST", url, bytes.NewReader(out))
-		req.Header.Set("Content-Type", "application/json")
-		if nc.Token != "" {
-			req.Header.Set("X-Signature", nc.Token)
-		}
-		if resp, err := client.Do(req); err == nil {
-			_ = resp.Body.Close()
-			sent++
-		}
+		sent++
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("部分通知渠道发送失败: %s", strings.Join(errs, "; "))
 	}
 	if sent == 0 {
 		if len(ncs) == 0 && len(cfgs) == 0 {
@@ -251,6 +247,34 @@ func sendReportViaChannels(a *core.App, title, content string) error {
 		return fmt.Errorf("所有通知渠道发送失败")
 	}
 	return nil
+}
+
+// channelText 通知渠道文本：标题 + 报告纯文本摘要。
+// 完整 HTML 报告不适合作为聊天机器人文本消息，先转纯文本再按字节截断
+// （企业微信 text 限制 2048 字节，中文 UTF-8 每字符 3 字节，保守取 1900 字节并回退到完整字符边界）
+func channelText(title, content string) string {
+	lines := stripHTML(content)
+	var sb strings.Builder
+	sb.WriteString(title)
+	for _, l := range lines {
+		sb.WriteByte('\n')
+		sb.WriteString(l)
+	}
+	s := sb.String()
+	b := []byte(s)
+	if len(b) <= 1900 {
+		return s
+	}
+	cut := 0
+	for i := 0; i < len(b) && i < 1900; {
+		_, size := utf8.DecodeRune(b[i:])
+		if i+size > 1900 {
+			break
+		}
+		i += size
+		cut = i
+	}
+	return string(b[:cut]) + "\n…（详见完整报告）"
 }
 
 func badge(status, color string) string {
@@ -720,15 +744,22 @@ func truncate(s string, n int) string {
 	return s
 }
 
-// startReportScheduler 每天 01:00 检查是否需要生成周报/月报
+// startReportScheduler 定时生成周报/月报：
+//   - 每 10 分钟检查一次，每天首次检查（时间 >= 01:00）即执行当天任务，
+//     服务在凌晨任意时刻启动/重启都不会错过（不再依赖整点 tick 对齐）
+//   - lastRunDay 防同一天重复触发，DB 日期范围去重兜底
+//   - 自动生成的报告同步通过已配置通知渠道发送（失败仅记日志，不影响入库）
 func startReportScheduler(a *core.App) {
 	go func() {
-		tk := time.NewTicker(time.Hour)
+		tk := time.NewTicker(10 * time.Minute)
 		defer tk.Stop()
+		lastRunDay := ""
 		for now := range tk.C {
-			if now.Hour() != 1 {
+			day := now.Format("2006-01-02")
+			if now.Hour() < 1 || day == lastRunDay {
 				continue
 			}
+			lastRunDay = day
 			// 周一生成周报
 			if now.Weekday() == time.Monday {
 				generateAutoReport(a, "weekly")
@@ -749,9 +780,12 @@ func generateAutoReport(a *core.App, kind string) {
 		start = end.Add(-30 * 24 * time.Hour)
 		title = "自动巡检月报 " + end.Format("2006-01")
 	}
-	// 避免重复生成：当天已生成则跳过
+	// 避免重复生成：当天已生成则跳过（日期范围查询，兼容 SQLite/MySQL/PostgreSQL/国产库）
+	dayStart := time.Date(end.Year(), end.Month(), end.Day(), 0, 0, 0, 0, time.Local)
 	var cnt int64
-	a.DB.Model(&model.ReportRecord{}).Where("title = ? AND DATE(created_at) = ?", title, end.Format("2006-01-02")).Count(&cnt)
+	a.DB.Model(&model.ReportRecord{}).
+		Where("title = ? AND created_at >= ? AND created_at < ?", title, dayStart, dayStart.Add(24*time.Hour)).
+		Count(&cnt)
 	if cnt > 0 {
 		return
 	}
@@ -763,6 +797,15 @@ func generateAutoReport(a *core.App, kind string) {
 	nodeS := renderNodeSection(a, stats)
 	nginxS := renderNginxSection(a, stats)
 	content := renderHTML(title, start, end, linkS, devS, dbS, containerS, nodeS, nginxS, stats)
-	rec := model.ReportRecord{Title: title, StartAt: start, EndAt: end, Content: content, Creator: "system"}
-	a.DB.Create(&rec)
+	rec := model.ReportRecord{Title: title, StartAt: start, EndAt: end, Content: content, Creator: "system", SendEmail: true}
+	if err := a.DB.Create(&rec).Error; err != nil {
+		logger.Errorf("[report] 自动报告生成失败 %s: %v", title, err)
+		return
+	}
+	// 自动发送到已配置的通知渠道（邮件 + 飞书/钉钉/企业微信）；失败仅记日志，报告仍入库可手动补发
+	if err := sendReportViaChannels(a, title, content); err != nil {
+		logger.Warnf("[report] 自动报告已生成但发送失败 %s: %v", title, err)
+	} else {
+		logger.Infof("[report] 自动报告已生成并发送 %s", title)
+	}
 }

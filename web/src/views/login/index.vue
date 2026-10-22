@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { reactive, ref, computed, onMounted } from 'vue'
+import { reactive, ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { validatePasswordStrength } from '@/utils'
 import { useAppStore } from '@/stores/app'
-import { login, changePassword, fetchPublicKey } from '@/api/login'
+import { login, changePassword, fetchPublicKey, fetchCaptcha } from '@/api/login'
 import type { LoginForm, ChangePwdForm } from '@/api/types'
 import '@/styles/login.scss'
 
@@ -16,24 +16,43 @@ const { t } = useI18n()
 const auth = useAuthStore()
 const appStore = useAppStore()
 
-const form = reactive<LoginForm>({ username: '', password: '' })
+const form = reactive<LoginForm & { captchaCode?: string }>({ username: '', password: '', captchaCode: '' })
 const loading = ref(false)
 const forceChange = ref(route.query.force === '1')
+const captchaId = ref('')
+const captchaImg = ref('')
 
 const pwdForm = reactive<ChangePwdForm>({ oldPassword: '', newPassword: '', confirm: '' })
 const pwdLoading = ref(false)
 
 const step = computed(() => (forceChange.value ? 1 : 0))
 
+async function refreshCaptcha() {
+  try {
+    const cap = await fetchCaptcha()
+    captchaId.value = cap.captcha_id
+    captchaImg.value = 'data:image/png;base64,' + cap.image_base64
+  } catch {
+    captchaImg.value = ''
+  }
+}
+
 async function onLogin() {
+  // 防重入：回车键 + 点击按钮并发时，只允许一个登录请求
+  // （一次性验证码被第一个请求消费后，第二个请求会报"验证码错误或已过期"并覆盖成功提示）
+  if (loading.value) return
   if (!form.username || !form.password) {
     ElMessage.warning(t('common.tip'))
     return
   }
+  if (!captchaId.value || !form.captchaCode) {
+    ElMessage.warning(t('login.captchaPlaceholder'))
+    return
+  }
   loading.value = true
   try {
-    const { result, sessionKey } = await login(form)
-    auth.setLogin(result.token, sessionKey, localStorage.getItem('np-sm2-pub') || '')
+    const { result, sessionKey } = await login({ ...form, captcha_id: captchaId.value, captcha_code: form.captchaCode })
+    auth.setLogin(result.token, sessionKey, sessionStorage.getItem('np-sm2-pub') || '')
     auth.setUser({
       id: 0,
       username: result.username,
@@ -52,6 +71,8 @@ async function onLogin() {
     }
   } catch (e) {
     ElMessage.error((e as Error).message || t('login.failed'))
+    form.captchaCode = ''
+    refreshCaptcha()
   } finally {
     loading.value = false
   }
@@ -88,15 +109,98 @@ onMounted(async () => {
   appStore.applyTheme()
   try {
     const pub = await fetchPublicKey()
-    localStorage.setItem('np-sm2-pub', pub.public_key)
+    sessionStorage.setItem('np-sm2-pub', pub.public_key)
   } catch {
     /* 忽略 */
   }
+  refreshCaptcha()
+  initParticles()
 })
+onBeforeUnmount(() => {
+  cancelAnimationFrame(raf)
+  window.removeEventListener('resize', onBgResize)
+})
+
+// ===== 背景网络粒子动画（节点漂移 + 近距连线，呼应网络拓扑主题） =====
+const bgCanvas = ref<HTMLCanvasElement>()
+let bgCtx: CanvasRenderingContext2D | null = null
+let raf = 0
+let parts: { x: number; y: number; vx: number; vy: number; r: number; c: string; a: number }[] = []
+
+function initParticles() {
+  onBgResize()
+  window.addEventListener('resize', onBgResize)
+}
+function onBgResize() {
+  const cv = bgCanvas.value
+  if (!cv) return
+  const dpr = window.devicePixelRatio || 1
+  cv.width = window.innerWidth * dpr
+  cv.height = window.innerHeight * dpr
+  cv.style.width = window.innerWidth + 'px'
+  cv.style.height = window.innerHeight + 'px'
+  bgCtx = cv.getContext('2d')
+  const dark = appStore.theme === 'dark'
+  const palette = dark
+    ? ['62,140,255', '138,99,255', '255,154,61', '61,210,192']
+    : ['64,158,255', '138,75,255', '255,154,61', '47,198,189']
+  const count = Math.min(80, Math.floor(window.innerWidth / 16))
+  parts = []
+  for (let i = 0; i < count; i++) {
+    parts.push({
+      x: Math.random() * cv.width,
+      y: Math.random() * cv.height,
+      vx: (Math.random() - 0.5) * 0.4 * dpr,
+      vy: (Math.random() - 0.5) * 0.4 * dpr,
+      r: (1 + Math.random() * 1.7) * dpr,
+      c: palette[Math.floor(Math.random() * palette.length)],
+      a: 0.25 + Math.random() * 0.4
+    })
+  }
+  cancelAnimationFrame(raf)
+  drawLoop()
+}
+function drawLoop() {
+  const cv = bgCanvas.value
+  const ctx = bgCtx
+  if (!cv || !ctx) return
+  ctx.clearRect(0, 0, cv.width, cv.height)
+  const dpr = window.devicePixelRatio || 1
+  const linkDist = 130 * dpr
+  for (let i = 0; i < parts.length; i++) {
+    const p = parts[i]
+    for (let j = i + 1; j < parts.length; j++) {
+      const q = parts[j]
+      const dx = p.x - q.x
+      const dy = p.y - q.y
+      const d = Math.hypot(dx, dy)
+      if (d < linkDist) {
+        ctx.strokeStyle = `rgba(${p.c},${(1 - d / linkDist) * 0.22})`
+        ctx.lineWidth = 1 * dpr
+        ctx.beginPath()
+        ctx.moveTo(p.x, p.y)
+        ctx.lineTo(q.x, q.y)
+        ctx.stroke()
+      }
+    }
+  }
+  for (const p of parts) {
+    p.x += p.vx
+    p.y += p.vy
+    if (p.x < 0 || p.x > cv.width) p.vx *= -1
+    if (p.y < 0 || p.y > cv.height) p.vy *= -1
+    ctx.beginPath()
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2)
+    ctx.fillStyle = `rgba(${p.c},${p.a})`
+    ctx.fill()
+  }
+  raf = requestAnimationFrame(drawLoop)
+}
 </script>
 
 <template>
   <div class="np-login">
+    <canvas ref="bgCanvas" class="np-login-bg"></canvas>
     <div class="np-login-card">
       <div class="np-login-head">
         <div class="np-login-logo">
@@ -118,6 +222,12 @@ onMounted(async () => {
           <el-input v-model="form.password" size="large" type="password" show-password :placeholder="t('login.password')">
             <template #prefix><el-icon><Lock /></el-icon></template>
           </el-input>
+        </el-form-item>
+        <el-form-item :label="t('login.captcha')">
+          <div class="np-login-captcha">
+            <el-input v-model="form.captchaCode" size="large" :placeholder="t('login.captchaPlaceholder')" maxlength="4" @keyup.enter="onLogin" />
+            <img v-if="captchaImg" class="np-login-captcha-img" :src="captchaImg" alt="captcha" title="点击刷新" @click="refreshCaptcha" />
+          </div>
         </el-form-item>
         <el-button type="primary" size="large" class="np-login-btn" :loading="loading" @click="onLogin">
           {{ t('login.loginBtn') }}

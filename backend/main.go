@@ -39,7 +39,7 @@ func main() {
   ██║╚██╗██║██╔══╝     ██║       ██║  ██║██║   ██║██║  ██║██╔══╝
   ██║ ╚████║███████╗   ██║       ██████╔╝╚██████╔╝██████╔╝███████╗
   ╚═╝  ╚═══╝╚══════╝   ╚═╝       ╚═════╝  ╚═════╝ ╚═════╝ ╚══════╝
-  NetOps 网络运维监控平台 v2.2.2 | AI巡检 · 日志中心 · 告警通知
+  NetOps 网络运维监控平台 v2.3.0 | AI巡检 · 日志中心 · 告警通知
 `)
 
 	// 1. 加载配置（支持 --config 指定，缺省自动探测 ./config.yaml 与可执行文件同目录）
@@ -245,8 +245,8 @@ func buildWebHandler(webDir string, apiPort int, useTLS bool) http.Handler {
 					return
 				}
 			}
-			// SPA 入口：禁止强缓存，确保升级后刷新即拿到最新版本
-			w.Header().Set("Cache-Control", "no-cache, must-revalidate")
+			// SPA 入口：no-store 强制浏览器每次重新下载 index.html（no-cache 仍允许 304 条件请求复用旧缓存，导致升级后看不到新版）
+			w.Header().Set("Cache-Control", "no-store")
 			http.ServeFileFS(w, r, sub, "index.html")
 		}))
 	} else {

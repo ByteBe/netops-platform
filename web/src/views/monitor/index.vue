@@ -187,7 +187,7 @@ async function loadHistory() {
     cpu: number[][]
     mem: number[][]
   }>(`/monitor/devices/${histDevice.value.id}/history?hours=${histHours.value}`)
-  histChart ??= echarts.init(histChartRef.value as HTMLDivElement)
+  histChart ??= echarts.init(histChartRef.value as HTMLDivElement, null, { renderer: 'svg' })
   const ca = chartAxisColors()
   histChart.setOption({
     backgroundColor: 'transparent',
@@ -197,8 +197,8 @@ async function loadHistory() {
     xAxis: { type: 'time', axisLabel: { color: ca.axis }, axisLine: { lineStyle: { color: ca.axisLine } } },
     yAxis: { type: 'value', max: 100, axisLabel: { color: ca.axis }, splitLine: { lineStyle: { color: ca.split } } },
     series: [
-      { name: 'CPU %', type: 'line', showSymbol: false, smooth: true, lineStyle: { width: 2, color: cssVar('--np-primary') }, itemStyle: { color: cssVar('--np-primary') }, data: h.cpu || [] },
-      { name: 'MEM %', type: 'line', showSymbol: false, smooth: true, lineStyle: { width: 2, color: cssVar('--np-success') }, itemStyle: { color: cssVar('--np-success') }, data: h.mem || [] }
+      { name: 'CPU %', type: 'line', showSymbol: false, smooth: true, emphasis: { disabled: true }, lineStyle: { width: 2, color: cssVar('--np-primary') }, itemStyle: { color: cssVar('--np-primary') }, data: h.cpu || [] },
+      { name: 'MEM %', type: 'line', showSymbol: false, smooth: true, emphasis: { disabled: true }, lineStyle: { width: 2, color: cssVar('--np-success') }, itemStyle: { color: cssVar('--np-success') }, data: h.mem || [] }
     ]
   })
 }

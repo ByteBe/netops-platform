@@ -152,7 +152,7 @@ async function loadTrafficHistory() {
     in: number[][]
     out: number[][]
   }>(`/traffic/rules/${histRule.value.id}/history?hours=${histHours.value}`)
-  histChart ??= echarts.init(histRef.value as HTMLDivElement)
+  histChart ??= echarts.init(histRef.value as HTMLDivElement, null, { renderer: 'svg' })
   const ca = chartAxisColors()
   histChart.setOption({
     backgroundColor: 'transparent',

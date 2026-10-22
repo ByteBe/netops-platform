@@ -27,12 +27,17 @@ type loginReq struct {
 
 // loginPayload 登录载荷
 type loginPayload struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Username    string `json:"username"`
+	Password    string `json:"password"`
+	CaptchaID   string `json:"captcha_id"`
+	CaptchaCode string `json:"captcha_code"`
 }
 
 // Register 公开路由：登录
 func Register(a *core.App, g *gin.RouterGroup) {
+	// 图形验证码
+	g.GET("/captcha", captchaHandler)
+
 	g.POST("/login", func(c *gin.Context) {
 		var req loginReq
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -54,6 +59,11 @@ func Register(a *core.App, g *gin.RouterGroup) {
 		var lp loginPayload
 		if err := json.Unmarshal(plain, &lp); err != nil || lp.Username == "" || lp.Password == "" {
 			response.Bad(c, "登录数据格式错误")
+			return
+		}
+		// 验证码校验（一次性，防止暴力破解/自动化攻击）
+		if lp.CaptchaID == "" || lp.CaptchaCode == "" || !verifyCaptcha(lp.CaptchaID, lp.CaptchaCode) {
+			response.Fail(c, http.StatusBadRequest, response.CodeBadRequest, "验证码错误或已过期")
 			return
 		}
 
