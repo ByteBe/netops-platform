@@ -1,6 +1,9 @@
 # 编译产物
 backend/netops-server
 backend/netops-server.exe
+# 根目录旧构建二进制（二进制统一放 backend/ 与 dist-release/）
+netops-linux-amd64
+netops-linux-arm64
 
 # 前端构建产物（自动生成）
 web/dist/
