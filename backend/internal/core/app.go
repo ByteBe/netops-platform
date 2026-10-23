@@ -47,9 +47,6 @@ type App struct {
 
 	// 已注册模块（由 bootstrap 填充）
 	Modules []string
-
-	// 运行状态
-	startTime time.Time
 }
 
 // New 创建应用实例（未初始化状态）

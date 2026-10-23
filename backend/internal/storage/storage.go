@@ -39,6 +39,8 @@ func Open(cfg *config.Database) (*gorm.DB, error) {
 	sqlDB.SetMaxIdleConns(cfg.MaxIdle)
 	sqlDB.SetMaxOpenConns(cfg.MaxOpen)
 	sqlDB.SetConnMaxLifetime(time.Hour)
+	// 空闲连接 30 分钟未复用即回收，避免空闲连接被数据库侧（wait_timeout 等）静默断开后产生失效连接
+	sqlDB.SetConnMaxIdleTime(30 * time.Minute)
 	if err := sqlDB.Ping(); err != nil {
 		return nil, fmt.Errorf("数据库探活失败(%s): %w", cfg.Type, err)
 	}
@@ -110,7 +112,7 @@ func dialector(cfg *config.Database) (gorm.Dialector, error) {
 		}
 		return sqlite.Open(path), nil
 	case "mysql", "oceanbase":
-		dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local&%s",
+		dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local&timeout=5s&readTimeout=10s&writeTimeout=10s&%s",
 			cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Database, cfg.Params)
 		return mysql.Open(dsn), nil
 	case "oracle":
@@ -125,7 +127,7 @@ func dialector(cfg *config.Database) (gorm.Dialector, error) {
 		dsn := fmt.Sprintf("dm://%s:%s@%s:%d?schema=%s", cfg.User, cfg.Password, cfg.Host, cfg.Port, firstNonEmpty(cfg.Database, cfg.User))
 		return OpenDM(dsn), nil
 	case "kingbase", "postgres":
-		dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable %s",
+		dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable connect_timeout=5 %s",
 			cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Database, cfg.Params)
 		return postgres.Open(dsn), nil
 	default:

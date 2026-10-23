@@ -689,61 +689,6 @@ func sanitizeFilename(s string) string {
 	return s
 }
 
-// buildPDF 生成最小可用的二进制 PDF（Helvetica，纯文本行）
-func buildPDF(title, content string) []byte {
-	lines := stripHTML(content)
-	objs := []string{}
-	// obj1 catalog, obj2 pages, obj3 page, obj4 content
-	contentStream := "BT /F1 12 Tf 50 800 Td 16 TL\n(" + escapePDF(title) + ") Tj\n"
-	y := 780
-	for i, l := range lines {
-		if i > 40 {
-			break
-		}
-		if y < 50 {
-			break
-		}
-		contentStream += fmt.Sprintf("0 -16 Td (%s) Tj\n", escapePDF(truncate(l, 90)))
-		y -= 16
-	}
-	contentStream += "ET"
-	objs = append(objs, "<< /Type /Catalog /Pages 2 0 R >>")
-	objs = append(objs, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
-	objs = append(objs, "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>")
-	objs = append(objs, "<< /Length "+strconv.Itoa(len(contentStream))+" >>\nstream\n"+contentStream+"\nendstream")
-	objs = append(objs, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
-	var out strings.Builder
-	out.WriteString("%PDF-1.4\n")
-	offsets := []int{}
-	for i, o := range objs {
-		offsets = append(offsets, out.Len())
-		out.WriteString(strconv.Itoa(i+1) + " 0 obj\n" + o + "\nendobj\n")
-	}
-	xrefPos := out.Len()
-	out.WriteString("xref\n0 " + strconv.Itoa(len(objs)+1) + "\n")
-	out.WriteString("0000000000 65535 f \n")
-	for _, off := range offsets {
-		out.WriteString(fmt.Sprintf("%010d 00000 n \n", off))
-	}
-	out.WriteString(fmt.Sprintf("trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, xrefPos))
-	return []byte(out.String())
-}
-
-func escapePDF(s string) string {
-	s = strings.ReplaceAll(s, "\\", "\\\\")
-	s = strings.ReplaceAll(s, "(", "\\(")
-	s = strings.ReplaceAll(s, ")", "\\)")
-	return s
-}
-
-func truncate(s string, n int) string {
-	r := []rune(s)
-	if len(r) > n {
-		return string(r[:n])
-	}
-	return s
-}
-
 // startReportScheduler 定时生成周报/月报：
 //   - 每 10 分钟检查一次，每天首次检查（时间 >= 01:00）即执行当天任务，
 //     服务在凌晨任意时刻启动/重启都不会错过（不再依赖整点 tick 对齐）

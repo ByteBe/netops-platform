@@ -23,5 +23,6 @@ export default {
   t_nginx: 'Nginx实例', t_backupDev: '配置备份设备', t_taskLog: '任务日志', t_devLog: '设备日志', t_aiReport: 'AI巡检报告',
   t_nodes: '节点表', t_backup: '配置备份', t_alertRule: '告警规则', t_alertEvent: '告警事件', t_notify: '通知渠道配置',
   t_nodeContainer: '下级容器', t_nodeLink: '下级链路', t_tsArchive: '时序归档', t_tsArchiveRetry: '归档重传记录',
-  t_cert: '节点证书'
+  t_cert: '节点证书',
+  t_topoNode: '拓扑节点', t_topoLink: '拓扑链路', t_topoPos: '拓扑位置'
 }

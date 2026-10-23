@@ -23,5 +23,6 @@ export default {
   t_nginx: 'Nginx Instances', t_backupDev: 'Config Backup Devices', t_taskLog: 'Task Logs', t_devLog: 'Device Logs', t_aiReport: 'AI Inspection Reports',
   t_nodes: 'Nodes', t_backup: 'Config Backups', t_alertRule: 'Alert Rules', t_alertEvent: 'Alert Events', t_notify: 'Notify Channels',
   t_nodeContainer: 'Child Containers', t_nodeLink: 'Child Links', t_tsArchive: 'TS Archives', t_tsArchiveRetry: 'Archive Retries',
-  t_cert: 'Node Certificates'
+  t_cert: 'Node Certificates',
+  t_topoNode: 'Topology Nodes', t_topoLink: 'Topology Links', t_topoPos: 'Topology Positions'
 }

@@ -210,7 +210,7 @@ func StartMQTT(a *core.App) {
 			opts.SetTLSConfig(tc)
 		}
 		opts.SetOnConnectHandler(func(c mqtt.Client) {
-			topic := fmt.Sprintf("netops/+/up")
+			topic := "netops/+/up"
 			if t := c.Subscribe(topic, 1, onIngest); t.Wait() && t.Error() != nil {
 				logger.Warnf("[mqtt] subscribe %s failed: %v", topic, t.Error())
 			} else {

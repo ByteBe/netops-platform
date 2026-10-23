@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"netops/internal/common/netutil"
 	"netops/internal/common/response"
 	"netops/internal/core"
 	"netops/internal/model"
@@ -30,7 +31,13 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			var dev model.MonitorDevice
 			if err := a.DB.First(&dev, r.DeviceID).Error; err == nil {
 				item["device_name"] = dev.Name
-				item["device_ip"] = dev.IP
+				// 本机纳管设备以 127.0.0.1/::1/localhost 作为 SNMP 采集地址，
+				// 对外展示应为本机真实 IP
+				if netutil.IsLoopbackAddr(dev.IP) {
+					item["device_ip"] = netutil.LocalIPv4()
+				} else {
+					item["device_ip"] = dev.IP
+				}
 			}
 			result = append(result, item)
 		}
@@ -145,9 +152,31 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		response.OK(c, gin.H{"in": matchSeries(in, r.Interface), "out": matchSeries(out, r.Interface), "rule": r})
 	})
 
-	// 接口列表（从设备快照）
-	g.GET("/devices/:id/interfaces", func(c *gin.Context) {
+	// 实时曲线（最近 N 秒，10s 桶聚合，供卡片 480 秒视图）
+	g.GET("/rules/:id/realtime", func(c *gin.Context) {
 		id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+		var r model.TrafficRule
+		if err := a.DB.First(&r, id).Error; err != nil {
+			response.NotFound(c, "规则不存在")
+			return
+		}
+		seconds, _ := strconv.Atoi(c.DefaultQuery("seconds", "480"))
+		if seconds < 60 {
+			seconds = 60
+		}
+		if seconds > 3600 {
+			seconds = 3600
+		}
+		end := time.Now()
+		start := end.Add(-time.Duration(seconds) * time.Second)
+		tags := map[string]string{"device_id": strconv.FormatUint(uint64(r.DeviceID), 10), "if_name": r.Interface}
+		in, _ := a.TSDB.Query(tsdb.Query{Metric: "if_in", Tags: tags, Start: start, End: end, Bucket: time.Second * 10, Agg: "avg"})
+		out, _ := a.TSDB.Query(tsdb.Query{Metric: "if_out", Tags: tags, Start: start, End: end, Bucket: time.Second * 10, Agg: "avg"})
+		response.OK(c, gin.H{"in": matchSeries(in, r.Interface), "out": matchSeries(out, r.Interface)})
+	})
+
+	// 接口列表（从设备快照）
+	g.GET("/devices/:id/interfaces", func(c *gin.Context) {		id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
 		snap, ok := a.SnmpMgr.DeviceSnapshotByID(uint(id))
 		if !ok {
 			response.OK(c, []gin.H{})

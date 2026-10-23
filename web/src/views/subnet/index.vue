@@ -152,10 +152,10 @@ calc()
         <div class="np-kpi r-card">
           <div class="np-kpi-icon"><el-icon><InfoFilled /></el-icon></div>
           <div class="np-kpi-body">
-            <div class="np-kpi-value r-value">{{ result.ip }}</div>
-            <div class="np-kpi-label">{{ t('subnet.ipAddr') }} /{{ result.cidr }}</div>
+            <div class="np-kpi-value r-value">{{ result.ip }}<span class="slash24">/{{ result.cidr }}</span></div>
+            <div class="np-kpi-label">{{ t('subnet.ipAddr') }}</div>
           </div>
-          <el-button size="small" class="cp-btn" @click="copy(result.ip)">{{ t('common.copy') }}</el-button>
+          <el-button size="small" class="cp-btn" @click="copy(result.ip + '/' + result.cidr)">{{ t('common.copy') }}</el-button>
         </div>
         <div class="np-kpi r-card">
           <div class="np-kpi-icon is-info"><el-icon><Key /></el-icon></div>
@@ -281,16 +281,23 @@ calc()
 .calc-ip-input { width: 260px; }
 .slash { font-size: 20px; color: var(--np-text-2); font-weight: 600; }
 
-.result-grid { margin-bottom: 4px; }
+.result-grid {
+  margin-bottom: 4px;
+  grid-template-columns: repeat(auto-fill, minmax(215px, 1fr));
+}
 
 .r-card {
   .cp-btn { position: absolute; top: 12px; right: 12px; font-size: 12px; padding: 2px 8px; }
+  .np-kpi-icon { display: none; } // 计算结果卡隐藏装饰图标，避免挤压数值
+  .np-kpi-body { padding-right: 46px; } // 为右上角复制按钮让位，避免遮挡数值
   .r-value {
     font-family: 'Consolas', monospace;
-    font-size: 18px;
+    font-size: 14px;
     font-weight: 700;
     color: var(--np-text-1);
-    word-break: break-all;
+    white-space: nowrap;
+    overflow: hidden;
+    .slash24 { font-size: 12px; font-weight: 600; opacity: .8; }
   }
   .r-value.sm { font-size: 14px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; line-height: 1.5; }
   .r-value.hl { color: var(--np-text-1); }

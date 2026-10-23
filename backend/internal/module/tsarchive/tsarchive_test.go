@@ -224,7 +224,7 @@ func TestArchiveRetryAndBackfill(t *testing.T) {
 		t.Fatalf("超过上限应标记 discard，实际 %s(retries=%d)", item.Status, item.Retries)
 	}
 	q, _ := eng.Query(tsdb.Query{Metric: "dev_mem", Start: start, End: end})
-	if q == nil || len(q) == 0 {
+	if len(q) == 0 {
 		t.Fatalf("discard 后时序库原始数据应保留")
 	}
 

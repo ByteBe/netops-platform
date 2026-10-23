@@ -252,9 +252,10 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			response.Bad(c, "节点不存在")
 			return
 		}
-		// 级联清理该下级节点上报的设备（避免删除节点后残留孤儿设备）
+		// 级联清理该下级节点上报的设备与交换证书（节点消失后证书自动删除，避免残留）
 		if n.NodeUUID != "" {
 			a.DB.Where("node_uuid = ?", n.NodeUUID).Delete(&model.MonitorDevice{})
+			a.DB.Where("node_uuid = ?", n.NodeUUID).Delete(&model.Certificate{})
 		}
 		a.DB.Delete(&model.Node{}, n.ID)
 		response.OK(c, gin.H{"ok": true})

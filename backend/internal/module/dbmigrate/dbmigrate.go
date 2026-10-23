@@ -159,7 +159,8 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 				if runtime.GOOS == "windows" {
 					cmd = exec.Command("cmd", "/C", "start", "", exe)
 				} else {
-					cmd = exec.Command("sh", "-c", "nohup "+exe+" >/dev/null 2>&1 &")
+					// 直接启动自身可执行文件（nohup 忽略 SIGHUP，Start 后进程脱离）
+					cmd = exec.Command("nohup", exe)
 				}
 				_ = cmd.Start()
 				os.Exit(0)

@@ -7,5 +7,6 @@ export default {
   back: 'Back', tip: 'Notice', success: 'Operation succeeded', failed: 'Operation failed',
   confirmDelete: 'Are you sure to delete this record? This cannot be undone.',
   loading: 'Loading...', noData: 'No data', enable: 'Enable', disable: 'Disable',
-  required: 'is required', warning: 'Notice'
+  required: 'is required', warning: 'Notice',
+  selectPlaceholder: 'Select'
 }

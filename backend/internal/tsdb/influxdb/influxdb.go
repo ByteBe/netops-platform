@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"sort"
@@ -44,7 +45,21 @@ func NewInflux(host string, port int, user, pass, db, params string) (*Engine, e
 		db:     db,
 		org:    db,
 		bucket: db,
-		client: &http.Client{Timeout: 5 * time.Second},
+		client: &http.Client{Timeout: 10 * time.Second},
+	}
+	// 连接池参数：与 TDengine 引擎一致，高并发采集/查询下复用空闲连接
+	e.client.Transport = &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   5 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		MaxIdleConns:          64,
+		MaxIdleConnsPerHost:   32,
+		MaxConnsPerHost:       64,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   5 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
 	}
 	for _, kv := range strings.Split(params, ";") {
 		p := strings.SplitN(kv, "=", 2)

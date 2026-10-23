@@ -15,8 +15,6 @@ import (
 const (
 	// ReplayWindow 请求有效期（秒），超过即拒绝
 	ReplayWindow = 300 // 5分钟
-	// NonceCacheSize Nonce缓存最大条数
-	nonceCacheSize = 100000
 )
 
 var (

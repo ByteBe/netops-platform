@@ -31,14 +31,14 @@ type User struct {
 // AuditLog 操作审计日志
 type AuditLog struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
-	UserID    uint      `gorm:"index" json:"user_id"`
-	Username  string    `gorm:"size:64" json:"username"`
+	UserID    uint      `gorm:"index:idx_audit_logs_user_id;index:idx_audit_logs_user_created" json:"user_id"`
+	Username  string    `gorm:"size:64;index:idx_audit_logs_username" json:"username"`
 	Action    string    `gorm:"size:128" json:"action"`
 	Method    string    `gorm:"size:8" json:"method"`
 	Path      string    `gorm:"size:256" json:"path"`
 	IP        string    `gorm:"size:64" json:"ip"`
 	Detail    string    `gorm:"size:1024" json:"detail"`
-	CreatedAt time.Time `gorm:"index" json:"created_at"`
+	CreatedAt time.Time `gorm:"index:idx_audit_logs_created_at;index:idx_audit_logs_user_created" json:"created_at"`
 }
 
 // DeviceGroup 资源分组（设置资源管理：将监控设备分类管理）
@@ -166,8 +166,8 @@ type NginxInstance struct {
 type ScriptTemplate struct {
 	ID          uint      `gorm:"primaryKey" json:"id"`
 	Code        string    `gorm:"size:64;uniqueIndex" json:"code"`  // 代码中的模板标识
-	Vendor      string    `gorm:"size:16;index" json:"vendor"`      // huawei/h3c
-	DeviceType  string    `gorm:"size:16;index" json:"device_type"` // router/switch/ac
+	Vendor      string    `gorm:"size:16;index:idx_script_templates_vendor;index:idx_script_templates_vendor_devtype" json:"vendor"`      // huawei/h3c
+	DeviceType  string    `gorm:"size:16;index:idx_script_templates_device_type;index:idx_script_templates_vendor_devtype" json:"device_type"` // router/switch/ac
 	Category    string    `gorm:"size:32;index" json:"category"`    // vlan/acl/nat/...
 	Name        string    `gorm:"size:128" json:"name"`
 	Description string    `gorm:"size:512" json:"description"`
@@ -205,8 +205,8 @@ type Subnet struct {
 // IPRecord IP使用记录
 type IPRecord struct {
 	ID           uint      `gorm:"primaryKey" json:"id"`
-	SubnetID     uint      `gorm:"index;not null" json:"subnet_id"`
-	IP           string    `gorm:"size:64;index;not null" json:"ip"`
+	SubnetID     uint      `gorm:"index:idx_ip_records_subnet_id;index:idx_ip_records_subnet_ip;not null" json:"subnet_id"`
+	IP           string    `gorm:"size:64;index:idx_ip_records_ip;index:idx_ip_records_subnet_ip;not null" json:"ip"`
 	OwnerName    string    `gorm:"size:64" json:"owner_name"`               // 使用人员姓名
 	MAC          string    `gorm:"size:32" json:"mac"`                      // 电脑MAC地址
 	VLAN         int       `gorm:"default:0" json:"vlan"`                   // 从ARP表识别的VLAN
@@ -223,7 +223,7 @@ type IPRecord struct {
 type BindDevice struct {
 	ID         uint      `gorm:"primaryKey" json:"id"`
 	Name       string    `gorm:"size:128;not null" json:"name"`
-	IP         string    `gorm:"size:64;not null" json:"ip"`
+	IP         string    `gorm:"size:64;not null;index:idx_bind_devices_ip" json:"ip"`
 	SSHUser    string    `gorm:"size:64" json:"ssh_user"`
 	SSHPort    int       `gorm:"default:22" json:"ssh_port"`
 	AuthType   string    `gorm:"size:16;default:password" json:"auth_type"` // password/key
@@ -360,7 +360,7 @@ type ConfigBackupDevice struct {
 	ID         uint      `gorm:"primaryKey" json:"id"`
 	NodeID     string    `gorm:"size:64;index" json:"node_id"`
 	Name       string    `gorm:"size:128;not null" json:"name"`
-	IP         string    `gorm:"size:64;not null" json:"ip"`
+	IP         string    `gorm:"size:64;not null;index:idx_config_backup_devices_ip" json:"ip"`
 	Type       string    `gorm:"size:16;default:switch" json:"type"` // switch/router/database
 	Vendor     string    `gorm:"size:32;default:h3c" json:"vendor"`  // h3c/huawei/cisco/mysql/...
 	SSHUser    string    `gorm:"size:64" json:"ssh_user"`
@@ -404,18 +404,18 @@ type AlertRule struct {
 type AlertEvent struct {
 	ID         uint       `gorm:"primaryKey" json:"id"`
 	RuleID     uint       `gorm:"index" json:"rule_id"`
-	Metric     string     `gorm:"size:32" json:"metric"`
-	Target     string     `gorm:"size:128;index" json:"target"` // 设备/节点名
+	Metric     string     `gorm:"size:32;index:idx_alert_events_metric" json:"metric"`
+	Target     string     `gorm:"size:128;index:idx_alert_events_target;index:idx_alert_events_target_acked" json:"target"` // 设备/节点名
 	Value      float64    `gorm:"type:decimal(10,2)" json:"value"`
 	Level      string     `gorm:"size:16" json:"level"`
 	Message    string     `gorm:"size:512" json:"message"`
-	GroupKey   string     `gorm:"size:191;index" json:"group_key"`
+	GroupKey   string     `gorm:"size:191;index:idx_alert_events_group_key;index:idx_alert_events_group_acked" json:"group_key"`
 	Count      int        `gorm:"default:1" json:"count"`
 	Suppressed bool       `gorm:"default:false" json:"suppressed"`
 	Escalated  bool       `gorm:"default:false" json:"escalated"`
-	Acked      bool       `gorm:"default:false" json:"acked"`
+	Acked      bool       `gorm:"default:false;index:idx_alert_events_group_acked;index:idx_alert_events_target_acked" json:"acked"`
 	AckedAt    *time.Time `json:"acked_at"`
-	CreatedAt  time.Time  `json:"created_at"`
+	CreatedAt  time.Time  `gorm:"index:idx_alert_events_created_at" json:"created_at"`
 }
 
 // NotifyConfig 通知渠道配置
@@ -432,26 +432,26 @@ type NotifyConfig struct {
 // TaskLog 采集任务日志：记录每次 SNMP/SSH/DB 采集的成功失败
 type TaskLog struct {
 	ID         uint      `gorm:"primaryKey" json:"id"`
-	DeviceID   uint      `gorm:"index" json:"device_id"`
+	DeviceID   uint      `gorm:"index:idx_task_logs_device_id;index:idx_task_logs_devid_created" json:"device_id"`
 	DeviceName string    `gorm:"size:128" json:"device_name"`
 	IP         string    `gorm:"size:64" json:"ip"`
 	Type       string    `gorm:"size:32" json:"type"` // snmp/ssh/db/docker
 	Success    bool      `json:"success"`
 	DurationMs int64     `json:"duration_ms"`
 	Message    string    `gorm:"type:text" json:"message"`
-	CreatedAt  time.Time `gorm:"index" json:"created_at"`
+	CreatedAt  time.Time `gorm:"index:idx_task_logs_created_at;index:idx_task_logs_devid_created" json:"created_at"`
 }
 
 // DeviceLog 设备日志（syslog/docker/k8s/ssh）
 type DeviceLog struct {
 	ID         uint      `gorm:"primaryKey" json:"id"`
 	Source     string    `gorm:"size:32;index" json:"source"` // syslog/docker/k8s/ssh
-	DeviceName string    `gorm:"size:128;index" json:"device_name"`
-	IP         string    `gorm:"size:64" json:"ip"`
-	Level      string    `gorm:"size:16;index" json:"level"` // info/warning/error/critical
+	DeviceName string    `gorm:"size:128;index:idx_device_logs_device_name;index:idx_device_logs_devname_created" json:"device_name"`
+	IP         string    `gorm:"size:64;index:idx_device_logs_ip" json:"ip"`
+	Level      string    `gorm:"size:16;index:idx_device_logs_level;index:idx_device_logs_level_created" json:"level"` // info/warning/error/critical
 	Facility   string    `gorm:"size:32" json:"facility"`
 	Message    string    `gorm:"type:text" json:"message"`
-	CreatedAt  time.Time `gorm:"index" json:"created_at"`
+	CreatedAt  time.Time `gorm:"index:idx_device_logs_created_at;index:idx_device_logs_devname_created;index:idx_device_logs_level_created" json:"created_at"`
 }
 
 func (m *MonitorDevice) BeforeSave(tx *gorm.DB) error {

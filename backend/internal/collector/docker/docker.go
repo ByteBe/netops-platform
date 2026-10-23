@@ -18,16 +18,6 @@ import (
 	"netops/internal/tsdb"
 )
 
-// 本地 Docker：优先 unix socket，失败回退 TCP 2375
-var localClient = &http.Client{
-	Timeout: 10 * time.Second,
-	Transport: &http.Transport{
-		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			return net.DialTimeout("unix", "/var/run/docker.sock", 5*time.Second)
-		},
-	},
-}
-
 func dockerTransport(host string) *http.Transport {
 	addr := strings.TrimPrefix(host, "tcp://")
 	if addr == "" {

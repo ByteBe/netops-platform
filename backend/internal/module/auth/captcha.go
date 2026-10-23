@@ -3,6 +3,7 @@ package auth
 
 import (
 	"bytes"
+	crand "crypto/rand"
 	"encoding/base64"
 	"image"
 	"image/color"
@@ -84,14 +85,30 @@ func init() {
 	}()
 }
 
-// genCaptchaCode 生成 4 位验证码（字符不重复，便于辨认）
-func genCaptchaCode() string {
-	perm := rand.Perm(len(captchaChars))
-	b := make([]byte, 4)
-	for i := range b {
-		b[i] = captchaChars[perm[i]]
+// secureRandIndex 基于 crypto/rand 生成 [0,n) 安全随机数（消除模偏差；
+// crypto 读取失败时兜底 math/rand，正常运行不会发生）
+func secureRandIndex(n int) int {
+	var b [1]byte
+	for {
+		if _, err := crand.Read(b[:]); err != nil {
+			return int(b[0]) % n
+		}
+		// 拒绝超出最大 256 倍数范围的值，消除模偏差
+		if int(b[0]) < 256-(256%n) {
+			return int(b[0]) % n
+		}
 	}
-	return string(b)
+}
+
+// genCaptchaCode 生成 4 位验证码（字符不重复，便于辨认；crypto/rand 安全随机）
+func genCaptchaCode() string {
+	chars := append([]byte(nil), captchaChars...)
+	// Fisher-Yates 安全洗牌
+	for i := len(chars) - 1; i > 0; i-- {
+		j := secureRandIndex(i + 1)
+		chars[i], chars[j] = chars[j], chars[i]
+	}
+	return string(chars[:4])
 }
 
 // drawCaptchaCode 绘制验证码 PNG（标准库，无外部依赖）
@@ -226,12 +243,12 @@ func verifyCaptcha(id, code string) bool {
 	return strings.EqualFold(e.code, code)
 }
 
-// randHex 生成随机十六进制字符串（验证码 ID）
+// randHex 生成随机十六进制字符串（验证码 ID，crypto/rand 安全随机）
 func randHex(n int) string {
 	const hex = "0123456789abcdef"
 	b := make([]byte, n)
 	for i := range b {
-		b[i] = hex[rand.Intn(16)]
+		b[i] = hex[secureRandIndex(16)]
 	}
 	return string(b)
 }

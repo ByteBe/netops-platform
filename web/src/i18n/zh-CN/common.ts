@@ -7,5 +7,6 @@ export default {
   back: '返回', tip: '提示', success: '操作成功', failed: '操作失败',
   confirmDelete: '确定删除该记录吗？删除后不可恢复。', loading: '加载中...',
   noData: '暂无数据', enable: '启用', disable: '停用',
-  required: '不能为空', warning: '提示'
+  required: '不能为空', warning: '提示',
+  selectPlaceholder: '请选择'
 }

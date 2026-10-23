@@ -9,15 +9,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"netops/internal/common/logger"
 	"netops/internal/tsdb"
 )
+
+// maxBatchSQLBytes 单条 INSERT SQL 的最大字节数（TDengine 默认 maxSQLLength 为 1MB，保守取 800KB）
+const maxBatchSQLBytes = 800 * 1024
 
 // Engine TDengine 引擎
 type Engine struct {
@@ -26,6 +31,9 @@ type Engine struct {
 	pass   string
 	db     string
 	client *http.Client
+
+	mu     sync.Mutex
+	tables map[string]bool // 已确认存在的表缓存，避免每轮写入重复 CREATE TABLE IF NOT EXISTS
 }
 
 // NewTDengine 创建 TDengine REST 连接（host/port 为 taosAdapter 地址，默认 6041）
@@ -44,7 +52,23 @@ func NewTDengine(host string, port int, user, pass, db string) (*Engine, error) 
 		user:   user,
 		pass:   pass,
 		db:     db,
-		client: &http.Client{Timeout: 5 * time.Second},
+		client: &http.Client{Timeout: 10 * time.Second},
+		tables: map[string]bool{},
+	}
+	// 连接池参数：REST 请求并发高（多采集器并发写入+图表查询），默认 Transport
+	// MaxIdleConnsPerHost=2 会导致高并发下频繁新建 TCP 连接；提升空闲连接复用
+	e.client.Transport = &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   5 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		MaxIdleConns:          64,
+		MaxIdleConnsPerHost:   32,
+		MaxConnsPerHost:       64,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   5 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
 	}
 	if err := e.initDB(); err != nil {
 		return nil, err
@@ -115,12 +139,12 @@ func (e *Engine) queryAt(path, sql string) ([][]interface{}, error) {
 	return tr.Data, nil
 }
 
-// Write 写入
+// Write 写入：按 指标+标签 分组构造批量 INSERT；多表合并为单条 SQL（超长自动拆批），
+// 已确认存在的表跳过重复 CREATE TABLE IF NOT EXISTS
 func (e *Engine) Write(rows []tsdb.Row) error {
 	if len(rows) == 0 {
 		return nil
 	}
-	// 按 指标+标签 分组，构造批量 INSERT
 	byTable := map[string][]tsdb.Row{}
 	order := []string{}
 	for _, r := range rows {
@@ -130,34 +154,72 @@ func (e *Engine) Write(rows []tsdb.Row) error {
 		}
 		byTable[table] = append(byTable[table], r)
 	}
+	// 逐表保证存在（缓存命中跳过 RPC）
 	for _, table := range order {
-		rs := byTable[table]
-		// 建表
-		if err := e.exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (ts TIMESTAMP, fname VARCHAR(64), val DOUBLE)", table)); err != nil {
+		if err := e.ensureTable(table); err != nil {
 			logger.Warnf("[tdengine] create table %s error: %v", table, err)
 			return err
 		}
-		var sb strings.Builder
+	}
+	// 多表合并为一条 INSERT：INSERT INTO t1 VALUES (...),(...) t2 VALUES (...)
+	var sb strings.Builder
+	sb.WriteString("INSERT INTO ")
+	first := true
+	flush := func() error {
+		if sb.Len() <= len("INSERT INTO ") {
+			return nil
+		}
+		if err := e.exec(sb.String()); err != nil {
+			logger.Warnf("[tdengine] insert error: %v sql=%s", err, sb.String()[:min(sb.Len(), 600)])
+			return err
+		}
+		sb.Reset()
 		sb.WriteString("INSERT INTO ")
+		first = true
+		return nil
+	}
+	for _, table := range order {
+		rs := byTable[table]
+		if !first {
+			sb.WriteString(" ")
+		}
 		sb.WriteString(table)
 		sb.WriteString(" VALUES ")
+		first = false
 		for i, r := range rs {
 			if i > 0 {
 				sb.WriteString(",")
 			}
 			sb.WriteString("(")
 			sb.WriteString(strconv.FormatInt(r.TS.UnixMilli(), 10))
-			sb.WriteString(",")
-			sb.WriteString("'" + strings.ReplaceAll(tsdb.Sanitize(r.Field), "'", "") + "'")
+			sb.WriteString(",'" + strings.ReplaceAll(tsdb.Sanitize(r.Field), "'", "") + "'")
 			sb.WriteString(",")
 			sb.WriteString(strconv.FormatFloat(r.Value, 'f', -1, 64))
 			sb.WriteString(")")
 		}
-		if err := e.exec(sb.String()); err != nil {
-			logger.Warnf("[tdengine] insert %s error: %v sql=%s", table, err, sb.String())
-			return err
+		if sb.Len() >= maxBatchSQLBytes {
+			if err := flush(); err != nil {
+				return err
+			}
 		}
 	}
+	return flush()
+}
+
+// ensureTable 确认子表存在；首次出现时执行 CREATE TABLE IF NOT EXISTS 并缓存
+func (e *Engine) ensureTable(table string) error {
+	e.mu.Lock()
+	if e.tables[table] {
+		e.mu.Unlock()
+		return nil
+	}
+	e.mu.Unlock()
+	if err := e.exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (ts TIMESTAMP, fname VARCHAR(64), val DOUBLE)", table)); err != nil {
+		return err
+	}
+	e.mu.Lock()
+	e.tables[table] = true
+	e.mu.Unlock()
 	return nil
 }
 
@@ -182,9 +244,18 @@ func (e *Engine) Query(q tsdb.Query) ([]tsdb.Series, error) {
 		return e.queryAllTables(q)
 	}
 	table := e.tableName(q.Metric, q.Tags)
+	return e.queryTable(table, q)
+}
+
+// queryTable 查询单张子表；Bucket>0 且聚合类型支持时下推 SQL 端 INTERVAL 聚合，
+// 减少 REST 传输与 Go 端内存占用；last 等不支持 SQL 下推的场景回退拉取原始点
+func (e *Engine) queryTable(table string, q tsdb.Query) ([]tsdb.Series, error) {
 	where := ""
 	if q.Field != "" {
 		where = fmt.Sprintf(" AND fname = '%s'", tsdb.Sanitize(q.Field))
+	}
+	if q.Bucket > 0 && sqlAggFn(q.Agg) != "" {
+		return e.queryAgg(table, q, where)
 	}
 	sql := fmt.Sprintf("SELECT ts, fname, val FROM %s WHERE ts >= %d AND ts <= %d%s",
 		table, q.Start.UnixMilli(), q.End.UnixMilli(), where)
@@ -231,6 +302,72 @@ func (e *Engine) Query(q tsdb.Query) ([]tsdb.Series, error) {
 	return out, nil
 }
 
+// sqlAggFn 返回可下推 SQL 端聚合的 TDengine 函数名；不支持的返回 ""（如 last）
+func sqlAggFn(agg string) string {
+	switch agg {
+	case "avg":
+		return "AVG"
+	case "max":
+		return "MAX"
+	case "min":
+		return "MIN"
+	case "sum":
+		return "SUM"
+	case "count":
+		return "COUNT"
+	default:
+		return ""
+	}
+}
+
+// queryAgg 使用 TDengine 时间窗口在服务端聚合（3.x 语法：INTERVAL 为独立子句，
+// PARTITION BY fname 保证多字段各自开窗），窗口起点对齐与 Go 端一致
+func (e *Engine) queryAgg(table string, q tsdb.Query, where string) ([]tsdb.Series, error) {
+	bms := int64(q.Bucket / time.Millisecond)
+	if bms <= 0 {
+		bms = 1
+	}
+	fn := sqlAggFn(q.Agg)
+	sql := fmt.Sprintf("SELECT _wstart, fname, %s(val) FROM %s WHERE ts >= %d AND ts <= %d%s PARTITION BY fname INTERVAL(%d)",
+		fn, table, q.Start.UnixMilli(), q.End.UnixMilli(), where, bms)
+	if q.Limit > 0 {
+		sql += fmt.Sprintf(" LIMIT %d", q.Limit)
+	}
+	data, err := e.query(sql)
+	if err != nil {
+		if strings.Contains(err.Error(), "Table does not exist") {
+			return nil, tsdb.ErrNoData
+		}
+		return nil, err
+	}
+	groups := map[string]*tsdb.Series{}
+	order := []string{}
+	for _, row := range data {
+		if len(row) < 3 {
+			continue
+		}
+		tsMs := parseTsMs(row[0])
+		field := fmt.Sprint(row[1])
+		val, _ := strconv.ParseFloat(fmt.Sprint(row[2]), 64)
+		key := field
+		s, ok := groups[key]
+		if !ok {
+			s = &tsdb.Series{Metric: q.Metric, Field: field, Tags: q.Tags}
+			groups[key] = s
+			order = append(order, key)
+		}
+		s.Points = append(s.Points, [2]float64{float64(tsMs), val})
+	}
+	if len(order) == 0 {
+		return nil, tsdb.ErrNoData
+	}
+	out := make([]tsdb.Series, 0, len(order))
+	for _, k := range order {
+		out = append(out, *groups[k])
+	}
+	return out, nil
+}
+
 // queryAllTables 无 tags 查询：枚举该 metric 的全部表（含无标签主表 t_<metric>），逐表查询并合并
 // 不同标签组合以 Tags={"__table": 表名} 标记分组（TDengine 标签 hash 不可逆，无法还原原始标签）
 func (e *Engine) queryAllTables(q tsdb.Query) ([]tsdb.Series, error) {
@@ -244,47 +381,18 @@ func (e *Engine) queryAllTables(q tsdb.Query) ([]tsdb.Series, error) {
 	}
 	out := []tsdb.Series{}
 	for _, tbl := range tables {
-		where := ""
-		if q.Field != "" {
-			where = fmt.Sprintf(" AND fname = '%s'", tsdb.Sanitize(q.Field))
-		}
-		sql := fmt.Sprintf("SELECT ts, fname, val FROM %s WHERE ts >= %d AND ts <= %d%s",
-			tbl, q.Start.UnixMilli(), q.End.UnixMilli(), where)
-		if q.Limit > 0 {
-			sql += fmt.Sprintf(" LIMIT %d", q.Limit)
-		}
-		data, err := e.query(sql)
+		// 复用单表查询逻辑：Bucket>0 时同样下推 SQL 端聚合
+		series, err := e.queryTable(tbl, q)
 		if err != nil {
 			// 表可能在枚举后被删除，跳过
-			if strings.Contains(err.Error(), "Table does not exist") {
+			if err == tsdb.ErrNoData || strings.Contains(err.Error(), "Table does not exist") {
 				continue
 			}
 			return nil, err
 		}
-		groups := map[string]*tsdb.Series{}
-		order := []string{}
-		for _, row := range data {
-			if len(row) < 3 {
-				continue
-			}
-			tsMs := parseTsMs(row[0])
-			field := fmt.Sprint(row[1])
-			val, _ := strconv.ParseFloat(fmt.Sprint(row[2]), 64)
-			key := field + "|" + tbl
-			s, ok := groups[key]
-			if !ok {
-				s = &tsdb.Series{Metric: q.Metric, Field: field, Tags: map[string]string{"__table": tbl}}
-				groups[key] = s
-				order = append(order, key)
-			}
-			s.Points = append(s.Points, [2]float64{float64(tsMs), val})
-		}
-		for _, k := range order {
-			s := groups[k]
-			if q.Bucket > 0 {
-				s.Points = tsdb.AggregatePoints(s.Points, q.Bucket, q.Agg)
-			}
-			out = append(out, *s)
+		for _, s := range series {
+			s.Tags = map[string]string{"__table": tbl}
+			out = append(out, s)
 		}
 	}
 	if len(out) == 0 {
@@ -295,7 +403,7 @@ func (e *Engine) queryAllTables(q tsdb.Query) ([]tsdb.Series, error) {
 
 // Delete 按 metric + 时间范围删除（归档转存校验通过后清理已归档数据）
 func (e *Engine) Delete(q tsdb.Query) (int64, error) {
-	tables := []string{}
+	var tables []string
 	if tbl, ok := q.Tags["__table"]; ok {
 		// 无 tags 查询返回的序列带 __table 标记：直接按表名删除
 		tables = []string{tbl}

@@ -56,6 +56,7 @@ func SM2Decrypt(privateHex, cipherHex string) ([]byte, error) {
 	priv.Curve = sm2.P256Sm2()
 	priv.D = new(big.Int).SetBytes(d)
 	priv.PublicKey.Curve = priv.Curve
+	//lint:ignore SA1019 SM2 国密曲线非 NIST 曲线，crypto/ecdh 不支持，须用低层标量乘法计算公钥
 	priv.PublicKey.X, priv.PublicKey.Y = priv.Curve.ScalarBaseMult(d)
 
 	cipher, err := hex.DecodeString(cipherHex)

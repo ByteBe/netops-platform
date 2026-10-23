@@ -626,7 +626,8 @@ func (m *Manager) collectMemory(params *gosnmp.GoSNMP, d Device, snap *DeviceSna
 				bufKB = toUint64(buf.Variables[0].Value)
 			}
 			usedKB := totalKB - availKB - cachedKB - bufKB
-			if usedKB < 0 {
+			// uint64 无负数：减法下溢时 usedKB 会包绕成大于 totalKB 的巨大值，此时回退为 total-avail
+			if usedKB > totalKB {
 				usedKB = totalKB - availKB
 			}
 			snap.MemUsed = math.Round(float64(usedKB)/float64(totalKB)*1000) / 10

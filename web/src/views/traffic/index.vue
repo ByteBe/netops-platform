@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 流量监控：专线规则（带宽/上下行独立可配）+ 实时速率 + 历史
+// 流量监控：单接口实时带宽卡（参考图样式：In/Out 速率 + 480s 曲线 + 单位切换 + 自动缩放）
 import { ref, reactive, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
@@ -7,18 +7,23 @@ import * as echarts from 'echarts'
 import { getEnc, postEnc, putEnc, delEnc } from '@/utils/request'
 import { WSClient } from '@/utils/ws'
 import { useAppStore } from '@/stores/app'
-import { fmtBps, pickColor, cssVar, chartAxisColors } from '@/utils'
+import { pickColor, fmtBps, chartAxisColors } from '@/utils'
 import { histTooltip } from '@/utils/histTooltip'
 
 const appStore = useAppStore()
-
-const fmtPct = (v: number) => {
-  if (v < 0.01) return v.toFixed(3)
-  if (v < 1) return v.toFixed(2)
-  return v.toFixed(1)
-}
-
 const { t } = useI18n()
+
+// 参考图配色：蓝=出站(Out)，绿=入站(In)
+const IN_COLOR = '#3dd68c'
+const OUT_COLOR = '#3b9df0'
+const WINDOW_SEC = 480 // 曲线窗口（秒）
+const WINDOW_MS = WINDOW_SEC * 1000
+
+type Unit = 'mbps' | 'bytes'
+interface CurPoint {
+  in: [number, number][]
+  out: [number, number][]
+}
 
 interface TrafficRule {
   id: number
@@ -45,29 +50,199 @@ interface IfInfo {
 const rules = ref<TrafficRule[]>([])
 const devices = ref<Array<{ id: number; name: string; ip: string }>>([])
 const currents = ref<Record<number, { up: boolean; in_bps: number; out_bps: number; in_pct: number; out_pct: number }>>({})
+const curves = ref<Record<number, CurPoint>>({})
+const units = ref<Record<number, Unit>>({})
+const autoscale = ref<Record<number, boolean>>({})
+const nowTs = ref(Date.now())
 
 const dialogVisible = ref(false)
 const editingId = ref(0)
-const form = reactive({
-  id: 0, device_id: 0, interface: '', display_name: '', line_rate: 1000,
+interface RuleForm {
+  id: number
+  device_id?: number
+  interface: string
+  display_name: string
+  line_rate: number
+  if_speed: number
+  up_rate: number
+  down_rate: number
+  color: string
+  enable: boolean
+  remark: string
+}
+const form = reactive<RuleForm>({
+  id: 0, interface: '', display_name: '', line_rate: 1000,
   if_speed: 1000, up_rate: 1000, down_rate: 1000, color: '', enable: true, remark: ''
 })
 
 const ifs = ref<IfInfo[]>([])
 const ifLoading = ref(false)
 
-// 历史
+// 历史弹窗
 const histVisible = ref(false)
 const histRule = ref<TrafficRule | null>(null)
 const histRef = ref<HTMLDivElement>()
 const histHours = ref(24)
 let histChart: echarts.ECharts | null = null
 
+// 每卡迷你曲线
+const chartMap = new Map<number, echarts.ECharts>()
+const chartEls = ref<Record<number, HTMLDivElement | undefined>>({})
+let renderTimer: number | null = null
 let ws: WSClient | null = null
+let clockTimer: any = null
+let pollTimer: any = null
+
+function fmtBytes(bps: number, digits = 2): string {
+  const b = bps / 8
+  if (b <= 0) return '0 B/s'
+  const unitsArr = ['B/s', 'KB/s', 'MB/s', 'GB/s']
+  let v = b
+  let i = 0
+  while (v >= 1000 && i < unitsArr.length - 1) { v /= 1000; i++ }
+  return `${v.toFixed(digits)} ${unitsArr[i]}`
+}
+
+function fmtRate(bps: number, u: Unit): string {
+  if (u === 'bytes') return fmtBytes(bps)
+  if (bps <= 0) return '0.00 Mbps'
+  if (bps < 1e4) return (bps / 1e3).toFixed(1) + ' Kbps'
+  return (bps / 1e6).toFixed(2) + ' Mbps'
+}
+
+function fmtAxis(v: number, u: Unit): string {
+  if (u === 'bytes') return fmtBytes(v, 0)
+  if (v >= 1e6) return (v / 1e6).toFixed(v >= 10e6 ? 0 : 2) + 'M'
+  if (v >= 1e3) return (v / 1e3).toFixed(0) + 'K'
+  return v.toFixed(0)
+}
+
+// 历史图纵轴：按量级自适应单位，避免小流量时全显示 0M
+function fmtAxisSmart(bps: number): string {
+  if (bps >= 1e9) return (bps / 1e9).toFixed(1) + 'G'
+  if (bps >= 1e6) return (bps / 1e6).toFixed(1) + 'M'
+  if (bps >= 1e3) return (bps / 1e3).toFixed(1) + 'K'
+  return bps.toFixed(0)
+}
+
+function fmtClock(ts: number): string {
+  const d = new Date(ts)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${p(d.getMonth() + 1)}/${p(d.getDate())}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
+
+function calcMax(inData: [number, number][], outData: [number, number][], as: boolean, lineRate: number): number {
+  if (!as) return Math.max(1, lineRate) * 1e6
+  let m = 1
+  for (const p of inData) m = Math.max(m, p[1])
+  for (const p of outData) m = Math.max(m, p[1])
+  if (m <= 1) return 1e5 // 无数据：100 Kbps 空刻度
+  // 数据驱动刻度（1/2/5 系列），留 25% 余量；下限 10 Kbps，小流量时曲线尽量铺满
+  const nice = Math.pow(10, Math.floor(Math.log10(m)))
+  const norm = m / nice
+  let step = 10
+  if (norm <= 1) step = 1
+  else if (norm <= 2) step = 2
+  else if (norm <= 5) step = 5
+  return Math.max(1e4, step * nice * 1.25)
+}
+
+function mergeCurve(dst: CurPoint, src: CurPoint) {
+  const merge = (a: [number, number][], b: [number, number][]) => {
+    const m = new Map<number, number>()
+    for (const p of a) m.set(p[0], p[1])
+    for (const p of b) m.set(p[0], p[1])
+    return Array.from(m.entries()).sort((x, y) => x[0] - y[0]) as [number, number][]
+  }
+  dst.in = merge(dst.in, src.in)
+  dst.out = merge(dst.out, src.out)
+}
+
+function pushPoint(id: number, inBps: number, outBps: number, ts: number) {
+  const c = curves.value[id]
+  if (!c) return
+  const cutoff = ts - WINDOW_MS
+  const trim = (arr: [number, number][], v: number) => {
+    const a = arr.filter((p) => p[0] > cutoff)
+    const last = a[a.length - 1]
+    if (last && ts - last[0] < 2000) last[1] = v
+    else a.push([ts, v])
+    return a
+  }
+  c.in = trim(c.in, inBps)
+  c.out = trim(c.out, outBps)
+}
+
+function toggleUnit(id: number) {
+  units.value[id] = units.value[id] === 'mbps' ? 'bytes' : 'mbps'
+  renderRealtime()
+}
+
+function toggleScale(id: number) {
+  autoscale.value[id] = autoscale.value[id] === false
+  renderRealtime()
+}
+
+// 渲染节流：最多每秒一次
+function renderRealtime() {
+  if (renderTimer) return
+  renderTimer = window.setTimeout(() => {
+    renderTimer = null
+    doRenderRealtime()
+  }, 1000)
+}
+
+function doRenderRealtime() {
+  ensureCharts()
+  const now = Date.now()
+  const cutoff = now - WINDOW_MS
+  const ca = chartAxisColors()
+  for (const r of rules.value) {
+    if (!r.enable) continue
+    const chart = chartMap.get(r.id)
+    if (!chart || chart.isDisposed()) continue
+    const c = curves.value[r.id]
+    const u = units.value[r.id] || 'mbps'
+    const as = autoscale.value[r.id] !== false
+    const inData = (c?.in || []).filter((p) => p[0] >= cutoff)
+    const outData = (c?.out || []).filter((p) => p[0] >= cutoff)
+    chart.setOption({
+      backgroundColor: 'transparent',
+      grid: { left: 8, right: 46, top: 10, bottom: 8 },
+      xAxis: { type: 'time', min: cutoff, max: now, axisLabel: { show: false }, axisLine: { show: false }, axisTick: { show: false }, splitLine: { show: false } },
+      yAxis: {
+        type: 'value', position: 'right', min: 0, max: calcMax(inData, outData, as, r.line_rate),
+        splitNumber: 3,
+        axisLabel: { color: ca.axis, fontSize: 10, formatter: (v: number) => fmtAxis(v, u) },
+        splitLine: { lineStyle: { color: ca.split, type: 'dashed' } },
+        axisLine: { show: false }, axisTick: { show: false }
+      },
+      series: [
+        { type: 'line', showSymbol: false, smooth: true, animation: false, lineStyle: { width: 2, color: OUT_COLOR }, itemStyle: { color: OUT_COLOR }, data: outData },
+        { type: 'line', showSymbol: false, smooth: true, animation: false, lineStyle: { width: 2, color: IN_COLOR }, itemStyle: { color: IN_COLOR }, data: inData }
+      ]
+    }, true)
+  }
+}
+
+// 幂等初始化卡片图表（避免 ref 每次渲染重建实例）
+function ensureCharts() {
+  for (const r of rules.value) {
+    if (!r.enable) continue
+    const el = chartEls.value[r.id]
+    if (!el) continue
+    if (!chartMap.has(r.id)) chartMap.set(r.id, echarts.init(el, null, { renderer: 'svg' }))
+  }
+}
+
+function chartElRef(r: TrafficRule) {
+  return (el: unknown) => {
+    chartEls.value[r.id] = el instanceof HTMLDivElement ? el : undefined
+  }
+}
 
 async function loadRules() {
   rules.value = await getEnc<TrafficRule[]>('/traffic/rules')
-  // 拉取实时速率
   for (const r of rules.value) {
     if (!r.enable) continue
     try {
@@ -79,6 +254,25 @@ async function loadRules() {
       /* 忽略 */
     }
   }
+}
+
+// 拉取 480 秒曲线；force=重置，否则与本地合并（补齐 WS 断档）
+async function loadCurves(force: boolean) {
+  const list = rules.value.filter((r) => r.enable)
+  await Promise.all(list.map(async (r) => {
+    try {
+      const h = await getEnc<{ in: number[][]; out: number[][] }>(`/traffic/rules/${r.id}/realtime?seconds=${WINDOW_SEC}`)
+      const src: CurPoint = {
+        in: h.in.map((p) => [p[0], p[1]] as [number, number]),
+        out: h.out.map((p) => [p[0], p[1]] as [number, number])
+      }
+      if (force || !curves.value[r.id]) curves.value[r.id] = src
+      else mergeCurve(curves.value[r.id], src)
+    } catch {
+      if (!curves.value[r.id]) curves.value[r.id] = { in: [], out: [] }
+    }
+  }))
+  renderRealtime()
 }
 
 async function loadDevices() {
@@ -105,7 +299,7 @@ function onInterfaceChange() {
 function openAdd() {
   editingId.value = 0
   Object.assign(form, {
-    id: 0, device_id: 0, interface: '', display_name: '', line_rate: 1000,
+    id: 0, device_id: undefined, interface: '', display_name: '', line_rate: 1000,
     if_speed: 1000, up_rate: 1000, down_rate: 1000, color: pickColor(rules.value.length), enable: true, remark: ''
   })
   dialogVisible.value = true
@@ -130,10 +324,14 @@ async function save() {
   ElMessage.success(t('common.success'))
   dialogVisible.value = false
   await loadRules()
+  await loadCurves(true)
 }
 async function remove(r: TrafficRule) {
   await ElMessageBox.confirm(t('common.confirmDelete'), t('common.tip'), { type: 'warning' })
   await delEnc(`/traffic/rules/${r.id}`)
+  delete curves.value[r.id]
+  chartMap.get(r.id)?.dispose()
+  chartMap.delete(r.id)
   ElMessage.success(t('common.success'))
   await loadRules()
 }
@@ -156,28 +354,31 @@ async function loadTrafficHistory() {
   const ca = chartAxisColors()
   histChart.setOption({
     backgroundColor: 'transparent',
-    tooltip: histTooltip({ digits: 2, fmt: (v) => (v / 1e6).toFixed(2) + ' Mbps' }),
+    tooltip: histTooltip({ digits: 2, fmt: (v) => fmtBps(v) }),
     legend: { data: [t('traffic.in'), t('traffic.out')], textStyle: { color: ca.axis } },
     grid: { left: 80, right: 20, top: 36, bottom: 28 },
     xAxis: { type: 'time', axisLabel: { color: ca.axis }, axisLine: { lineStyle: { color: ca.axisLine } } },
-    yAxis: { type: 'value', axisLabel: { color: ca.axis, formatter: (v: number) => (v / 1e6).toFixed(0) + 'M' }, splitLine: { lineStyle: { color: ca.split } } },
+    yAxis: { type: 'value', axisLabel: { color: ca.axis, formatter: (v: number) => fmtAxisSmart(v) }, splitLine: { lineStyle: { color: ca.split } } },
     series: [
-      { name: t('traffic.in'), type: 'line', showSymbol: false, smooth: true, lineStyle: { width: 2, color: cssVar('--np-info') }, itemStyle: { color: cssVar('--np-info') }, areaStyle: { opacity: 0.08 }, data: h.in },
-      { name: t('traffic.out'), type: 'line', showSymbol: false, smooth: true, lineStyle: { width: 2, color: cssVar('--np-warning') }, itemStyle: { color: cssVar('--np-warning') }, areaStyle: { opacity: 0.08 }, data: h.out }
+      { name: t('traffic.in'), type: 'line', showSymbol: false, smooth: true, lineStyle: { width: 2, color: IN_COLOR }, itemStyle: { color: IN_COLOR }, areaStyle: { opacity: 0.08 }, data: h.in },
+      { name: t('traffic.out'), type: 'line', showSymbol: false, smooth: true, lineStyle: { width: 2, color: OUT_COLOR }, itemStyle: { color: OUT_COLOR }, areaStyle: { opacity: 0.08 }, data: h.out }
     ]
   })
 }
 
-// 进度条信号色（ECharts/组件不解析 CSS 变量，显式取色）
-function inBarColor() { return cssVar('--np-info') }
-function outBarColor() { return cssVar('--np-warning') }
+// 主题切换时重绘曲线
+watch(() => appStore.theme, () => {
+  nextTick(() => {
+    doRenderRealtime()
+    if (histVisible.value) void loadTrafficHistory()
+  })
+})
 
-// 主题切换时重绘历史曲线（canvas 不感知 CSS 变量变化）
-watch(() => appStore.theme, () => { if (histChart) void loadTrafficHistory() })
-
-let _timer: any = null
 onMounted(async () => {
+  nowTs.value = Date.now()
+  clockTimer = setInterval(() => { nowTs.value = Date.now() }, 1000)
   await Promise.all([loadDevices(), loadRules()])
+  await loadCurves(true)
   ws = new WSClient(['traffic'])
   ws.on('traffic', 'if_rate', (msg) => {
     const d = msg.data as unknown as { device_id: number; if_name: string; in_bps: number; out_bps: number }
@@ -188,16 +389,22 @@ onMounted(async () => {
         in_pct: r.down_rate ? (d.in_bps / (r.down_rate * 1e6)) * 100 : 0,
         out_pct: r.up_rate ? (d.out_bps / (r.up_rate * 1e6)) * 100 : 0
       }
+      pushPoint(r.id, d.in_bps, d.out_bps, Date.now())
+      renderRealtime()
     }
   })
   ws.connect()
-  _timer = setInterval(async () => { await loadDevices(); await loadRules() }, 30000) // 30s 刷新列表
+  pollTimer = setInterval(async () => { await loadDevices(); await loadRules(); await loadCurves(false) }, 30000)
 })
 
 onBeforeUnmount(() => {
-  if (_timer) clearInterval(_timer)
+  if (clockTimer) clearInterval(clockTimer)
+  if (pollTimer) clearInterval(pollTimer)
+  if (renderTimer) { clearTimeout(renderTimer); renderTimer = null }
   ws?.close()
   histChart?.dispose()
+  for (const ch of chartMap.values()) ch.dispose()
+  chartMap.clear()
 })
 </script>
 
@@ -215,38 +422,41 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <!-- 实时流量卡片 -->
+    <!-- 实时带宽卡片（参考图样式） -->
     <div class="np-traffic-grid">
-      <div v-for="r in rules" :key="r.id" class="np-card np-traffic-card" :style="{ '--accent': r.color || undefined }">
-        <div class="np-tc-head">
-          <div class="np-tc-head-left">
-            <div class="np-tc-devname">{{ r.device_name || t('traffic.unknownDevice') }}</div>
-            <div class="np-tc-meta">
-              <el-tag size="small" effect="plain">{{ r.device_ip || '-' }}</el-tag>
-              <el-tag size="small" type="info" effect="dark">{{ r.interface }}</el-tag>
-              <span v-if="r.display_name && r.display_name !== r.interface" class="np-tc-alias">{{ r.display_name }}</span>
+      <div v-for="r in rules" :key="r.id" class="np-card np-tf-card">
+        <div class="np-tf-top">
+          <div class="np-tf-rates">
+            <div class="np-tf-rate is-in">
+              <span class="np-tf-k">In</span>
+              <span class="np-tf-v">{{ fmtRate(currents[r.id]?.in_bps || 0, units[r.id] || 'mbps') }}</span>
+            </div>
+            <div class="np-tf-rate is-out">
+              <span class="np-tf-k">Out</span>
+              <span class="np-tf-v">{{ fmtRate(currents[r.id]?.out_bps || 0, units[r.id] || 'mbps') }}</span>
             </div>
           </div>
-          <span class="np-tc-status" :class="{up: currents[r.id]?.up}">{{ currents[r.id]?.up ? t('traffic.online') : t('traffic.offline') }}</span>
-        </div>
-        <div class="np-tc-rates">
-          <div class="np-tc-item is-in">
-            <div class="np-tc-label">↓ {{ t('traffic.in') }}</div>
-            <div class="np-tc-value">{{ fmtBps(currents[r.id]?.in_bps || 0) }}</div>
-            <el-progress :percentage="Math.min(currents[r.id]?.in_pct || 0, 100)" :stroke-width="6" :color="inBarColor()" :show-text="false" />
-            <div class="np-tc-pct">{{ fmtPct(currents[r.id]?.in_pct || 0) }}% / {{ r.down_rate }}M</div>
+          <div class="np-tf-mid">
+            <div class="np-tf-ts">{{ fmtClock(nowTs) }}</div>
+            <div class="np-tf-tools">
+              <a class="np-tf-tool" @click="toggleUnit(r.id)">{{ units[r.id] === 'bytes' ? t('traffic.switchMbps') : t('traffic.switchBytes') }}</a>
+              <a class="np-tf-tool" @click="toggleScale(r.id)">{{ autoscale[r.id] === false ? t('traffic.autoScaleFixed') : t('traffic.autoScaleFollow') }}</a>
+            </div>
+            <div class="np-tf-note">{{ t('traffic.graphSeconds', { n: WINDOW_SEC }) }}</div>
           </div>
-          <div class="np-tc-item is-out">
-            <div class="np-tc-label">↑ {{ t('traffic.out') }}</div>
-            <div class="np-tc-value">{{ fmtBps(currents[r.id]?.out_bps || 0) }}</div>
-            <el-progress :percentage="Math.min(currents[r.id]?.out_pct || 0, 100)" :stroke-width="6" :color="outBarColor()" :show-text="false" />
-            <div class="np-tc-pct">{{ fmtPct(currents[r.id]?.out_pct || 0) }}% / {{ r.up_rate }}M</div>
+          <div class="np-tf-title">
+            <div class="np-tf-ifname">{{ r.interface }}</div>
+            <div class="np-tf-devname">{{ r.device_name || r.display_name || t('traffic.unknownDevice') }}</div>
           </div>
         </div>
-        <div class="np-tc-actions">
-          <el-button size="small" text type="primary" @click="showHistory(r)">{{ t('traffic.history') }}</el-button>
-          <el-button size="small" text type="primary" @click="openEdit(r)">{{ t('common.edit') }}</el-button>
-          <el-button size="small" text type="danger" @click="remove(r)">{{ t('common.delete') }}</el-button>
+        <div class="np-tf-chart" :ref="chartElRef(r)"></div>
+        <div class="np-tf-bottom">
+          <div class="np-tf-ip">{{ r.device_ip || '-' }}</div>
+          <div class="np-tf-ops">
+            <el-button size="small" text type="primary" @click="showHistory(r)">{{ t('traffic.history') }}</el-button>
+            <el-button size="small" text type="primary" @click="openEdit(r)">{{ t('common.edit') }}</el-button>
+            <el-button size="small" text type="danger" @click="remove(r)">{{ t('common.delete') }}</el-button>
+          </div>
         </div>
       </div>
       <div v-if="!rules.length" class="np-card tc-empty">
@@ -261,7 +471,7 @@ onBeforeUnmount(() => {
     <el-dialog v-model="dialogVisible" :title="editingId ? t('traffic.editRule') : t('traffic.addRule')" width="520px">
       <el-form :model="form" label-width="130px">
         <el-form-item :label="t('traffic.device')" required>
-          <el-select v-model="form.device_id" filterable style="width: 100%" @change="loadIfs">
+          <el-select v-model="form.device_id" filterable style="width: 100%" @change="loadIfs" :placeholder="t('common.selectPlaceholder')">
             <el-option v-for="d in devices" :key="d.id" :label="`${d.name} (${d.ip})`" :value="d.id" />
           </el-select>
         </el-form-item>
@@ -278,12 +488,6 @@ onBeforeUnmount(() => {
         </el-form-item>
         <el-form-item :label="t('traffic.ifSpeed')">
           <el-input-number v-model="form.if_speed" :min="1" :max="1000000" />
-        </el-form-item>
-        <el-form-item :label="t('traffic.upRate')">
-          <el-input-number v-model="form.up_rate" :min="1" :max="1000000" />
-        </el-form-item>
-        <el-form-item :label="t('traffic.downRate')">
-          <el-input-number v-model="form.down_rate" :min="1" :max="1000000" />
         </el-form-item>
         <el-form-item :label="t('traffic.color')">
           <el-color-picker v-model="form.color" />
@@ -317,102 +521,124 @@ onBeforeUnmount(() => {
 <style lang="scss">
 .np-traffic-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
   gap: 14px;
 }
 
-.np-traffic-card {
-  // 左侧信号标线：优先规则自带色（后端下发），否则中性发丝线
-  border-left: 2px solid var(--accent, var(--np-border-strong));
-  transition: border-color 0.2s ease-out, transform 0.2s ease-out;
-  &:hover { transform: translateY(-1px); }
-  .np-tc-head {
+.np-tf-card {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 14px;
+  min-width: 0;
+
+  .np-tf-top {
     display: flex;
-    align-items: flex-start;
     justify-content: space-between;
+    align-items: flex-start;
     gap: 10px;
-    margin-bottom: 12px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid var(--np-border);
-    .np-tc-head-left {
-      min-width: 0;
-    }
-    .np-tc-devname {
-      font-size: 16px;
-      font-weight: 700;
-      margin-bottom: 6px;
-      color: var(--np-text-1);
-    }
-    .np-tc-meta {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      flex-wrap: wrap;
-      .np-tc-alias {
-        color: var(--np-text-2);
-        font-size: 12px;
-      }
-    }
-    // 在线/离线徽标：语义弱底 + 语义文字，发丝边
-    .np-tc-status {
-      flex: none;
-      font-size: 12px;
-      padding: 2px 10px;
-      border-radius: $radius-sm;
-      background: var(--np-danger-weak);
-      color: var(--np-danger);
-      border: 1px solid var(--np-border);
-      &.up {
-        background: var(--np-success-weak);
-        color: var(--np-success);
-      }
-    }
   }
-  .np-tc-rates {
+
+  .np-tf-rates {
     display: flex;
-    gap: 18px;
-    .np-tc-item {
-      flex: 1;
-      .np-tc-label {
-        display: flex;
-        align-items: center;
-        gap: 6px;
+    flex-direction: column;
+    gap: 4px;
+    flex: none;
+
+    .np-tf-rate {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+
+      .np-tf-k {
         font-size: 11px;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: var(--np-text-3);
-        // 方向信号小标线（颜色只出现在标线上，数值保持墨色）
-        &::before {
-          content: '';
-          width: 8px;
-          height: 2px;
-          border-radius: 1px;
-        }
-      }
-      &.is-in .np-tc-label::before { background: var(--np-info); }
-      &.is-out .np-tc-label::before { background: var(--np-warning); }
-      .np-tc-value {
-        font-size: 20px;
         font-weight: 700;
-        margin: 2px 0 6px;
+        letter-spacing: 0.05em;
+      }
+      .np-tf-v {
+        font-size: 17px;
+        font-weight: 700;
         font-variant-numeric: tabular-nums;
         color: var(--np-text-1);
       }
-      .np-tc-pct {
-        font-size: 11px;
-        color: var(--np-text-3);
-        margin-top: 2px;
-        text-align: right;
-        font-variant-numeric: tabular-nums;
-      }
+      &.is-in .np-tf-k { color: #3dd68c; }
+      &.is-out .np-tf-k { color: #3b9df0; }
     }
   }
-  .np-tc-actions {
+
+  .np-tf-mid {
+    flex: 1;
     display: flex;
-    justify-content: flex-end;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+
+    .np-tf-ts {
+      font-size: 12px;
+      color: var(--np-text-3);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .np-tf-tools {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+
+      .np-tf-tool {
+        font-size: 11px;
+        color: var(--np-text-2);
+        cursor: pointer;
+        white-space: nowrap;
+        &:hover { color: var(--np-primary); }
+      }
+    }
+    .np-tf-note {
+      font-size: 11px;
+      color: var(--np-text-3);
+    }
+  }
+
+  .np-tf-title {
+    flex: none;
+    text-align: right;
+    min-width: 0;
+
+    .np-tf-ifname {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--np-text-1);
+      word-break: break-all;
+    }
+    .np-tf-devname {
+      font-size: 12px;
+      color: var(--np-text-2);
+      margin-top: 2px;
+      word-break: break-all;
+    }
+  }
+
+  .np-tf-chart {
+    height: 150px;
+    margin-top: 8px;
+  }
+
+  .np-tf-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     border-top: 1px solid var(--np-border);
-    margin-top: 10px;
-    padding-top: 4px;
+    margin-top: 8px;
+    padding-top: 6px;
+
+    .np-tf-ip {
+      font-size: 12px;
+      color: var(--np-text-2);
+      font-variant-numeric: tabular-nums;
+    }
+    .np-tf-ops {
+      display: flex;
+    }
   }
 }
 

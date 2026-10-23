@@ -220,6 +220,15 @@ func registerCertHandlers(a *core.App, g *gin.RouterGroup) {
 	})
 	// 已交换的对方证书列表（含节点参数与关联节点状态）
 	g.GET("/cert/peers", func(c *gin.Context) {
+		// 自愈：清理"节点已删除但证书残留"的孤儿记录（删除路径未级联时的兜底）
+		var orphans []model.Certificate
+		a.DB.Where("node_uuid <> '' AND node_uuid NOT IN (SELECT node_uuid FROM nodes)").Find(&orphans)
+		if len(orphans) > 0 {
+			for _, oc := range orphans {
+				a.DB.Delete(&model.Certificate{}, oc.ID)
+			}
+			logger.Infof("[cert] 清理孤儿对方证书 %d 条（对应节点已删除）", len(orphans))
+		}
 		var certs []model.Certificate
 		a.DB.Where("node_uuid <> ''").Order("id asc").Find(&certs)
 		// 关联节点状态：一次查全部，避免 N+1

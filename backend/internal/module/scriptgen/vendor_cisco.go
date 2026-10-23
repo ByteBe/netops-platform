@@ -123,7 +123,7 @@ func buildCisco(code string, m map[string]string) []string {
 	case "router_policy":
 		return []string{
 			fmt.Sprintf("access-list %s permit ip any any", p(m, "acl", "100")),
-			fmt.Sprintf("route-map P permit 10"),
+			"route-map P permit 10",
 			fmt.Sprintf(" match ip address %s", p(m, "acl", "100")),
 			fmt.Sprintf(" set ip next-hop %s", p(m, "nh", "")),
 			fmt.Sprintf("interface %s", p(m, "iface", "")),

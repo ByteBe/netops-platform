@@ -142,7 +142,7 @@ func buildHuawei(code string, m map[string]string) []string {
 		return lines
 	case "router_policy":
 		return []string{
-			fmt.Sprintf("traffic classifier c1 operator or"),
+			"traffic classifier c1 operator or",
 			fmt.Sprintf(" if-match acl %s", p(m, "acl", "3000")),
 			"traffic behavior b1",
 			fmt.Sprintf(" redirect ip-nexthop %s", p(m, "nh", "")),

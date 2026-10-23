@@ -23,9 +23,6 @@ import (
 
 var arpIPRe = regexp.MustCompile(`\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b`)
 var arpMACRe = regexp.MustCompile(`\b([0-9a-fA-F]{4}[-.][0-9a-fA-F]{4}[-.][0-9a-fA-F]{4})\b`)
-var arpVLANRe = regexp.MustCompile(`\b(?:BAGG|XGE|GE|Vlan-interface|Vlan)\S*\s+(\d{1,4})\b`)
-
-func regexpMustCompile(s string) *regexp.Regexp { return regexp.MustCompile(s) }
 
 // RegisterProtected 路由
 func RegisterProtected(a *core.App, g *gin.RouterGroup) {

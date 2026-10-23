@@ -153,6 +153,7 @@ const tableKeys: Record<string, string> = {
   node_containers: 't_nodeContainer', node_links: 't_nodeLink',
   ts_archives: 't_tsArchive', ts_archive_retries: 't_tsArchiveRetry',
   certificates: 't_cert',
+  topo_nodes: 't_topoNode', topo_links: 't_topoLink', topo_pos: 't_topoPos',
 }
 function tableLabel(n: string) { const k = tableKeys[n]; return k ? t('dbmigrate.' + k) : '-' }
 // 表清单拆成两半并排展示，铺满内容区避免右侧空白

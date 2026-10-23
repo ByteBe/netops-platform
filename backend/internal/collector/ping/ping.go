@@ -56,6 +56,10 @@ var (
 )
 
 func (CMDProbe) Run(target string, _ int, timeout time.Duration) (float64, float64, error) {
+	// 防御：拒绝以 - 开头的目标（防 ping flag 注入）及含空白的目标
+	if strings.HasPrefix(target, "-") || strings.ContainsAny(target, " \t\n\r") {
+		return 0, 100, fmt.Errorf("非法的探测目标: %q", target)
+	}
 	var args []string
 	if runtime.GOOS == "windows" {
 		args = []string{"-n", "1", "-w", fmt.Sprintf("%d", int(timeout.Milliseconds())), target}
