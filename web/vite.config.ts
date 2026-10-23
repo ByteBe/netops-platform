@@ -22,9 +22,11 @@ export default defineConfig({
     chunkSizeWarningLimit: 2000,
     rollupOptions: {
       output: {
-        manualChunks: {
-          echarts: ['echarts'],
-          vendor: ['vue', 'vue-router', 'pinia', 'element-plus', 'axios', 'vue-i18n']
+        // Vite 8 (rolldown) 仅支持函数形式 manualChunks
+        manualChunks(id) {
+          if (id.includes('/node_modules/echarts/')) return 'echarts'
+          if (id.includes('/node_modules/')) return 'vendor'
+          return undefined
         }
       }
     }
