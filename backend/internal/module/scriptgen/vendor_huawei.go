@@ -59,7 +59,7 @@ func buildHuawei(code string, m map[string]string) []string {
 		return []string{
 			fmt.Sprintf("ospf%s %s router-id %s", vpnLine, p(m, "process", "1"), p(m, "rid", "1.1.1.1")),
 			fmt.Sprintf(" area %s", p(m, "area", "0")),
-			fmt.Sprintf("  network %s %s", net, mask),
+			fmt.Sprintf("  network %s %s", net, wildcardOf(mask)),
 		}
 	case "router_static", "sw_static":
 		vpnPre := ""
