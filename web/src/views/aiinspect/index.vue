@@ -59,7 +59,7 @@
               </div>
             </div>
             <div class="np-kpi">
-              <div class="np-kpi-icon is-warning"><el-icon><WarningTriangle /></el-icon></div>
+              <div class="np-kpi-icon is-warning"><el-icon><WarningFilled /></el-icon></div>
               <div class="np-kpi-body">
                 <div class="np-kpi-value">{{ report.snapshot.log_warn_24h ?? '-' }}</div>
                 <div class="np-kpi-label">24h 警告日志</div>

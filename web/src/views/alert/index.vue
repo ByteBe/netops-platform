@@ -57,7 +57,7 @@ function levelLabel(l: string) { return l === 'critical' ? t('alert.critical') :
         </div>
       </div>
       <div class="np-kpi">
-        <div class="np-kpi-icon is-warning"><el-icon><BellRing /></el-icon></div>
+        <div class="np-kpi-icon is-warning"><el-icon><Bell /></el-icon></div>
         <div class="np-kpi-body">
           <div class="np-kpi-value">{{ events.filter(e => !e.acked).length }}</div>
           <div class="np-kpi-label">{{ t('alert.unacked') }}</div>

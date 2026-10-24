@@ -73,7 +73,7 @@ function stateType(s: string) {
 
     <div class="np-kpi-grid">
       <div class="np-kpi">
-        <div class="np-kpi-icon"><el-icon><Network /></el-icon></div>
+        <div class="np-kpi-icon"><el-icon><Connection /></el-icon></div>
         <div class="np-kpi-body">
           <div class="np-kpi-value">{{ peers.length }}</div>
           <div class="np-kpi-label">{{ t('bgp.totalPeers') }}</div>
@@ -119,7 +119,7 @@ function stateType(s: string) {
       </el-table>
       <div v-else class="bgp-empty">
         <div class="np-empty-box">
-          <div class="np-empty-icon"><el-icon><Network /></el-icon></div>
+          <div class="np-empty-icon"><el-icon><Connection /></el-icon></div>
           <div class="np-empty-title">{{ t('bgp.title') }}</div>
           <div class="np-empty-desc">{{ t('bgp.emptyHint') }}</div>
         </div>
