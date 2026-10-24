@@ -22,23 +22,6 @@ const forceChange = ref(route.query.force === '1')
 const captchaId = ref('')
 const captchaImg = ref('')
 const captchaFail = ref(false)
-const captchaLeft = ref(0) // 剩余秒数
-let captchaExpireAt = 0
-let captchaTimer = 0
-
-// 验证码倒计时：显示剩余时间，最后 10 秒自动刷新并提示
-function startCaptchaCountdown() {
-  if (captchaTimer) clearInterval(captchaTimer)
-  captchaExpireAt = Date.now() + 5 * 60 * 1000
-  captchaTimer = window.setInterval(() => {
-    const left = Math.max(0, Math.round((captchaExpireAt - Date.now()) / 1000))
-    captchaLeft.value = left
-    if (left > 0 && left <= 10 && captchaImg.value) {
-      refreshCaptcha()
-      ElMessage.info(t('login.captchaRefreshed'))
-    }
-  }, 1000)
-}
 
 const pwdForm = reactive<ChangePwdForm>({ oldPassword: '', newPassword: '', confirm: '' })
 const pwdLoading = ref(false)
@@ -52,11 +35,9 @@ async function refreshCaptcha() {
     captchaImg.value = 'data:image/png;base64,' + cap.image_base64
     captchaFail.value = false
     form.captchaCode = ''
-    startCaptchaCountdown()
   } catch {
     captchaImg.value = ''
     captchaFail.value = true
-    captchaLeft.value = 0
   }
 }
 
@@ -94,7 +75,7 @@ async function onLogin() {
     if (result.must_change_pwd) {
       forceChange.value = true
     } else {
-      ElMessage.success(t('common.success'))
+      ElMessage.success(t('login.success'))
       router.push('/linkdetect')
     }
   } catch (e) {
@@ -145,7 +126,6 @@ onMounted(async () => {
   initParticles()
 })
 onBeforeUnmount(() => {
-  if (captchaTimer) clearInterval(captchaTimer)
   cancelAnimationFrame(raf)
   window.removeEventListener('resize', onBgResize)
 })
@@ -260,10 +240,7 @@ function drawLoop() {
               {{ captchaFail ? t('login.captchaLoadFail') : t('login.captchaLoading') }}
             </div>
           </div>
-          <div v-if="captchaLeft > 0" class="np-login-captcha-tip">
-            {{ t('login.captchaExpireTip') }} {{ captchaLeft }}s
-          </div>
-          <div v-else-if="captchaFail" class="np-login-captcha-tip is-danger">
+          <div v-if="captchaFail" class="np-login-captcha-tip is-danger">
             {{ t('login.captchaLoadFail') }}，{{ t('login.captchaClickRetry') }}
           </div>
         </el-form-item>
