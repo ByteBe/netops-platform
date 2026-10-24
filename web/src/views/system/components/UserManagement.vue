@@ -17,7 +17,7 @@ async function load() {
   try { const nr = await getEnc<{list: Node[]}>('/distributed/nodes'); nodes.value = nr.list || nr || [] } catch {}
 }
 onMounted(load)
-function open(u?: SysUser) {
+function open(u?: Partial<SysUser>) {
   if (u) Object.assign(form, { id: u.id, username: u.username, employee_no: u.employee_no, role: u.role, node_scope: u.node_scope || 'all', status: u.status, password: '' })
   else Object.assign(form, { id: 0, username: '', employee_no: '', role: 'operator', node_scope: 'all', status: 'active', password: '' })
   dlg.value = true
@@ -28,11 +28,11 @@ async function save() {
   else await postEnc('/user/users', form)
   ElMessage.success(t('common.success')); dlg.value = false; await load()
 }
-async function remove(u: SysUser) {
+async function remove(u: Partial<SysUser>) {
   await ElMessageBox.confirm(t('common.confirmDelete'), t('common.tip'), { type: 'warning' })
   await delEnc(`/user/users/${u.id}`); ElMessage.success(t('common.success')); await load()
 }
-async function resetPwd(u: SysUser) {
+async function resetPwd(u: Partial<SysUser>) {
   const { value } = await ElMessageBox.prompt(t('system.pwdPrompt'), t('system.resetPwdTitle'), { inputType: 'password' })
   await postEnc(`/user/users/${u.id}/reset-password`, { password: value }); ElMessage.success(t('common.success'))
 }

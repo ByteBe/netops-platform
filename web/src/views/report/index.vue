@@ -61,13 +61,13 @@ async function generate() {
   }
 }
 
-async function send(r: ReportRecord) {
+async function send(r: Partial<ReportRecord>) {
   await postEnc(`/report/${r.id}/send`, {})
   ElMessage.success(t('common.success'))
   await load()
 }
 
-async function remove(r: ReportRecord) {
+async function remove(r: Partial<ReportRecord>) {
   await ElMessageBox.confirm(t('common.confirmDelete'), t('common.tip'), { type: 'warning' })
   await delEnc(`/report/${r.id}`)
   ElMessage.success(t('common.success'))
@@ -76,11 +76,11 @@ async function remove(r: ReportRecord) {
 
 const auth = useAuthStore()
 
-function downloadPdf(r: ReportRecord) {
+function downloadPdf(r: Partial<ReportRecord>) {
   window.open(`/api/v1/report/${r.id}/pdf?token=${encodeURIComponent(auth.token)}`, '_blank')
 }
 
-async function view(r: ReportRecord) {
+async function view(r: Partial<ReportRecord>) {
   viewVisible.value = true
   viewContent.value = '<p>' + t('report.loading') + '</p>'
   try {

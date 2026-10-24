@@ -16,7 +16,7 @@ async function loadEvents() { const r = await getEnc<{list:Event[]}>('/alert/eve
 let autoTimer: number | undefined
 onMounted(() => { loadRules(); loadEvents(); autoTimer = window.setInterval(() => { loadRules(); loadEvents() }, 30000) })
 onUnmounted(() => { if (autoTimer) clearInterval(autoTimer) })
-function open(r?: Rule) {
+function open(r?: Partial<Rule>) {
   if (r) Object.assign(form, r)
   else Object.assign(form, { id: 0, name: '', metric: 'cpu', threshold: 80, duration: 1, durationUnit: 'm', level: 'warning', channels: '', enabled: true })
   dlg.value = true
@@ -31,8 +31,8 @@ async function save() {
     ElMessage.error(e?.message || t('common.failed'))
   }
 }
-async function remove(r: Rule) { await ElMessageBox.confirm(t('alert.deleteConfirm'), t('common.tip'), { type: 'warning' }); await delEnc(`/alert/rules/${r.id}`); loadRules() }
-async function ack(e: Event) { await postEnc(`/alert/events/${e.id}/ack`, {}); loadEvents() }
+async function remove(r: Partial<Rule>) { await ElMessageBox.confirm(t('alert.deleteConfirm'), t('common.tip'), { type: 'warning' }); await delEnc(`/alert/rules/${r.id}`); loadRules() }
+async function ack(e: Partial<Event>) { await postEnc(`/alert/events/${e.id}/ack`, {}); loadEvents() }
 function levelTag(l: string) { return l === 'critical' ? 'danger' : l === 'warning' ? 'warning' : 'info' }
 function levelLabel(l: string) { return l === 'critical' ? t('alert.critical') : l === 'warning' ? t('alert.warning') : t('alert.info') }
 </script>

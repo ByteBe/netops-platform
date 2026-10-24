@@ -14,7 +14,7 @@ const taskDetailLog = ref<TaskLog | null>(null)
 const tableRef = ref()
 
 function fmtTime(s: string) { return s ? s.replace('T', ' ').substring(0, 19) : '' }
-function showDetail(row: TaskLog) { taskDetailLog.value = row; taskDetailVisible.value = true }
+function showDetail(row: Partial<TaskLog>) { taskDetailLog.value = row as TaskLog; taskDetailVisible.value = true }
 
 async function load() {
   taskLogs.value = await getEnc<TaskLog[]>('/monitor/task-logs')

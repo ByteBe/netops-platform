@@ -1,10 +1,8 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-import ElementPlus from 'element-plus'
-import zhCn from 'element-plus/es/locale/lang/zh-cn'
-import en from 'element-plus/es/locale/lang/en'
-import * as Icons from '@element-plus/icons-vue'
-import 'element-plus/dist/index.css'
+// ElementPlus 按需引入：组件/样式/API 由 unplugin 自动导入，无需全量注册
+// 以下仅引入官方全局组件类型（纯类型，无运行时代码），保留 el-* 组件泛型推断
+import 'element-plus/global'
 import 'element-plus/theme-chalk/dark/css-vars.css'
 
 import App from './App.vue'
@@ -15,11 +13,6 @@ import '@/styles/index.scss'
 
 const app = createApp(App)
 
-// 全局注册图标
-for (const [name, comp] of Object.entries(Icons)) {
-  app.component(name, comp as never)
-}
-
 app.use(createPinia())
 
 // 应用主题与语言
@@ -28,6 +21,5 @@ appStore.applyTheme()
 
 app.use(i18n)
 app.use(router)
-app.use(ElementPlus, { locale: appStore.lang === 'zh-CN' ? zhCn : en })
 
 app.mount('#app')

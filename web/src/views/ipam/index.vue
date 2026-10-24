@@ -71,7 +71,7 @@ const arpDialog = ref(false)
 const arpDeviceId = ref(0)
 const bindPickDialog = ref(false)
 const bindPickId = ref<number | undefined>(undefined)
-let bindPickItem: IPItem | null = null
+let bindPickItem: Partial<IPItem> | null = null
 
 async function loadSubnets() {
   subnets.value = await getEnc<Subnet[]>('/ipam/subnets')
@@ -128,7 +128,7 @@ async function removeSubnet(s: Subnet) {
   else { ipItems.value = []; ipTotal.value = 0 } // 网段删空：清空明细
 }
 
-function openRec(item: IPItem) {
+function openRec(item: Partial<IPItem>) {
   editRecordId.value = item.record_id || 0
   Object.assign(recForm, {
     subnet_id: currentSubnet.value!.id,
@@ -156,14 +156,14 @@ async function saveRec() {
   recDialog.value = false
   await loadIps()
 }
-async function unuse(item: IPItem) {
+async function unuse(item: Partial<IPItem>) {
   await ElMessageBox.confirm(`${t('ipam.releaseConfirm')} ${item.ip} ?`, t('common.tip'), { type: 'warning' })
   await delEnc(`/ipam/records/${item.record_id}`)
   ElMessage.success(t('common.success'))
   await loadIps()
 }
 
-function bind(item: IPItem) {
+function bind(item: Partial<IPItem>) {
   if (!bindingEnable.value) {
     ElMessage.warning(t('ipam.bindingNotEnabled'))
     return
@@ -194,7 +194,7 @@ async function confirmBind() {
   await loadIps()
 }
 
-function openBindDevice(d?: BindDevice) {
+function openBindDevice(d?: Partial<BindDevice>) {
   testOut.value = ''
   if (d) {
     Object.assign(bindForm, d)
@@ -220,13 +220,13 @@ async function saveBindDevice() {
   bindDialog.value = false
   await loadBindDevices()
 }
-async function removeBindDevice(d: BindDevice) {
+async function removeBindDevice(d: Partial<BindDevice>) {
   await ElMessageBox.confirm(t('common.confirmDelete'), t('common.tip'), { type: 'warning' })
   await delEnc(`/ipam/bind-devices/${d.id}`)
   ElMessage.success(t('common.success'))
   await loadBindDevices()
 }
-async function testBindDevice(d: BindDevice) {
+async function testBindDevice(d: Partial<BindDevice>) {
   try {
     const r = await postEnc<{ ok: boolean; output: string }>(`/ipam/bind-devices/${d.id}/test`, {})
     testOut.value = r.output

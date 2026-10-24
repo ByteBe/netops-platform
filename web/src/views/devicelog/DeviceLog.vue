@@ -14,7 +14,7 @@ const total = ref(0)
 const page = ref(1); const size = ref(50)
 const source = ref(''); const level = ref(''); const device = ref(''); const keyword = ref('')
 const loading = ref(false)
-const levelType: Record<string, string> = { critical: 'danger', warning: 'warning', info: 'info', debug: '' }
+const levelType: Record<string, 'primary' | 'success' | 'warning' | 'info' | 'danger' | ''> = { critical: 'danger', warning: 'warning', info: 'info', debug: '' }
 const levelText: Record<string, string> = { critical: '严重', warning: '警告', info: '信息', debug: '调试' }
 const sources = ref<{label:string,value:string}[]>([])
 const sourceLabel: Record<string,string> = {
@@ -27,7 +27,7 @@ const detailLog = ref<Log | null>(null)
 const tableRef = ref()
 
 function fmtTime(s: string) { return s ? s.replace('T', ' ').substring(0, 19) : '' }
-function showDetail(row: Log) { detailLog.value = row; detailVisible.value = true }
+function showDetail(row: Partial<Log>) { detailLog.value = row as Log; detailVisible.value = true }
 
 async function load() {
   loading.value = true

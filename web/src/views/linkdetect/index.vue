@@ -66,7 +66,7 @@ function openAdd() {
   Object.assign(form, { id: 0, name: '', target: '', method: 'cmd', port: 0, interval: 30, timeout: 3000, color: pickColor(tasks.value.length), enabled: true, remark: '' })
   dialogVisible.value = true
 }
-function openEdit(row: LinkTask) { editingId.value = row.id; Object.assign(form, row); dialogVisible.value = true }
+function openEdit(row: Partial<LinkTask>) { editingId.value = row.id!; Object.assign(form, row); dialogVisible.value = true }
 
 async function saveTask() {
   if (!form.name || !form.target) { ElMessage.warning(t('common.tip')); return }
@@ -79,16 +79,16 @@ async function saveTask() {
   renderRealtime()
 }
 
-async function removeTask(row: LinkTask) {
+async function removeTask(row: Partial<LinkTask>) {
   await ElMessageBox.confirm(t('common.confirmDelete'), t('common.tip'), { type: 'warning' })
   await delEnc(`/linkdetect/tasks/${row.id}`)
   ElMessage.success(t('common.success'))
-  delete rtHistoryGlobal[row.id]
+  delete rtHistoryGlobal[row.id!]
   await loadTasks()
 }
 
-async function showHistory(row: LinkTask) {
-  historyTask.value = row
+async function showHistory(row: Partial<LinkTask>) {
+  historyTask.value = row as LinkTask
   historyVisible.value = true
   histHours.value = 24
   await loadLinkHistory()

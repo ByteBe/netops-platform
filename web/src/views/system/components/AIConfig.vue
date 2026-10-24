@@ -16,7 +16,7 @@ async function load() {
   list.value = l; providers.value = p
 }
 onMounted(load)
-function open(a?: AIConfig) {
+function open(a?: Partial<AIConfig>) {
   reply.value = ''
   if (a) Object.assign(form, { ...a, api_key: '', has_key: !!a.has_key })
   else Object.assign(form, { id: 0, name: '', provider: 'openai', base_url: 'https://api.openai.com/v1', api_key: '', has_key: false, model: '', temperature: 0.7, priority: list.value.length, enable: true, remark: '' })
@@ -38,13 +38,13 @@ async function save() {
   if (form.id) await putEnc(`/system/ai/${form.id}`, form); else await postEnc('/system/ai', form)
   ElMessage.success(t('common.success')); dlg.value = false; await load()
 }
-async function remove(a: AIConfig) {
+async function remove(a: Partial<AIConfig>) {
   await ElMessageBox.confirm(t('common.confirmDelete'), t('common.tip'), { type: 'warning' })
   await delEnc(`/system/ai/${a.id}`); ElMessage.success(t('common.success')); await load()
 }
 const reply = ref('')
 const replyVisible = ref(false)
-async function test(a: AIConfig) {
+async function test(a: Partial<AIConfig>) {
   try {
     const r = await postEnc<any>(`/system/ai/${a.id}/test`, {})
     reply.value = r.reply; replyVisible.value = true

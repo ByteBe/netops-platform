@@ -85,7 +85,7 @@ async function loadMCP() {
   mcpAgents.value = await getEnc<MCPAgent[]>('/system/mcp/agents')
   try { mcpInfo.value = await getEnc('/system/mcp/info') } catch {}
 }
-function openMCP(m?: MCPAgent) {
+function openMCP(m?: Partial<MCPAgent>) {
   mcpOut.value = ''
   if (m) Object.assign(mcpForm, m)
   else Object.assign(mcpForm, { id: 0, name: '', server_url: '', endpoint: '/api', auth_type: 'none', auth_token: '', enable: true, remark: '' })
@@ -96,11 +96,11 @@ async function saveMCP() {
   if (mcpForm.id) await putEnc(`/system/mcp/agents/${mcpForm.id}`, mcpForm); else await postEnc('/system/mcp/agents', mcpForm)
   ElMessage.success(t('common.success')); mcpDialog.value = false; await loadMCP()
 }
-async function removeMCP(m: MCPAgent) {
+async function removeMCP(m: Partial<MCPAgent>) {
   await ElMessageBox.confirm(t('common.confirmDelete'), t('common.tip'), { type: 'warning' })
   await delEnc(`/system/mcp/agents/${m.id}`); ElMessage.success(t('common.success')); await loadMCP()
 }
-async function testMCP(m: MCPAgent) { const r = await postEnc<any>(`/system/mcp/agents/${m.id}/test`, {}); mcpOut.value = r.output }
+async function testMCP(m: Partial<MCPAgent>) { const r = await postEnc<any>(`/system/mcp/agents/${m.id}/test`, {}); mcpOut.value = r.output }
 
 // Email
 interface EmailConfig { id: number; name: string; type?: string; smtp_host: string; smtp_port: number; user: string; password: string; use_ssl: boolean; enable: boolean; default_to: string; webhook?: string }
@@ -108,7 +108,7 @@ const emailList = ref<EmailConfig[]>([])
 const emailDialog = ref(false)
 const emailForm = reactive<EmailConfig>({ id: 0, name: '', smtp_host: '', smtp_port: 465, user: '', password: '', use_ssl: true, enable: false, default_to: '' })
 async function loadEmails() { emailList.value = await getEnc<EmailConfig[]>('/system/email/list') }
-function openEmail(e?: EmailConfig) {
+function openEmail(e?: Partial<EmailConfig>) {
   if (e) Object.assign(emailForm, e); else Object.assign(emailForm, { id: 0, name: '', type: 'email', smtp_host: '', smtp_port: 465, user: '', password: '', use_ssl: true, enable: false, default_to: '', webhook: '' })
   emailDialog.value = true
 }
@@ -118,11 +118,11 @@ async function saveEmail() {
   if (emailForm.id) await putEnc(`/system/email/${emailForm.id}`, emailForm); else await postEnc('/system/email', emailForm)
   ElMessage.success(t('system.saved')); emailDialog.value = false; await loadEmails()
 }
-async function removeEmail(e: EmailConfig) {
+async function removeEmail(e: Partial<EmailConfig>) {
   await ElMessageBox.confirm(t('common.confirmDelete'), t('common.tip'), { type: 'warning' })
   await delEnc(`/system/email/${e.id}`); ElMessage.success(t('common.success')); await loadEmails()
 }
-async function testEmail(e: EmailConfig) {
+async function testEmail(e: Partial<EmailConfig>) {
   try {
     const to = await ElMessageBox.prompt('请输入收件人邮箱', '发送测试邮件', {
       inputValue: e.default_to || e.user,
@@ -143,7 +143,7 @@ const notifyList = ref<NotifyConfig[]>([])
 const notifyDialog = ref(false)
 const notifyForm = reactive<NotifyConfig>({ id: 0, name: '', type: 'email', addr: '', token: '', enabled: true })
 async function loadNotify() { notifyList.value = await getEnc<NotifyConfig[]>('/alert/notify') }
-function openNotify(n?: NotifyConfig) {
+function openNotify(n?: Partial<NotifyConfig>) {
   if (n) Object.assign(notifyForm, n)
   else Object.assign(notifyForm, { id: 0, name: '', type: 'email', addr: '', token: '', enabled: true })
   notifyDialog.value = true
@@ -154,7 +154,7 @@ async function saveNotify() {
   if (notifyForm.id) await putEnc(`/alert/notify/${notifyForm.id}`, notifyForm); else await postEnc('/alert/notify', notifyForm)
   ElMessage.success(t('system.saved')); notifyDialog.value = false; await loadNotify()
 }
-async function removeNotify(n: NotifyConfig) {
+async function removeNotify(n: Partial<NotifyConfig>) {
   await ElMessageBox.confirm(t('common.confirmDelete'), t('common.tip'), { type: 'warning' })
   await delEnc(`/alert/notify/${n.id}`); ElMessage.success(t('common.success')); await loadNotify()
 }
