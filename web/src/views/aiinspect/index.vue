@@ -38,6 +38,13 @@
               </div>
             </div>
             <div class="np-kpi">
+              <div class="np-kpi-icon is-info"><el-icon><InfoFilled /></el-icon></div>
+              <div class="np-kpi-body">
+                <div class="np-kpi-value">{{ report.snapshot.device_unknown ?? '-' }}</div>
+                <div class="np-kpi-label">未知</div>
+              </div>
+            </div>
+            <div class="np-kpi">
               <div class="np-kpi-icon is-warning"><el-icon><Bell /></el-icon></div>
               <div class="np-kpi-body">
                 <div class="np-kpi-value">{{ report.snapshot.alert_active ?? '-' }}</div>

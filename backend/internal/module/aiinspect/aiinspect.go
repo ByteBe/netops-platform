@@ -134,6 +134,7 @@ type Snapshot struct {
 	DeviceTotal   int64        `json:"device_total"`
 	DeviceUp      int64        `json:"device_up"`
 	DeviceDown    int64        `json:"device_down"`
+	DeviceUnknown int64        `json:"device_unknown"`
 	AlertActive   int64        `json:"alert_active"`
 	AlertToday    int64        `json:"alert_today"`
 	DockerTotal   int64        `json:"docker_total"`
@@ -162,6 +163,7 @@ func collectSnapshot(a *core.App) Snapshot {
 	a.DB.Model(&model.MonitorDevice{}).Count(&s.DeviceTotal)
 	a.DB.Model(&model.MonitorDevice{}).Where("status = ?", "up").Count(&s.DeviceUp)
 	a.DB.Model(&model.MonitorDevice{}).Where("status = ?", "down").Count(&s.DeviceDown)
+	a.DB.Model(&model.MonitorDevice{}).Where("status NOT IN (?)", []string{"up", "down"}).Count(&s.DeviceUnknown)
 	a.DB.Model(&model.AlertEvent{}).Where("acked = ?", false).Count(&s.AlertActive)
 	today := time.Now().Format("2006-01-02")
 	a.DB.Model(&model.AlertEvent{}).Where("DATE(created_at) = ?", today).Count(&s.AlertToday)
@@ -230,7 +232,7 @@ func collectLocalHost() *DeviceStat {
 func buildPrompt(s Snapshot) string {
 	var b strings.Builder
 	b.WriteString("## 系统巡检数据\n\n")
-	fmt.Fprintf(&b, "- 设备总数：%d，在线：%d，离线：%d\n", s.DeviceTotal, s.DeviceUp, s.DeviceDown)
+	fmt.Fprintf(&b, "- 设备总数：%d，在线：%d，离线：%d，未知：%d\n", s.DeviceTotal, s.DeviceUp, s.DeviceDown, s.DeviceUnknown)
 	fmt.Fprintf(&b, "- 活跃告警：%d，今日告警：%d\n", s.AlertActive, s.AlertToday)
 	fmt.Fprintf(&b, "- 24h 严重日志：%d 条，警告日志：%d 条\n", s.LogError24h, s.LogWarn24h)
 

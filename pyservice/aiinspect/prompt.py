@@ -9,7 +9,7 @@ def build_prompt(snapshot: Dict[str, Any], extra: Dict[str, Any], trends: Option
     """构造增强版巡检 prompt。"""
     lines: List[str] = ["## 系统巡检数据\n"]
     devs = snapshot.get("devices") or []
-    lines.append(f"- 设备总数：{snapshot.get('device_total', 0)}，在线：{snapshot.get('device_up', 0)}，离线：{snapshot.get('device_down', 0)}")
+    lines.append(f"- 设备总数：{snapshot.get('device_total', 0)}，在线：{snapshot.get('device_up', 0)}，离线：{snapshot.get('device_down', 0)}，未知：{snapshot.get('device_unknown', 0)}")
     lines.append(f"- 活跃告警：{snapshot.get('alert_active', 0)}，今日告警：{snapshot.get('alert_today', 0)}")
     lines.append(f"- 24h 严重日志：{snapshot.get('log_error_24h', 0)} 条，警告日志：{snapshot.get('log_warn_24h', 0)} 条")
 
