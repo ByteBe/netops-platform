@@ -149,16 +149,24 @@ async function renderTrends() {
     connectNulls: false,
     data: s.points
   }))
-  trendChart.setOption({
+  const option = {
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis', valueFormatter: (v: number) => v == null ? '--' : v.toFixed(1) + ' ms' },
+    tooltip: { trigger: 'axis', confine: true, valueFormatter: (v: number) => v == null ? '--' : v.toFixed(1) + ' ms' },
     legend: { textStyle: { color: ca.axis }, top: 0 },
     grid: { left: 50, right: 16, top: 32, bottom: 24 },
     xAxis: { type: 'time', min: startMs, max: nowMs, axisLine: { lineStyle: { color: ca.axisLine } } },
     yAxis: { type: 'value', name: 'ms', min: 0, splitLine: { lineStyle: { color: ca.split } } },
     series
-  }, true)
+  }
+  // 系列数量变化时全量重建（新增/删除链路）；否则 merge 增量更新，避免重绘打断 tooltip
+  if (series.length !== lastTrendSeriesCount) {
+    trendChart.setOption(option, true)
+    lastTrendSeriesCount = series.length
+  } else {
+    trendChart.setOption(option)
+  }
 }
+let lastTrendSeriesCount = 0
 
 function renderHealth() {
   if (!healthRef.value) return
@@ -166,7 +174,7 @@ function renderHealth() {
   const ca = chartAxisColors()
   healthChart.setOption({
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis', valueFormatter: (v: number) => v == null ? '--' : v.toFixed(1) + '%' },
+    tooltip: { trigger: 'axis', confine: true, valueFormatter: (v: number) => v == null ? '--' : v.toFixed(1) + '%' },
     legend: { textStyle: { color: ca.axis }, top: 0 },
     grid: { left: 50, right: 16, top: 32, bottom: 40 },
     xAxis: { type: 'category', data: devices.value.map((d) => d.name), axisLabel: { color: ca.axis, rotate: 30 } },
@@ -187,7 +195,7 @@ function renderHealth() {
         data: devices.value.map((d) => d.mem_used)
       }
     ]
-  }, true)
+  })
 }
 
 function renderTraffic() {
@@ -196,14 +204,15 @@ function renderTraffic() {
   const ca = chartAxisColors()
   trafficChart.setOption({
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis', valueFormatter: (v: number) => v == null ? '--' : (v/1e6).toFixed(2) + ' Mbps' },
+    tooltip: { trigger: 'axis', confine: true, valueFormatter: (v: number) => v == null ? '--' : (v/1e6).toFixed(2) + ' Mbps' },
     legend: { textStyle: { color: ca.axis }, top: 0 },
     grid: { left: 70, right: 16, top: 32, bottom: 24 },
     xAxis: { type: 'category', data: trafficData.value.map((x) => x.name), axisLabel: { color: ca.axis } },
     yAxis: {
       type: 'value',
       name: 'Mbps',
-      axisLabel: { color: ca.axis, formatter: (v: number) => (v / 1e6).toFixed(0) },
+      // 小流量(<1Mbps)保留两位小数，避免所有刻度取整后显示为 0
+      axisLabel: { color: ca.axis, formatter: (v: number) => (v / 1e6 >= 1 ? (v / 1e6).toFixed(0) : (v / 1e6).toFixed(2)) },
       splitLine: { lineStyle: { color: ca.split } }
     },
     series: [
@@ -222,7 +231,7 @@ function renderTraffic() {
         data: trafficData.value.map((x) => x.out_bps)
       }
     ]
-  }, true)
+  })
 }
 
 const trafficData = ref<Array<{ name: string; in_bps: number; out_bps: number }>>([])
@@ -239,7 +248,7 @@ function renderDb() {
   const ca = chartAxisColors()
   dbChart.setOption({
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'item' },
+    tooltip: { trigger: 'item', confine: true },
     legend: { textStyle: { color: ca.axis }, top: 0 },
     grid: { left: 50, right: 16, top: 32, bottom: 40 },
     xAxis: { type: 'category', data: dbs.value.map((d) => d.name), axisLabel: { color: ca.axis, rotate: 20 } },
@@ -252,7 +261,7 @@ function renderDb() {
         data: dbs.value.map((d) => Number((d as unknown as { conns?: number }).conns || 0))
       }
     ]
-  }, true)
+  })
 }
 
 // 仪表盘：平均CPU/内存
@@ -293,7 +302,7 @@ function renderGauge() {
         data: [{ value: avgCpu.value, name: t('dashboard.cpuAvg') }]
       }
     ]
-  }, true)
+  })
 }
 
 // 主题切换时重绘图表（ECharts canvas 不感知 CSS 变量变化）

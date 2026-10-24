@@ -221,7 +221,7 @@ function doRenderRealtime() {
         { type: 'line', showSymbol: false, smooth: true, animation: false, lineStyle: { width: 2, color: OUT_COLOR }, itemStyle: { color: OUT_COLOR }, data: outData },
         { type: 'line', showSymbol: false, smooth: true, animation: false, lineStyle: { width: 2, color: IN_COLOR }, itemStyle: { color: IN_COLOR }, data: inData }
       ]
-    }, true)
+    })
   }
 }
 

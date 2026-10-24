@@ -179,7 +179,7 @@ function doRenderRealtime() {
   const nowMs = Date.now()
   const axisStart = nowMs - 10 * 60 * 1000
   const ca = chartAxisColors()
-  rtChart.setOption({
+  const option = {
     backgroundColor: 'transparent',
     tooltip: { trigger: 'axis', confine: true, axisPointer: { type: 'none' }, position: ['right', 'top'], valueFormatter: (v: number) => v == null ? '--' : v.toFixed(1) + ' ms' },
     legend: { type: 'scroll', top: 0, textStyle: { color: ca.axis } },
@@ -191,8 +191,16 @@ function doRenderRealtime() {
       lineStyle: { width: 2, color: s.color || cssVar('--np-primary') }, itemStyle: { color: s.color || cssVar('--np-primary') },
       areaStyle: { opacity: 0.08 }, connectNulls: false, data: s.data
     }))
-  }, true)
+  }
+  // 系列数量变化时全量重建（新增/删除链路）；否则 merge 增量更新，避免重绘打断 tooltip
+  if (list.length !== lastRtSeriesCount) {
+    rtChart.setOption(option, true)
+    lastRtSeriesCount = list.length
+  } else {
+    rtChart.setOption(option)
+  }
 }
+let lastRtSeriesCount = 0
 
 async function seedHistory() {
   for (const tk of tasks.value) {
