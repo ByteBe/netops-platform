@@ -437,16 +437,28 @@ html.dark .el-table--striped .el-table__body tr.el-table__row--striped td.el-tab
 }
 
 // 确认弹窗（ElMessageBox）：按钮组居中显示
-// wrapper 显式固定全屏 flex 居中，防止样式未随按需加载时弹窗错位到左上角
-.el-message-box__wrapper {
+// 按需模式未注入 overlay 布局样式时，显式固定全屏居中
+// Element Plus DOM: .el-overlay > .el-overlay-message-box > .el-message-box
+.el-overlay {
   position: fixed;
   inset: 0;
+  z-index: 2000;
+  background-color: rgba(0, 0, 0, 0.5);
+  overflow: auto;
+}
+.el-overlay-message-box,
+.el-overlay-dialog {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0;
+  overflow: auto;
 }
 .el-message-box {
+  display: inline-block;
+  width: 420px;
+  max-width: calc(100% - 32px);
+  box-sizing: border-box;
+  vertical-align: middle;
   border-radius: $radius-lg;
   background: var(--np-bg-elevated);
   border: 1px solid var(--np-border);
@@ -457,6 +469,23 @@ html.dark .el-table--striped .el-table__body tr.el-table__row--striped td.el-tab
   .el-message-box__btns {
     justify-content: center;
     padding: 12px 20px 14px;
+  }
+}
+// center: true 时标题与内容居中（按需模式下 is-center 规则缺失）
+.el-message-box.is-center {
+  .el-message-box__header {
+    text-align: center;
+  }
+  .el-message-box__title {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .el-message-box__content {
+    display: flex;
+    justify-content: center;
+    text-align: center;
   }
 }
 

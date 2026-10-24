@@ -1,7 +1,11 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 // ElementPlus 按需引入：组件/样式/API 由 unplugin 自动导入，无需全量注册
+// 显式 import 的 API（ElMessage/ElMessageBox）样式不会被按需注入，此处单独引入其样式
 import 'element-plus/theme-chalk/dark/css-vars.css'
+import 'element-plus/theme-chalk/el-message.css'
+import 'element-plus/theme-chalk/el-message-box.css'
+import 'element-plus/theme-chalk/el-overlay.css'
 
 import App from './App.vue'
 import router from './router'
