@@ -6,7 +6,7 @@
 //  3. animation:false —— 数据更新不播放动画
 //  4. hoverPaused —— 鼠标在图表内时暂停 setOption 重绘（数据照常拉取）
 //  5. 签名守卫 —— 数据无变化不 setOption
-import { ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import * as echarts from 'echarts'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -41,6 +41,8 @@ const trafficData = ref<TrafficItem[]>([])
 const alerts = ref<AlertItem[]>([])
 const alertTotal = ref(0)
 const now = ref(Date.now())
+// 链路 chips 按名称稳定排序（接口顺序每次可能不同，避免跳动）
+const sortedLinks = computed(() => [...links.value].sort((a, b) => a.name.localeCompare(b.name, 'zh')))
 
 // ---------- 图表引用 ----------
 const trendRef = ref<HTMLDivElement>()
@@ -380,7 +382,10 @@ onBeforeUnmount(() => {
           <span class="np-kpi-big">{{ linkRate() }}</span>
           <span class="np-kpi-unit">{{ t('dashboard.linkOnlineRate') }}</span>
         </div>
-        <div class="np-kpi-sub">{{ t('dashboard.linkUp') }} <b>{{ kpi?.link_up ?? '--' }}</b><span class="np-sep">·</span>{{ t('dashboard.linkDown') }} <b>{{ kpi?.link_down ?? '--' }}</b></div>
+        <div class="np-kpi-sub">
+          <span>{{ t('dashboard.linkUp') }} <b class="np-ok">{{ kpi?.link_up ?? '--' }}</b></span><span class="np-sep">·</span>
+          <span>{{ t('dashboard.linkDown') }} <b :class="(kpi?.link_down ?? 0) > 0 ? 'np-bad' : 'np-ok'">{{ kpi?.link_down ?? '--' }}</b></span>
+        </div>
       </div>
       <div class="np-kpi">
         <div class="np-kpi-head"><span class="np-kpi-ico np-ico-traffic"></span>{{ t('dashboard.traffic') }}</div>
@@ -416,7 +421,7 @@ onBeforeUnmount(() => {
           <span class="np-panel-hint">{{ t('dashboard.linkTrends') }} · 10 min</span>
         </div>
         <div class="np-link-chips">
-          <div v-for="l in links" :key="l.name" class="np-link-chip" :class="l.up ? 'up' : 'down'">
+          <div v-for="l in sortedLinks" :key="l.name" class="np-link-chip" :class="l.up ? 'up' : 'down'">
             <span class="np-link-dot"></span>
             <span class="np-link-name">{{ l.name }}</span>
             <span class="np-link-rt">{{ l.rt_ms != null ? `${Number(l.rt_ms).toFixed(1)}ms` : '--' }}</span>
@@ -516,7 +521,7 @@ onBeforeUnmount(() => {
     .np-duo-val { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--np-text-1); }
   }
   .np-kpi-sub { font-size: 12px; color: var(--np-text-2); font-variant-numeric: tabular-nums;
-    b { color: var(--np-text-1); } b.np-ok { color: var(--np-success); } }
+    b { color: var(--np-text-1); } b.np-ok { color: var(--np-success); } b.np-bad { color: var(--np-danger); } }
   .np-sep { margin: 0 4px; color: var(--np-border-strong); }
 
   // 主体网格
