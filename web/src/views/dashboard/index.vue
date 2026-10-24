@@ -382,9 +382,9 @@ onBeforeUnmount(() => {
           <span class="np-kpi-big">{{ linkRate() }}</span>
           <span class="np-kpi-unit">{{ t('dashboard.linkOnlineRate') }}</span>
         </div>
-        <div class="np-kpi-sub">
-          <span>{{ t('dashboard.linkUp') }} <b class="np-ok">{{ kpi?.link_up ?? '--' }}</b></span><span class="np-sep">·</span>
-          <span>{{ t('dashboard.linkDown') }} <b :class="(kpi?.link_down ?? 0) > 0 ? 'np-bad' : 'np-ok'">{{ kpi?.link_down ?? '--' }}</b></span>
+        <div class="np-kpi-sub np-kpi-links">
+          <span class="np-lk">{{ t('dashboard.linkUp') }} <b class="np-ok">{{ kpi?.link_up ?? '--' }}</b></span>
+          <span class="np-lk">{{ t('dashboard.linkDown') }} <b :class="(kpi?.link_down ?? 0) > 0 ? 'np-bad' : 'np-ok'">{{ kpi?.link_down ?? '--' }}</b></span>
         </div>
       </div>
       <div class="np-kpi">
@@ -522,6 +522,8 @@ onBeforeUnmount(() => {
   }
   .np-kpi-sub { font-size: 12px; color: var(--np-text-2); font-variant-numeric: tabular-nums;
     b { color: var(--np-text-1); } b.np-ok { color: var(--np-success); } b.np-bad { color: var(--np-danger); } }
+  .np-kpi-links { display: flex; justify-content: space-between; gap: 8px; white-space: nowrap; }
+  .np-lk { white-space: nowrap; }
   .np-sep { margin: 0 4px; color: var(--np-border-strong); }
 
   // 主体网格
