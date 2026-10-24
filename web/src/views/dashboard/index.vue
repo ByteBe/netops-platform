@@ -9,6 +9,7 @@ import { WSClient } from '@/utils/ws'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import { fmtBps, fmtTime, cssVar, chartAxisColors } from '@/utils'
+import { histTooltip } from '@/utils/histTooltip'
 import NodeHealth from './components/NodeHealth.vue'
 
 const { t } = useI18n()
@@ -177,7 +178,8 @@ async function renderTrends() {
   }))
   const option = {
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis', confine: true, valueFormatter: (v: number) => v == null ? '--' : v.toFixed(1) + ' ms' },
+    // 复用历史图表 tooltip 修复：固定右上角 + 禁用画布轴指针（hover 不触发画布重绘，避免曲线/柱子消失）
+    tooltip: histTooltip({ digits: 1, suffix: ' ms' }),
     legend: { textStyle: { color: ca.axis }, top: 0 },
     grid: { left: 50, right: 16, top: 32, bottom: 24 },
     xAxis: { type: 'time', min: startMs, max: nowMs, axisLine: { lineStyle: { color: ca.axisLine } } },
@@ -206,7 +208,8 @@ function renderHealth() {
   const ca = chartAxisColors()
   healthChart.setOption({
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis', confine: true, valueFormatter: (v: number) => v == null ? '--' : v.toFixed(1) + '%' },
+    // 固定右上角 + 禁用画布轴指针：hover 不触发画布重绘，柱子稳定不消失
+    tooltip: histTooltip({ digits: 1, suffix: '%' }),
     legend: { textStyle: { color: ca.axis }, top: 0 },
     grid: { left: 50, right: 16, top: 32, bottom: 40 },
     xAxis: { type: 'category', data: devices.value.map((d) => d.name), axisLabel: { color: ca.axis, interval: 0, rotate: 0, margin: 8 } },
@@ -244,7 +247,8 @@ function renderTraffic() {
   const ca = chartAxisColors()
   trafficChart.setOption({
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis', confine: true, valueFormatter: (v: number) => v == null ? '--' : (v/1e6).toFixed(2) + ' Mbps' },
+    // 固定右上角 + 禁用画布轴指针；值按 Mbps 换算显示
+    tooltip: histTooltip({ fmt: (v: number) => (v / 1e6).toFixed(2) + ' Mbps' }),
     legend: { textStyle: { color: ca.axis }, top: 0 },
     grid: { left: 70, right: 16, top: 32, bottom: 24 },
     xAxis: { type: 'category', data: trafficData.value.map((x) => x.name), axisLabel: { color: ca.axis } },
@@ -297,7 +301,8 @@ function renderDb() {
   const ca = chartAxisColors()
   dbChart.setOption({
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'item', confine: true },
+    // 固定右上角 + 禁用画布轴指针：hover 不触发画布重绘，柱子稳定不消失（整数显示）
+    tooltip: histTooltip({ digits: 0, suffix: '' }),
     legend: { textStyle: { color: ca.axis }, top: 0 },
     grid: { left: 50, right: 16, top: 32, bottom: 40 },
     xAxis: { type: 'category', data: dbs.value.map((d) => d.name), axisLabel: { color: ca.axis, interval: 0, rotate: 0, margin: 8 } },
