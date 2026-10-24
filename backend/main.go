@@ -5,6 +5,7 @@
 package main
 
 import (
+	"compress/gzip"
 	"context"
 	"crypto/tls"
 	"fmt"
@@ -204,6 +205,43 @@ func validateWebPort(cfg *config.Config) error {
 	return nil
 }
 
+// gzipResponseWriter 包装 ResponseWriter：写入时经 gzip 压缩，写头时更新编码头
+type gzipResponseWriter struct {
+	http.ResponseWriter
+	zw *gzip.Writer
+}
+
+func (g *gzipResponseWriter) Write(b []byte) (int, error) { return g.zw.Write(b) }
+
+func (g *gzipResponseWriter) WriteHeader(code int) {
+	g.Header().Del("Content-Length")
+	g.Header().Set("Content-Encoding", "gzip")
+	g.Header().Set("Vary", "Accept-Encoding")
+	g.ResponseWriter.WriteHeader(code)
+}
+
+// gzipStatic 仅对可压缩静态资源（js/css/json/svg/woff2）启用 gzip 压缩，减少公网传输体积
+func gzipStatic(next http.Handler) http.Handler {
+	compressible := func(p string) bool {
+		lp := strings.ToLower(p)
+		for _, suffix := range []string{".js", ".css", ".json", ".svg", ".woff2", ".map"} {
+			if strings.HasSuffix(lp, suffix) {
+				return true
+			}
+		}
+		return false
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") || !compressible(r.URL.Path) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		gz := gzip.NewWriter(w)
+		defer gz.Close()
+		next.ServeHTTP(&gzipResponseWriter{ResponseWriter: w, zw: gz}, r)
+	})
+}
+
 // buildWebHandler 构建独立前端服务 handler：
 //   - 前端 SPA 静态资源（./web，回退 index.html）
 //   - /api /ws /mcp 反向代理到 API 端口（TLS 模式下走 https 并信任本机证书）
@@ -241,7 +279,7 @@ func buildWebHandler(webDir string, apiPort int, useTLS bool) http.Handler {
 			reqPath := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
 			if reqPath != "" && reqPath != "." {
 				if _, err := fs.Stat(sub, reqPath); err == nil {
-					http.FileServer(http.FS(sub)).ServeHTTP(w, r)
+					gzipStatic(http.FileServer(http.FS(sub))).ServeHTTP(w, r)
 					return
 				}
 			}
