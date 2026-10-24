@@ -164,8 +164,8 @@ function renderTrends() {
   const option = {
     backgroundColor: 'transparent',
     tooltip: tooltipCfg((v) => `${v.toFixed(1)} ms`),
-    legend: { textStyle: { color: ca.axis }, top: 0 },
-    grid: { left: 48, right: 16, top: 34, bottom: 26 },
+    legend: { show: false }, // 链路名称已由 chips 展示，图例隐藏释放绘图区
+    grid: { left: 48, right: 16, top: 10, bottom: 26 },
     xAxis: { type: 'time', min: startMs, max: nowMs, axisLine: { lineStyle: { color: ca.axisLine } } },
     yAxis: { type: 'value', name: 'ms', min: 0, splitLine: { lineStyle: { color: ca.split } } },
     series
@@ -420,21 +420,22 @@ onBeforeUnmount(() => {
           <span class="np-panel-tick"></span>{{ t('dashboard.linkDetect') }}
           <span class="np-panel-hint">{{ t('dashboard.linkTrends') }} · 10 min</span>
         </div>
-        <div class="np-link-stats">
+        <div class="np-link-meta">
           <span class="np-ls"><i class="np-ls-dot rate"></i>{{ t('dashboard.linkOnlineRate') }} <b class="np-rate">{{ linkRate() }}</b></span>
           <span class="np-ls"><i class="np-ls-dot ok"></i>{{ t('dashboard.linkUp') }} <b class="np-ok">{{ kpi?.link_up ?? '--' }}</b></span>
           <span class="np-ls"><i class="np-ls-dot bad"></i>{{ t('dashboard.linkDown') }} <b :class="(kpi?.link_down ?? 0) > 0 ? 'np-bad' : 'np-ok'">{{ kpi?.link_down ?? '--' }}</b></span>
-        </div>
-        <div class="np-link-chips">
-          <div v-for="l in sortedLinks" :key="l.name" class="np-link-chip" :class="l.up ? 'up' : 'down'">
-            <span class="np-link-dot"></span>
-            <span class="np-link-name">{{ l.name }}</span>
-            <span class="np-link-rt">{{ l.rt_ms != null ? `${Number(l.rt_ms).toFixed(1)}ms` : '--' }}</span>
-            <span v-if="Number(l.loss_pct) > 0" class="np-link-loss bad">{{ Number(l.loss_pct).toFixed(0) }}%</span>
+          <span class="np-meta-sep"></span>
+          <div class="np-link-chips">
+            <div v-for="l in sortedLinks" :key="l.name" class="np-link-chip" :class="l.up ? 'up' : 'down'">
+              <span class="np-link-dot"></span>
+              <span class="np-link-name">{{ l.name }}</span>
+              <span class="np-link-rt">{{ l.rt_ms != null ? `${Number(l.rt_ms).toFixed(1)}ms` : '--' }}</span>
+              <span v-if="Number(l.loss_pct) > 0" class="np-link-loss bad">{{ Number(l.loss_pct).toFixed(0) }}%</span>
+            </div>
+            <div v-if="!links.length" class="np-empty">{{ t('common.noData') }}</div>
           </div>
-          <div v-if="!links.length" class="np-empty">{{ t('common.noData') }}</div>
         </div>
-        <div ref="trendRef" class="np-chart" style="height: 266px"></div>
+        <div ref="trendRef" class="np-chart" style="height: 282px"></div>
       </div>
 
       <!-- 专线流量 -->
@@ -557,9 +558,10 @@ onBeforeUnmount(() => {
   }
   .np-chart { width: 100%; }
 
-  // 链路状态行（在线率/正常/异常，显示在图表区）
-  .np-link-stats { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: -2px 0 10px; font-size: 12px; color: var(--np-text-2); }
-  .np-ls { display: flex; align-items: center; gap: 6px; white-space: nowrap;
+  // 链路状态行 + chips 合并为一行（在线率/正常/异常 + 各链路延迟）
+  .np-link-meta { display: flex; align-items: center; gap: 16px; margin-bottom: 10px; flex-wrap: wrap; }
+  .np-meta-sep { width: 1px; height: 16px; background: var(--np-border-strong); flex: none; }
+  .np-ls { display: flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 12px; color: var(--np-text-2);
     b { font-variant-numeric: tabular-nums; }
     .np-ls-dot { width: 8px; height: 8px; border-radius: 50%; }
     .np-ls-dot.rate { background: var(--np-primary); box-shadow: 0 0 0 3px color-mix(in oklch, var(--np-primary) 16%, transparent); }
@@ -571,7 +573,7 @@ onBeforeUnmount(() => {
   }
 
   // 链路 chips
-  .np-link-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .np-link-chips { display: flex; flex-wrap: wrap; gap: 8px; }
   .np-link-chip {
     display: flex; align-items: center; gap: 8px; padding: 7px 12px;
     border-radius: $radius-md; font-size: 12px;
