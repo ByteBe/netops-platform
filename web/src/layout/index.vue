@@ -33,7 +33,7 @@ const menus = computed(() => {
 })
 
 function logout() {
-  ElMessageBox.confirm(t('common.confirm') + '?', t('login.logout'), { type: 'warning' })
+  ElMessageBox.confirm(t('common.confirm') + '?', t('login.logout'), { type: 'warning', center: true, confirmButtonText: t('common.confirm'), cancelButtonText: t('common.cancel') })
     .then(async () => {
       authStore.logout()
       ElMessage.success(t('common.success'))

@@ -436,6 +436,21 @@ html.dark .el-table--striped .el-table__body tr.el-table__row--striped td.el-tab
   padding: 12px 20px;
 }
 
+// 确认弹窗（ElMessageBox）：按钮组居中显示
+.el-message-box {
+  border-radius: $radius-lg;
+  background: var(--np-bg-elevated);
+  border: 1px solid var(--np-border);
+  box-shadow: var(--np-shadow-md);
+  .el-message-box__header {
+    padding: 14px 20px;
+  }
+  .el-message-box__btns {
+    justify-content: center;
+    padding: 12px 20px 14px;
+  }
+}
+
 .el-popper,
 .el-select-dropdown,
 .el-picker-panel,
