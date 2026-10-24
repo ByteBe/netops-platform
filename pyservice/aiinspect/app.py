@@ -28,7 +28,7 @@ import llm
 import fallback_report
 from config import PY_PORT
 
-app = FastAPI(title="netops-python", version="1.1.0")
+app = FastAPI(title="netops-python", version="1.2.0")
 
 # 挂载脚本生成器子路由（同进程复用 8000 端口，Go 转发调用）
 from scriptgen.router import router as scriptgen_router
