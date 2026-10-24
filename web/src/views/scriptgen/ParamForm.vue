@@ -1,15 +1,22 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { ElMessage } from 'element-plus'
 import type { Category, Field } from '@/types/scriptgen'
 const { t } = useI18n()
 
-const props = defineProps<{ selected: Category | null; params: Record<string, string>; loading: boolean }>()
+const props = defineProps<{ selected: Category | null; params: Record<string, string>; loading: boolean; errors: Record<string, string> }>()
 const emit = defineEmits<{ (e: 'gen'): void }>()
 // params 是父级 reactive 对象，直接改属性即可（父级 ref 自动解包）
 function set(k: string, v: string) { props.params[k] = v }
 watch(() => props.selected, () => { rules.value = []; props.params.pfx_index = '10' })
 watch(() => props.params.enable_prefix, (v) => { if (v === 'on' && !props.params.pfx_index) props.params.pfx_index = '10' })
+
+function validIP(s: string): boolean {
+  const t = s.trim()
+  if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(t)) return false
+  return t.split('.').every(x => +x <= 255)
+}
 
 const visibleFields = computed(() => {
   if (!props.selected) return []
@@ -36,8 +43,15 @@ function addRule() {
   props.params.pfx_index = String(parseInt(props.params.pfx_index || '10') + 5)
 }
 function removeRule(i: number) { rules.value.splice(i, 1) }
-function flushRules() {
+function flushRules(): boolean {
+  // 校验前缀列表规则行（网段=IP、掩码长度=0-32、序号=数字）
+  for (const r of rules.value) {
+    if (r.net && !validIP(r.net)) { ElMessage.error(`${t('script.matchNet')}：${t('script.validate.ip')}`); return false }
+    if (r.mask && (!/^\d+$/.test(r.mask) || +r.mask > 32)) { ElMessage.error(`${t('script.mask')}：${t('script.validate.prefix')}`); return false }
+    if (r.idx && !/^\d+$/.test(r.idx)) { ElMessage.error(`${t('script.seq')}：${t('script.validate.number')}`); return false }
+  }
   props.params.pfx_rules_multi = rules.value.map(r => `${r.idx} ${r.act} ${r.net} ${r.mask}`.trim()).join('\n')
+  return true
 }
 </script>
 
@@ -54,7 +68,7 @@ function flushRules() {
       </div>
       <div class="pf-desc">{{ selected.desc }}</div>
       <el-form v-if="selected.code !== 'route_policy'" :model="params" label-position="top" size="default">
-        <el-form-item v-for="f in visibleFields" :key="f.key" :label="`${f.label}${required(f) ? ' *' : ''}`">
+        <el-form-item v-for="f in visibleFields" :key="f.key" :label="`${f.label}${required(f) ? ' *' : ''}`" :error="errors[f.key]">
           <el-select v-if="f.type === 'select'" :model-value="params[f.key]" style="width:100%" @update:model-value="(v: any) => set(f.key, String(v))">
             <el-option v-for="o in f.options" :key="o" :label="o" :value="o" />
           </el-select>
@@ -64,7 +78,7 @@ function flushRules() {
       </el-form>
       <div v-else>
         <el-form :model="params" label-position="top" size="default">
-          <el-form-item v-for="f in visibleFields.filter(f => !['pfx_index','pfx_action','pfx_net','pfx_masklen','prefix'].includes(f.key))" :key="f.key" :label="`${f.label}${required(f) ? ' *' : ''}`">
+          <el-form-item v-for="f in visibleFields.filter(f => !['pfx_index','pfx_action','pfx_net','pfx_masklen','prefix'].includes(f.key))" :key="f.key" :label="`${f.label}${required(f) ? ' *' : ''}`" :error="errors[f.key]">
             <el-select v-if="f.type === 'select'" :model-value="params[f.key]" style="width:100%" @update:model-value="(v: any) => set(f.key, String(v))">
               <el-option v-for="o in f.options" :key="o" :label="o" :value="o" />
             </el-select>
@@ -96,7 +110,7 @@ function flushRules() {
           <el-button size="small" style="margin-bottom:10px" @click="addRule">{{ t('script.addRow') }}</el-button>
         </template>
       </div>
-      <el-button type="primary" size="large" class="gen-btn" :loading="loading" @click="flushRules();emit('gen')">⚡ {{ t('script.generate') }}</el-button>
+      <el-button type="primary" size="large" class="gen-btn" :loading="loading" @click="flushRules() && emit('gen')">⚡ {{ t('script.generate') }}</el-button>
     </template>
   </div>
 </template>

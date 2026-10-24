@@ -19,5 +19,20 @@ export default {
   cisco: '思科',
   clear: '清空',
   fillRequired: '请填写',
-  pleaseInput: '请输入'
+  pleaseInput: '请输入',
+  validate: {
+    empty: '不能为空',
+    ip: 'IP 地址格式不正确',
+    network: '网段格式不正确（如 192.168.1.0/24）',
+    prefix: '掩码长度应为 0-32',
+    number: '请输入数字',
+    mask: '掩码格式不正确（需连续，如 255.255.255.0）',
+    passlen: '密码长度不能少于 6 位',
+    iplist: 'IP 列表格式不正确（逗号分隔，如 1.1.1.1,2.2.2.2）',
+    aslist: 'AS 号列表格式不正确（数字，逗号分隔）',
+    vlan: 'VLAN 格式不正确（如 10,20,30-40）',
+    vty: 'VTY 范围格式不正确（如 0 4）',
+    mac: 'MAC 地址格式不正确（如 0000-1111-2222）',
+    ipmask: '接口IP格式不正确（如 10.0.0.1 255.255.255.0）'
+  }
 }

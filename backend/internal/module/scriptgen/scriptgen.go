@@ -3,7 +3,11 @@ package scriptgen
 
 import (
 	"fmt"
+	"math/bits"
+	"net"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -74,14 +78,14 @@ func init() {
 		{Code: "router_ospf", Name: "OSPF动态路由", Icon: "🔄", Desc: "内部网关协议", Fields: []Field{
 			{Key: "process", Label: "进程号", Type: "number", Required: true, Placeholder: "如1"},
 			{Key: "rid", Label: "Router ID", Type: "ip", Required: true, Placeholder: "如1.1.1.1"},
-			{Key: "net", Label: "宣告网段", Type: "text", Required: true, Placeholder: "如10.16.194.0"},
-			{Key: "netmask", Label: "掩码", Type: "text", Required: true, Placeholder: "如255.255.255.0"},
+			{Key: "net", Label: "宣告网段", Type: "ip", Required: true, Placeholder: "如10.16.194.0"},
+			{Key: "netmask", Label: "掩码", Type: "mask", Required: true, Placeholder: "如255.255.255.0"},
 			{Key: "area", Label: "区域号", Type: "text", Required: true, Placeholder: "如0"},
 			{Key: "enable_vpn", Label: "启用MPLS VPN", Type: "switch", Required: false},
 			{Key: "vpn", Label: "VPN实例名", Type: "text", Required: true, Placeholder: "如vpna", ShowIf: &ShowIf{Key: "enable_vpn", Eq: "on"}},
 		}},
 		{Code: "router_static", Name: "静态路由", Icon: "➡️", Desc: "手动指定路由", Fields: []Field{
-			{Key: "dest", Label: "目标网段", Type: "text", Required: true, Placeholder: "如0.0.0.0"},
+			{Key: "dest", Label: "目标网段", Type: "ip", Required: true, Placeholder: "如0.0.0.0"},
 			{Key: "mask", Label: "掩码", Type: "text", Required: true, Placeholder: "如0"},
 			{Key: "nh", Label: "下一跳", Type: "ip", Required: true, Placeholder: "如192.168.1.1"},
 			{Key: "enable_vpn", Label: "启用MPLS VPN", Type: "switch", Required: false},
@@ -94,8 +98,8 @@ func init() {
 			{Key: "peer_ip", Label: "邻居IP(多个用逗号分隔)", Type: "text", Required: true, Placeholder: "如1.1.1.1,2.2.2.2"},
 			{Key: "conn_int", Label: "更新源接口", Type: "text", Required: false, Placeholder: "如LoopBack0"},
 			{Key: "enable_net", Label: "启用发布路由", Type: "switch", Required: false},
-			{Key: "network", Label: "发布网段(IPv4)", Type: "text", Required: true, Placeholder: "如10.0.0.0", ShowIf: &ShowIf{Key: "enable_net", Eq: "on"}},
-			{Key: "netmask", Label: "掩码", Type: "text", Required: true, Placeholder: "如255.255.255.0", ShowIf: &ShowIf{Key: "enable_net", Eq: "on"}},
+			{Key: "network", Label: "发布网段(IPv4)", Type: "ip", Required: true, Placeholder: "如10.0.0.0", ShowIf: &ShowIf{Key: "enable_net", Eq: "on"}},
+			{Key: "netmask", Label: "掩码", Type: "mask", Required: true, Placeholder: "如255.255.255.0", ShowIf: &ShowIf{Key: "enable_net", Eq: "on"}},
 			{Key: "vpn4", Label: "启用VPNv4地址族", Type: "switch", Required: false},
 			{Key: "vpn4_enable_peer", Label: "VPNv4中启用邻居(逗号分隔)", Type: "text", Required: false, Placeholder: "如1.1.1.1,8.8.8.8", ShowIf: &ShowIf{Key: "vpn4", Eq: "on"}},
 			{Key: "vpn4_adv_comm", Label: "VPNv4发送团体属性邻居(逗号分隔)", Type: "text", Required: false, Placeholder: "如1.1.1.1", ShowIf: &ShowIf{Key: "vpn4", Eq: "on"}},
@@ -219,6 +223,10 @@ func generate(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, 0, "参数错误")
 		return
 	}
+	if label, msg := validateReq(req.Code, req.Params); msg != "" {
+		response.Fail(c, http.StatusBadRequest, 0, label+": "+msg)
+		return
+	}
 	lines := build(req.Code, req.Params, req.Vendor)
 	filtered := make([]string, 0, len(lines))
 	for _, l := range lines {
@@ -229,6 +237,170 @@ func generate(c *gin.Context) {
 		filtered = append(filtered, l)
 	}
 	response.OK(c, gin.H{"script": strings.Join(decorate(req.Code, filtered), "\n")})
+}
+
+// ---------- 输入校验（生成前检查，前后端同一套规则） ----------
+
+var macRe = regexp.MustCompile(`^(?:[0-9A-Fa-f]{4}\.){2}[0-9A-Fa-f]{4}$|^(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$`)
+
+// fieldVisible 按 ShowIf 判定字段当前是否可见
+func fieldVisible(f Field, m map[string]string) bool {
+	if f.ShowIf == nil {
+		return true
+	}
+	v := m[f.ShowIf.Key]
+	if f.ShowIf.NotEq != "" {
+		return v != f.ShowIf.NotEq
+	}
+	if len(f.ShowIf.EqAny) > 0 {
+		for _, e := range f.ShowIf.EqAny {
+			if v == e {
+				return true
+			}
+		}
+		return false
+	}
+	return v == f.ShowIf.Eq
+}
+
+func validIP(s string) bool {
+	ip := net.ParseIP(strings.TrimSpace(s))
+	return ip != nil && strings.Count(strings.TrimSpace(s), ".") == 3
+}
+
+func validMask(s string) bool {
+	s = strings.TrimSpace(s)
+	var a, b, c, d uint32
+	if _, err := fmt.Sscanf(s, "%d.%d.%d.%d", &a, &b, &c, &d); err != nil {
+		return false
+	}
+	if a > 255 || b > 255 || c > 255 || d > 255 {
+		return false
+	}
+	m := a<<24 | b<<16 | c<<8 | d
+	if m == 0 {
+		return s == "0.0.0.0"
+	}
+	ones := bits.OnesCount32(m)
+	// 注意：IPMask.String() 返回十六进制，须经 net.IP 转点分十进制比较
+	return net.IP(net.CIDRMask(ones, 32)).String() == s
+}
+
+// checkValue 按字段类型与关键 key 校验，返回错误信息（空串=通过）
+func checkValue(f Field, code, v string) string {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		if f.Required {
+			return "不能为空"
+		}
+		return ""
+	}
+	switch f.Type {
+	case "ip":
+		if !validIP(v) {
+			return "IP 地址格式不正确"
+		}
+	case "network":
+		parts := strings.Split(v, "/")
+		if len(parts) != 2 || !validIP(parts[0]) {
+			return "网段格式不正确（如 192.168.1.0/24）"
+		}
+		p, err := strconv.Atoi(strings.TrimSpace(parts[1]))
+		if err != nil || p < 0 || p > 32 {
+			return "掩码长度应为 0-32"
+		}
+	case "number":
+		if _, err := strconv.Atoi(v); err != nil {
+			return "请输入数字"
+		}
+	case "mask":
+		if !validMask(v) {
+			return "掩码格式不正确（需连续，如 255.255.255.0）"
+		}
+	case "password":
+		if len(v) < 6 {
+			return "密码长度不能少于 6 位"
+		}
+	}
+	// 按 key 特判（text 类但语义明确）
+	switch f.Key {
+	case "peer_ip", "vpn4_enable_peer", "vpn4_adv_comm", "vpn4_next_hop_inv", "dns":
+		for _, item := range strings.Split(v, ",") {
+			if !validIP(item) {
+				return "IP 列表格式不正确（逗号分隔，如 1.1.1.1,2.2.2.2）"
+			}
+		}
+	case "peer_as":
+		for _, item := range strings.Split(v, ",") {
+			if _, err := strconv.Atoi(strings.TrimSpace(item)); err != nil {
+				return "AS 号列表格式不正确（数字，逗号分隔）"
+			}
+		}
+	case "vlan", "vlans":
+		for _, item := range strings.Split(v, ",") {
+			item = strings.TrimSpace(item)
+			rg := strings.Split(item, "-")
+			for _, n := range rg {
+				if _, err := strconv.Atoi(strings.TrimSpace(n)); err != nil {
+					return "VLAN 格式不正确（如 10,20,30-40）"
+				}
+			}
+		}
+	case "vty":
+		parts := strings.Fields(v)
+		if len(parts) != 2 {
+			return "VTY 范围格式不正确（如 0 4）"
+		}
+		for _, p := range parts {
+			if _, err := strconv.Atoi(p); err != nil {
+				return "VTY 范围格式不正确（如 0 4）"
+			}
+		}
+	case "srcmac":
+		if !macRe.MatchString(v) {
+			return "MAC 地址格式不正确（如 0000-1111-2222）"
+		}
+	case "ip":
+		// mpls_vpn 的接口 IP 为 "地址 掩码" 双 token
+		if code == "mpls_vpn" {
+			parts := strings.Fields(v)
+			if len(parts) != 2 || !validIP(parts[0]) || !validMask(parts[1]) {
+				return "接口IP格式不正确（如 10.0.0.1 255.255.255.0）"
+			}
+		}
+	case "pfx_net":
+		if !validIP(v) {
+			return "匹配网段格式不正确（如 10.16.192.0）"
+		}
+	}
+	return ""
+}
+
+// validateReq 校验所有可见字段，返回第一个错误字段 label 与错误信息
+func validateReq(code string, m map[string]string) (string, string) {
+	for _, cat := range allCategories() {
+		if cat.Code != code {
+			continue
+		}
+		for _, f := range cat.Fields {
+			if !fieldVisible(f, m) {
+				continue
+			}
+			if msg := checkValue(f, code, m[f.Key]); msg != "" {
+				return f.Label, msg
+			}
+		}
+		return "", ""
+	}
+	return "", ""
+}
+
+func allCategories() []Category {
+	var all []Category
+	for _, g := range groups {
+		all = append(all, g...)
+	}
+	return all
 }
 
 // codeComments 各脚本类型的中文注释说明（生成结果区展示，前端"纯净版"自动剥离 // 注释）

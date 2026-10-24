@@ -20,5 +20,20 @@ export default {
   cisco: 'Cisco',
   clear: 'Clear',
   fillRequired: 'Please fill',
-  pleaseInput: 'Please input'
+  pleaseInput: 'Please input',
+  validate: {
+    empty: 'cannot be empty',
+    ip: 'Invalid IP address format',
+    network: 'Invalid network format (e.g. 192.168.1.0/24)',
+    prefix: 'Prefix length must be 0-32',
+    number: 'Please enter a number',
+    mask: 'Invalid mask format (must be contiguous, e.g. 255.255.255.0)',
+    passlen: 'Password must be at least 6 characters',
+    iplist: 'Invalid IP list (comma separated, e.g. 1.1.1.1,2.2.2.2)',
+    aslist: 'Invalid AS number list (numbers, comma separated)',
+    vlan: 'Invalid VLAN format (e.g. 10,20,30-40)',
+    vty: 'Invalid VTY range format (e.g. 0 4)',
+    mac: 'Invalid MAC address format (e.g. 0000-1111-2222)',
+    ipmask: 'Invalid interface IP format (e.g. 10.0.0.1 255.255.255.0)'
+  }
 }
