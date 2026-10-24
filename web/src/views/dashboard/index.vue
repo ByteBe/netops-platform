@@ -121,9 +121,10 @@ function tooltipCfg(fmt?: (v: number) => string) {
     confine: true,
     // 核心：不画画布轴指针，hover 只显示 DOM tooltip，canvas 不重绘
     axisPointer: { type: 'none' as const },
+    position: ['right', 'top'] as const,
     backgroundColor: cssVar('--np-card-bg', '#ffffff'),
     borderColor: cssVar('--np-border', '#e3e5e8'),
-    textStyle: { color: cssVar('--np-monitor-text', '#39424f'), fontSize: 12 },
+    textStyle: { color: cssVar('--np-text-1', '#39424f'), fontSize: 12 },
     ...(fmt ? { valueFormatter: (v: unknown) => fmt(Number(v)) } : {})
   }
 }
@@ -156,7 +157,6 @@ function renderTrends() {
     smooth: true,
     lineStyle: { width: 2, color: s.color || cssVar('--np-primary', '#d95f1f') },
     itemStyle: { color: s.color || cssVar('--np-primary', '#d95f1f') },
-    areaStyle: { opacity: 0.08 },
     data: s.points
   }))
   const option = {
@@ -203,12 +203,7 @@ function renderTraffic() {
         type: 'bar',
         barWidth: 14,
         label: { show: true, position: 'top', color: ca.axis, fontSize: 10, formatter: (p: { value: number }) => fmtShortBps(p.value) },
-        itemStyle: {
-          borderRadius: [4, 4, 0, 0],
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: '#6ea4d9' }, { offset: 1, color: '#3a6fb0' }
-          ])
-        },
+        itemStyle: { color: cssVar('--np-info', '#3a6fb0'), borderRadius: [3, 3, 0, 0] },
         data: trafficData.value.map((x) => x.in_bps)
       }),
       seriesOpt({
@@ -216,12 +211,7 @@ function renderTraffic() {
         type: 'bar',
         barWidth: 14,
         label: { show: true, position: 'top', color: ca.axis, fontSize: 10, formatter: (p: { value: number }) => fmtShortBps(p.value) },
-        itemStyle: {
-          borderRadius: [4, 4, 0, 0],
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: '#d9ab5f' }, { offset: 1, color: '#b5893a' }
-          ])
-        },
+        itemStyle: { color: cssVar('--np-warning', '#b5893a'), borderRadius: [3, 3, 0, 0] },
         data: trafficData.value.map((x) => x.out_bps)
       })
     ]
@@ -251,12 +241,7 @@ function renderServer() {
         type: 'bar',
         barWidth: 14,
         label: { show: true, position: 'top', color: ca.axis, fontSize: 10, formatter: '{c}%' },
-        itemStyle: {
-          borderRadius: [4, 4, 0, 0],
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: '#f0826a' }, { offset: 1, color: '#c84a1a' }
-          ])
-        },
+        itemStyle: { color: cssVar('--np-primary', '#d95f1f'), borderRadius: [3, 3, 0, 0] },
         data: devices.value.map((d) => d.cpu)
       }),
       seriesOpt({
@@ -264,12 +249,7 @@ function renderServer() {
         type: 'bar',
         barWidth: 14,
         label: { show: true, position: 'top', color: ca.axis, fontSize: 10, formatter: '{c}%' },
-        itemStyle: {
-          borderRadius: [4, 4, 0, 0],
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: '#6fc394' }, { offset: 1, color: '#2f8557' }
-          ])
-        },
+        itemStyle: { color: cssVar('--np-success', '#3f9e63'), borderRadius: [3, 3, 0, 0] },
         data: devices.value.map((d) => d.mem_used)
       })
     ]
@@ -492,7 +472,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  background: var(--np-monitor-bg);
+  background: var(--np-bg);
   min-height: 100%;
 
   .np-topbar {
@@ -509,7 +489,7 @@ onBeforeUnmount(() => {
     background: linear-gradient(135deg, var(--np-primary), color-mix(in oklch, var(--np-primary) 45%, var(--np-info)));
     box-shadow: 0 0 10px color-mix(in oklch, var(--np-primary) 50%, transparent);
   }
-  .np-brand-title { font-size: 20px; font-weight: 800; letter-spacing: 0.02em; color: var(--np-monitor-text); }
+  .np-brand-title { font-size: 20px; font-weight: 800; letter-spacing: 0.02em; color: var(--np-text-1); }
   .np-brand-sub { font-size: 12px; color: var(--np-text-3); letter-spacing: 0.1em; }
   .np-top-right { display: flex; align-items: center; gap: 12px; }
   .np-clock { font-size: 14px; font-variant-numeric: tabular-nums; color: var(--np-text-2); }
@@ -517,41 +497,26 @@ onBeforeUnmount(() => {
   // KPI
   .np-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
   .np-kpi {
-    position: relative;
     background: var(--np-card-bg);
     border: 1px solid var(--np-border);
     border-radius: $radius-lg;
     padding: 14px 16px 12px;
     box-shadow: var(--np-shadow-sm);
-    overflow: hidden;
-    &::before {
-      content: ''; position: absolute; inset: 0 0 auto 0; height: 3px;
-      background: linear-gradient(90deg, var(--np-primary), color-mix(in oklch, var(--np-primary) 30%, transparent));
-    }
+    transition: border-color 0.2s ease-out, box-shadow 0.2s ease-out;
+    &:hover { border-color: var(--np-border-strong); }
   }
-  .np-kpi:nth-child(2)::before { background: linear-gradient(90deg, var(--np-info), color-mix(in oklch, var(--np-info) 30%, transparent)); }
-  .np-kpi:nth-child(3)::before { background: linear-gradient(90deg, var(--np-success), color-mix(in oklch, var(--np-success) 30%, transparent)); }
-  .np-kpi:nth-child(4)::before { background: linear-gradient(90deg, var(--np-danger), color-mix(in oklch, var(--np-danger) 30%, transparent)); }
   .np-kpi-head { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--np-text-2); letter-spacing: 0.06em; }
-  .np-kpi-ico {
-    width: 18px; height: 18px; border-radius: 5px; position: relative;
-    background: linear-gradient(135deg, color-mix(in oklch, var(--np-primary) 80%, #fff), color-mix(in oklch, var(--np-primary) 55%, transparent));
-    box-shadow: 0 2px 8px color-mix(in oklch, var(--np-primary) 40%, transparent), inset 0 1px 0 rgba(255,255,255,.5);
-    &::after { content: ''; position: absolute; inset: 2px; border-radius: 3px; border: 1px solid rgba(255,255,255,.45); }
-  }
-  .np-kpi:nth-child(2) .np-kpi-ico { background: linear-gradient(135deg, color-mix(in oklch, var(--np-info) 80%, #fff), color-mix(in oklch, var(--np-info) 55%, transparent)); box-shadow: 0 2px 8px color-mix(in oklch, var(--np-info) 40%, transparent), inset 0 1px 0 rgba(255,255,255,.5); }
-  .np-kpi:nth-child(3) .np-kpi-ico { background: linear-gradient(135deg, color-mix(in oklch, var(--np-success) 80%, #fff), color-mix(in oklch, var(--np-success) 55%, transparent)); box-shadow: 0 2px 8px color-mix(in oklch, var(--np-success) 40%, transparent), inset 0 1px 0 rgba(255,255,255,.5); }
-  .np-kpi:nth-child(4) .np-kpi-ico { background: linear-gradient(135deg, color-mix(in oklch, var(--np-danger) 80%, #fff), color-mix(in oklch, var(--np-danger) 55%, transparent)); box-shadow: 0 2px 8px color-mix(in oklch, var(--np-danger) 40%, transparent), inset 0 1px 0 rgba(255,255,255,.5); }
+  .np-kpi-ico { width: 16px; height: 16px; border-radius: 4px; background: color-mix(in oklch, var(--np-primary) 12%, transparent); }
   .np-kpi-main { display: flex; align-items: baseline; gap: 6px; margin: 6px 0 2px; }
-  .np-kpi-big { font-size: 32px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; color: var(--np-monitor-text); &.np-bad { color: var(--np-danger); } }
+  .np-kpi-big { font-size: 32px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; color: var(--np-text-1); &.np-bad { color: var(--np-danger); } }
   .np-kpi-unit { font-size: 13px; color: var(--np-text-3); }
   .np-kpi-duo { display: flex; gap: 20px; margin: 8px 0 2px; }
   .np-duo { display: flex; flex-direction: column; gap: 2px;
     .np-duo-tag { font-size: 11px; color: var(--np-text-3); &.up { color: var(--np-info); } &.down { color: var(--np-warning); } }
-    .np-duo-val { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--np-monitor-text); }
+    .np-duo-val { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--np-text-1); }
   }
   .np-kpi-sub { font-size: 12px; color: var(--np-text-2); font-variant-numeric: tabular-nums;
-    b { color: var(--np-monitor-text); } b.np-ok { color: var(--np-success); } }
+    b { color: var(--np-text-1); } b.np-ok { color: var(--np-success); } }
   .np-sep { margin: 0 4px; color: var(--np-border-strong); }
 
   // 主体网格
@@ -566,16 +531,16 @@ onBeforeUnmount(() => {
     background: var(--np-card-bg);
     border: 1px solid var(--np-border);
     border-radius: $radius-lg;
-    padding: 14px 16px;
+    padding: 16px;
     box-shadow: var(--np-shadow-sm);
     min-width: 0;
-    transition: box-shadow .2s ease, transform .2s ease;
-    &:hover { box-shadow: var(--np-shadow-md); transform: translateY(-1px); }
+    transition: border-color 0.2s ease-out, box-shadow 0.2s ease-out;
+    &:hover { border-color: var(--np-border-strong); }
   }
   .np-panel-head {
     display: flex; align-items: center; gap: 8px;
-    font-size: 15px; font-weight: 700; color: var(--np-monitor-text); margin-bottom: 12px;
-    .np-panel-tick { width: 6px; height: 6px; transform: rotate(45deg); border-radius: 1px; background: var(--np-primary); }
+    font-size: 14px; font-weight: 600; color: var(--np-text-1); margin-bottom: 12px;
+    .np-panel-tick { width: 5px; height: 5px; transform: rotate(45deg); border-radius: 1px; background: var(--np-primary); }
     .np-panel-hint { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--np-text-3); &.np-hint-bad { color: var(--np-danger); } }
   }
   .np-chart { width: 100%; }
@@ -586,13 +551,13 @@ onBeforeUnmount(() => {
     display: flex; align-items: center; gap: 7px; padding: 6px 10px;
     border-radius: $radius-md; font-size: 12px;
     border: 1px solid var(--np-border); background: var(--np-surface-1);
-    transition: transform .15s ease, box-shadow .15s ease;
-    &:hover { transform: translateY(-1px); box-shadow: var(--np-shadow-sm); }
+    transition: background-color 0.18s ease-out, border-color 0.18s ease-out;
+    &:hover { background: var(--np-hover); border-color: var(--np-border-strong); }
     &.up { border-color: color-mix(in oklch, var(--np-success) 35%, var(--np-border)); }
     &.down { border-color: color-mix(in oklch, var(--np-danger) 45%, var(--np-border)); }
     .np-link-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--np-success); }
     &.down .np-link-dot { background: var(--np-danger); }
-    .np-link-name { color: var(--np-monitor-text); font-weight: 600; }
+    .np-link-name { color: var(--np-text-1); font-weight: 600; }
     .np-link-rt { color: var(--np-success); font-variant-numeric: tabular-nums; }
     &.down .np-link-rt { color: var(--np-danger); }
     .np-link-loss { color: var(--np-text-3); font-variant-numeric: tabular-nums; &.bad { color: var(--np-danger); } }
@@ -602,10 +567,10 @@ onBeforeUnmount(() => {
   .np-alert-list { display: flex; flex-direction: column; gap: 6px; max-height: 210px; overflow-y: auto; }
   .np-alert-row {
     display: flex; align-items: center; gap: 10px; padding: 8px 10px;
-    border-radius: $radius-md; background: var(--np-surface-1); border: 1px solid var(--np-border);
-    font-size: 12px; color: var(--np-monitor-text);
-    transition: background .15s ease, border-color .15s ease;
-    &:hover { background: color-mix(in oklch, var(--np-primary) 6%, var(--np-surface-1)); border-color: color-mix(in oklch, var(--np-primary) 30%, var(--np-border)); }
+    border-radius: $radius-sm; background: var(--np-surface-1); border: 1px solid var(--np-border);
+    font-size: 12px; color: var(--np-text-1);
+    transition: background-color 0.18s ease-out, border-color 0.18s ease-out;
+    &:hover { background: var(--np-hover); border-color: var(--np-border-strong); }
   }
   .np-alert-level { flex: none; padding: 1px 8px; border-radius: 999px; font-size: 11px; color: #fff;
     &.critical { background: var(--np-danger); } &.warning { background: var(--np-warning); } &.info { background: var(--np-info); } }
