@@ -21,6 +21,7 @@ type Server struct {
 	TLSCert      string   `yaml:"tls_cert"`      // TLS证书路径（留空=HTTP）
 	TLSKey       string   `yaml:"tls_key"`       // TLS私钥路径
 	CORSOrigins  []string `yaml:"cors_origins"`  // CORS 允许来源白名单（空=反射 Origin，开发模式；生产建议配置，如 http://127.0.0.1:40000）
+	PythonSvcURL string   `yaml:"python_service_url"` // Python 智能外围服务地址（AI 巡检等；空=禁用转发，走内置 AI）
 }
 
 // Database 存储数据库配置（系统初始化时选择：mysql/oracle/dm/kingbase/sqlite(内置)）
@@ -79,6 +80,7 @@ func defaultConfig() *Config {
 			Port:         30821,
 			InternalHost: "127.0.0.1",
 			InternalPort: 30001,
+			PythonSvcURL: "http://127.0.0.1:8000",
 		},
 		Database: Database{Type: "sqlite", Port: 0, MaxIdle: 10, MaxOpen: 100, LogLevel: 1},
 		TSDB:     TSDB{Type: "builtin"},

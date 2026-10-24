@@ -2,8 +2,10 @@
 package aiinspect
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -22,10 +24,23 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			response.Fail(c, 500, 50000, "数据库未就绪")
 			return
 		}
-		// 1. 收集系统快照
+		// 1. 收集系统快照（Go 采集）
 		snapshot := collectSnapshot(a)
 
-		// 2. 找启用的 AI 配置
+		// 2. 优先转发 Python 智能外围服务（AI 巡检增强：pandas 统计 + TDengine 趋势 + LLM）
+		if a.Cfg.Server.PythonSvcURL != "" {
+			if report, stats, err := callPythonSvc(a, snapshot); err == nil {
+				// 存历史
+				snapJSON, _ := json.Marshal(snapshot)
+				a.DB.Create(&model.AIInspectReport{Report: report, Snapshot: string(snapJSON), CreatedAt: time.Now()})
+				response.OK(c, gin.H{"report": report, "snapshot": snapshot, "stats": stats, "time": time.Now().Format("2006-01-02 15:04:05"), "source": "python"})
+				return
+			} else {
+				fmt.Printf("[aiinspect] python 服务调用失败，回退内置 AI: %v\n", err)
+			}
+		}
+
+		// 3. 找启用的 AI 配置
 		var cfg model.AIConfig
 		if a.DB.Where("enable = ?", true).Order("priority desc").First(&cfg).Error != nil {
 			response.Fail(c, 400, 40000, "未配置启用的 AI，请先在系统设置中配置")
@@ -79,6 +94,42 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 	})
 }
 
+// callPythonSvc 调用 Python 智能外围服务（FastAPI /internal/aiinspect/run）
+// 成功返回（报告, 统计增强数据, nil）；失败返回 error（由调用方回退内置 AI）
+func callPythonSvc(a *core.App, snapshot Snapshot) (string, any, error) {
+	url := strings.TrimRight(a.Cfg.Server.PythonSvcURL, "/") + "/internal/aiinspect/run"
+	body, err := json.Marshal(map[string]any{
+		"snapshot": snapshot,
+		"time":     time.Now().Format("2006-01-02 15:04:05"),
+	})
+	if err != nil {
+		return "", nil, err
+	}
+	client := &http.Client{Timeout: 120 * time.Second}
+	resp, err := client.Post(url, "application/json", bytes.NewReader(body))
+	if err != nil {
+		return "", nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", nil, fmt.Errorf("python svc status %d", resp.StatusCode)
+	}
+	var out struct {
+		Report   string `json:"report"`
+		Stats    any    `json:"stats"`
+		Time     string `json:"time"`
+		Source   string `json:"source"`
+		Snapshot any    `json:"snapshot"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return "", nil, err
+	}
+	if strings.TrimSpace(out.Report) == "" {
+		return "", nil, fmt.Errorf("python svc empty report")
+	}
+	return out.Report, out.Stats, nil
+}
+
 type Snapshot struct {
 	DeviceTotal   int64        `json:"device_total"`
 	DeviceUp      int64        `json:"device_up"`
@@ -111,7 +162,7 @@ func collectSnapshot(a *core.App) Snapshot {
 	a.DB.Model(&model.MonitorDevice{}).Count(&s.DeviceTotal)
 	a.DB.Model(&model.MonitorDevice{}).Where("status = ?", "up").Count(&s.DeviceUp)
 	a.DB.Model(&model.MonitorDevice{}).Where("status = ?", "down").Count(&s.DeviceDown)
-	a.DB.Model(&model.AlertEvent{}).Where("status = ?", "active").Count(&s.AlertActive)
+	a.DB.Model(&model.AlertEvent{}).Where("acked = ?", false).Count(&s.AlertActive)
 	today := time.Now().Format("2006-01-02")
 	a.DB.Model(&model.AlertEvent{}).Where("DATE(created_at) = ?", today).Count(&s.AlertToday)
 	a.DB.Model(&model.DeviceLog{}).Where("created_at > ? AND level = ?", time.Now().Add(-24*time.Hour), "critical").Count(&s.LogError24h)
