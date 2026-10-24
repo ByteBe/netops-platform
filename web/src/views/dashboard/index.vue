@@ -220,6 +220,8 @@ function renderHealth() {
         type: 'bar',
         barWidth: 12,
         animation: false,
+        // 柱子顶部显示数值：CPU 低占用时柱子贴底也能看清真实值（如 6%）
+        label: { show: true, position: 'top', color: ca.axis, fontSize: 10, formatter: '{c}%' },
         itemStyle: { color: cssVar('--np-primary', '#d95f1f'), borderRadius: [3, 3, 0, 0] },
         data: devices.value.map((d) => d.cpu)
       },
@@ -228,6 +230,7 @@ function renderHealth() {
         type: 'bar',
         barWidth: 12,
         animation: false,
+        label: { show: true, position: 'top', color: ca.axis, fontSize: 10, formatter: '{c}%' },
         itemStyle: { color: cssVar('--np-success', '#3f9e63'), borderRadius: [3, 3, 0, 0] },
         data: devices.value.map((d) => d.mem_used)
       }
@@ -266,6 +269,8 @@ function renderTraffic() {
         type: 'bar',
         barWidth: 10,
         animation: false,
+        // 柱子顶部显示实时速率（自适应单位），低流量也能看清真实数值
+        label: { show: true, position: 'top', color: ca.axis, fontSize: 10, formatter: fmtShortBps },
         itemStyle: { color: cssVar('--np-info', '#3a6fb0'), borderRadius: [3,3,0,0] },
         data: trafficData.value.map((x) => x.in_bps)
       },
@@ -274,6 +279,7 @@ function renderTraffic() {
         type: 'bar',
         barWidth: 10,
         animation: false,
+        label: { show: true, position: 'top', color: ca.axis, fontSize: 10, formatter: fmtShortBps },
         itemStyle: { color: cssVar('--np-warning', '#b5893a'), borderRadius: [3,3,0,0] },
         data: trafficData.value.map((x) => x.out_bps)
       }
@@ -282,6 +288,14 @@ function renderTraffic() {
 }
 
 const trafficData = ref<Array<{ name: string; in_bps: number; out_bps: number }>>([])
+
+// 速率自适应短格式：>=1Mbps 显示 M，>=1Kbps 显示 K，否则 B
+function fmtShortBps(v: number): string {
+  if (!v || v <= 0) return '0'
+  if (v >= 1e6) return (v / 1e6).toFixed(2) + 'M'
+  if (v >= 1e3) return (v / 1e3).toFixed(1) + 'K'
+  return v.toFixed(0)
+}
 
 async function loadTraffic() {
   const list = await getEnc<Array<{ name: string; in_bps: number; out_bps: number }>>('/dashboard/traffic')
@@ -294,26 +308,36 @@ function renderDb() {
   if (!dbRef.value) return
   if (hoverPaused) return // 悬停期间不重绘
   dbChart ??= echarts.init(dbRef.value)
-  // 数据无变化不重绘
-  const sig = JSON.stringify([dbs.value.map((d) => d.name), dbs.value.map((d) => Number((d as unknown as { conns?: number }).conns || 0))])
+  // 数据无变化不重绘（按在线状态签名）
+  const sig = JSON.stringify([dbs.value.map((d) => d.name), dbs.value.map((d) => !!d.up)])
   if (sig === lastDbSig) return
   lastDbSig = sig
   const ca = chartAxisColors()
+  // 数据库健康 = 实例在线状态（在线1/离线0），不再显示连接数
+  const okColor = cssVar('--np-success', '#3f9e63')
+  const badColor = cssVar('--np-danger', '#c0503d')
   dbChart.setOption({
     backgroundColor: 'transparent',
-    // 跟随鼠标显示（position:null），避免固定右上角压住时序数据库柱子顶部；仍禁用画布轴指针不触发重绘
-    tooltip: histTooltip({ digits: 0, suffix: '', position: null }),
+    // 跟随鼠标显示（position:null），避免固定右上角压住柱子顶部；仍禁用画布轴指针不触发重绘
+    tooltip: histTooltip({ digits: 0, suffix: '', position: null, fmt: (v: number) => (v === 1 ? t('dbmon.running') : t('dbmon.down')) }),
     legend: { textStyle: { color: ca.axis }, top: 0 },
     grid: { left: 50, right: 16, top: 32, bottom: 40 },
     xAxis: { type: 'category', data: dbs.value.map((d) => d.name), axisLabel: { color: ca.axis, interval: 0, rotate: 0, margin: 8 } },
-    yAxis: { type: 'value', splitLine: { lineStyle: { color: ca.split } } },
+    yAxis: { type: 'value', min: 0, max: 1, interval: 1, splitLine: { lineStyle: { color: ca.split } } },
     series: [
       {
-        name: t('dbmon.connections'),
+        name: t('dbmon.running'),
         type: 'bar',
+        barWidth: 24,
         animation: false,
-        itemStyle: { color: cssVar('--np-info', '#3a6fb0'), borderRadius: [3, 3, 0, 0] },
-        data: dbs.value.map((d) => Number((d as unknown as { conns?: number }).conns || 0))
+        label: {
+          show: true, position: 'top', color: ca.axis, fontSize: 11,
+          formatter: (p: { value: number }) => (p.value === 1 ? t('dbmon.running') : t('dbmon.down'))
+        },
+        data: dbs.value.map((d) => ({
+          value: d.up ? 1 : 0,
+          itemStyle: { color: d.up ? okColor : badColor, borderRadius: [3, 3, 0, 0] }
+        }))
       }
     ]
   })
