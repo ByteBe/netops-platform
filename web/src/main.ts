@@ -1,8 +1,6 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 // ElementPlus 按需引入：组件/样式/API 由 unplugin 自动导入，无需全量注册
-// 以下仅引入官方全局组件类型（纯类型，无运行时代码），保留 el-* 组件泛型推断
-import 'element-plus/global'
 import 'element-plus/theme-chalk/dark/css-vars.css'
 
 import App from './App.vue'
