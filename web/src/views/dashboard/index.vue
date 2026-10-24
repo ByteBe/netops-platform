@@ -418,6 +418,7 @@ onBeforeUnmount(() => {
       <div class="np-panel np-panel-link">
         <div class="np-panel-head">
           <span class="np-panel-tick"></span>{{ t('dashboard.linkDetect') }}
+          <span class="np-panel-rate">{{ t('dashboard.linkOnlineRate') }} {{ linkRate() }}</span>
           <span class="np-panel-hint">{{ t('dashboard.linkTrends') }} · 10 min</span>
         </div>
         <div class="np-link-chips">
@@ -548,6 +549,7 @@ onBeforeUnmount(() => {
     display: flex; align-items: center; gap: 8px;
     font-size: 14px; font-weight: 600; color: var(--np-text-1); margin-bottom: 12px;
     .np-panel-tick { width: 5px; height: 5px; transform: rotate(45deg); border-radius: 1px; background: var(--np-primary); }
+    .np-panel-rate { font-size: 12px; font-weight: 600; color: var(--np-success); font-variant-numeric: tabular-nums; }
     .np-panel-hint { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--np-text-3); &.np-hint-bad { color: var(--np-danger); } }
   }
   .np-chart { width: 100%; }
