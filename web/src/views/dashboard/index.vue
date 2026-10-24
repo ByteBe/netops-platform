@@ -55,6 +55,7 @@ let ws: WSClient | null = null
 let timer: number | null = null
 let wsLoadTimer: number | null = null
 let wsTrafficTimer: number | null = null
+let ro: ResizeObserver | null = null
 
 // hover 保护：鼠标进入任一图表容器时暂停全部 setOption 重绘
 let hoverPaused = false
@@ -320,6 +321,11 @@ onMounted(async () => {
   renderTrends()
   setTimeout(() => { trendChart?.resize(); trafficChart?.resize(); srvChart?.resize() }, 100)
   window.addEventListener('resize', onResize)
+  // 图表容器尺寸变化（面板 flex 拉伸/收缩）时同步 resize
+  ro = new ResizeObserver(() => { trendChart?.resize(); trafficChart?.resize(); srvChart?.resize() })
+  if (trendRef.value) ro.observe(trendRef.value)
+  if (trafficRef.value) ro.observe(trafficRef.value)
+  if (srvRef.value) ro.observe(srvRef.value)
   try {
     ws = new WSClient(['dashboard', 'linkdetect', 'monitor', 'traffic'])
     ws.on('dashboard', 'overview', () => wsLoadOverview())
@@ -354,6 +360,7 @@ onBeforeUnmount(() => {
   if (wsLoadTimer) window.clearTimeout(wsLoadTimer)
   if (wsTrafficTimer) window.clearTimeout(wsTrafficTimer)
   window.removeEventListener('resize', onResize)
+  ro?.disconnect()
   trendChart?.dispose()
   trafficChart?.dispose()
   srvChart?.dispose()
@@ -435,7 +442,7 @@ onBeforeUnmount(() => {
             <div v-if="!links.length" class="np-empty">{{ t('common.noData') }}</div>
           </div>
         </div>
-        <div ref="trendRef" class="np-chart" style="height: 282px"></div>
+        <div ref="trendRef" class="np-chart np-chart-fill"></div>
       </div>
 
       <!-- 专线流量 -->
@@ -444,7 +451,7 @@ onBeforeUnmount(() => {
           <span class="np-panel-tick"></span>{{ t('dashboard.traffic') }}
           <span class="np-panel-hint">{{ t('dashboard.liveRate') }}</span>
         </div>
-        <div ref="trafficRef" class="np-chart" style="height: 240px"></div>
+        <div ref="trafficRef" class="np-chart np-chart-fill"></div>
       </div>
 
       <!-- 服务器使用率 -->
@@ -452,7 +459,7 @@ onBeforeUnmount(() => {
         <div class="np-panel-head">
           <span class="np-panel-tick"></span>{{ t('dashboard.serverUsage') }}
         </div>
-        <div ref="srvRef" class="np-chart" style="height: 240px"></div>
+        <div ref="srvRef" class="np-chart np-chart-fill"></div>
       </div>
 
       <!-- 告警 -->
@@ -550,13 +557,16 @@ onBeforeUnmount(() => {
     transition: border-color 0.2s ease-out, box-shadow 0.2s ease-out;
     &:hover { border-color: var(--np-border-strong); }
   }
+  // 面板纵向布局，图表自动填充剩余高度（消除底部空白）
+  .np-panel-link, .np-panel-traffic, .np-panel-srv { display: flex; flex-direction: column; }
+  .np-chart { width: 100%; }
+  .np-chart-fill { flex: 1; min-height: 240px; }
   .np-panel-head {
     display: flex; align-items: center; gap: 8px;
     font-size: 14px; font-weight: 600; color: var(--np-text-1); margin-bottom: 12px;
     .np-panel-tick { width: 5px; height: 5px; transform: rotate(45deg); border-radius: 1px; background: var(--np-primary); }
     .np-panel-hint { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--np-text-3); &.np-hint-bad { color: var(--np-danger); } }
   }
-  .np-chart { width: 100%; }
 
   // 链路状态行 + chips 合并为一行（在线率/正常/异常 + 各链路延迟）
   .np-link-meta { display: flex; align-items: center; gap: 16px; margin-bottom: 10px; flex-wrap: wrap; }
