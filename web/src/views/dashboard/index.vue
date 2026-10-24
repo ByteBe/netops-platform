@@ -186,7 +186,7 @@ function renderTraffic() {
         type: 'bar',
         barWidth: 12,
         animation: false,
-        label: { show: true, position: 'top', color: ca.axis, fontSize: 10, formatter: fmtShortBps },
+        label: { show: true, position: 'top', color: ca.axis, fontSize: 10, formatter: (p: { value: number }) => fmtShortBps(p.value) },
         itemStyle: { color: cssVar('--np-info', '#3a6fb0'), borderRadius: [3, 3, 0, 0] },
         data: trafficData.value.map((x) => x.in_bps)
       },
@@ -195,7 +195,7 @@ function renderTraffic() {
         type: 'bar',
         barWidth: 12,
         animation: false,
-        label: { show: true, position: 'top', color: ca.axis, fontSize: 10, formatter: fmtShortBps },
+        label: { show: true, position: 'top', color: ca.axis, fontSize: 10, formatter: (p: { value: number }) => fmtShortBps(p.value) },
         itemStyle: { color: cssVar('--np-warning', '#b5893a'), borderRadius: [3, 3, 0, 0] },
         data: trafficData.value.map((x) => x.out_bps)
       }
