@@ -1,7 +1,10 @@
 // Package scriptgen 脚本生成器（全新设计：纯代码生成，无数据库模板）
+// 生成逻辑已迁移 Python 智能外围（pyservice/scriptgen，FastAPI），Go 保留 API/校验框架并转发调用，失败自动回退本地 Go 实现。
 package scriptgen
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"math/bits"
 	"net"
@@ -9,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"netops/internal/common/response"
@@ -22,7 +26,69 @@ func init() {
 
 func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 	g.GET("/categories", listCategories)
-	g.POST("/generate", generate)
+	g.POST("/generate", func(c *gin.Context) {
+		var req genReq
+		if err := c.ShouldBindJSON(&req); err != nil {
+			response.Fail(c, http.StatusBadRequest, 0, "参数错误")
+			return
+		}
+		if label, msg := validateReq(req.Code, req.Params); msg != "" {
+			response.Fail(c, http.StatusBadRequest, 0, label+": "+msg)
+			return
+		}
+		// 优先调用 Python 智能外围生成；失败自动回退本地 Go 实现（用户无感知）
+		lines, err := callPythonGenerate(a, req.Code, req.Vendor, req.Params)
+		if err != nil {
+			fmt.Printf("[scriptgen] python 服务调用失败，回退内置生成: %v\n", err)
+			lines = build(req.Code, req.Params, req.Vendor)
+		}
+		filtered := make([]string, 0, len(lines))
+		for _, l := range lines {
+			t := strings.TrimSpace(l)
+			if t == "quit" || t == "exit" || t == "end" {
+				continue
+			}
+			filtered = append(filtered, l)
+		}
+		response.OK(c, gin.H{"script": strings.Join(decorate(req.Code, filtered), "\n")})
+	})
+}
+
+// callPythonGenerate 调用 Python 智能外围服务（FastAPI /internal/scriptgen/generate）
+// 成功返回脚本行；失败返回 error（由调用方回退本地 Go 实现）
+func callPythonGenerate(a *core.App, code, vendor string, params map[string]string) ([]string, error) {
+	base := strings.TrimRight(a.Cfg.Server.PythonSvcURL, "/")
+	if base == "" {
+		return nil, fmt.Errorf("python svc url empty")
+	}
+	url := base + "/internal/scriptgen/generate"
+	body, err := json.Marshal(map[string]any{
+		"code":   code,
+		"vendor": vendor,
+		"params": params,
+	})
+	if err != nil {
+		return nil, err
+	}
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Post(url, "application/json", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("python svc status %d", resp.StatusCode)
+	}
+	var out struct {
+		Script string `json:"script"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(out.Script) == "" {
+		return nil, fmt.Errorf("python svc empty script")
+	}
+	return strings.Split(out.Script, "\n"), nil
 }
 
 // Field 表单字段
@@ -215,28 +281,6 @@ type genReq struct {
 	Code   string            `json:"code"`
 	Vendor string            `json:"vendor"`
 	Params map[string]string `json:"params"`
-}
-
-func generate(c *gin.Context) {
-	var req genReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, http.StatusBadRequest, 0, "参数错误")
-		return
-	}
-	if label, msg := validateReq(req.Code, req.Params); msg != "" {
-		response.Fail(c, http.StatusBadRequest, 0, label+": "+msg)
-		return
-	}
-	lines := build(req.Code, req.Params, req.Vendor)
-	filtered := make([]string, 0, len(lines))
-	for _, l := range lines {
-		t := strings.TrimSpace(l)
-		if t == "quit" || t == "exit" || t == "end" {
-			continue
-		}
-		filtered = append(filtered, l)
-	}
-	response.OK(c, gin.H{"script": strings.Join(decorate(req.Code, filtered), "\n")})
 }
 
 // ---------- 输入校验（生成前检查，前后端同一套规则） ----------

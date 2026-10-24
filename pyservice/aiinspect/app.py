@@ -5,11 +5,20 @@ NetOps Python 智能外围 - AI 巡检报告服务（FastAPI 常驻服务）
 职责编排：接收 Go 采集快照 -> MySQL 统计 -> TDengine 趋势 -> LLM 生成专业巡检报告。
 """
 import datetime
+import os
+import sys
 from typing import Any, Dict
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+
+# 兼容任意启动目录：pyservice 根（scriptgen 等子包）与 aiinspect 自身目录均加入 sys.path
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_ROOT = os.path.dirname(_HERE)
+for _p in (_ROOT, _HERE):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 import mysql_stats
 import tdengine_stats
@@ -19,7 +28,12 @@ import llm
 import fallback_report
 from config import PY_PORT
 
-app = FastAPI(title="netops-python-aiinspect", version="1.0.0")
+app = FastAPI(title="netops-python", version="1.1.0")
+
+# 挂载脚本生成器子路由（同进程复用 8000 端口，Go 转发调用）
+from scriptgen.router import router as scriptgen_router
+
+app.include_router(scriptgen_router)
 
 
 class RunRequest(BaseModel):
