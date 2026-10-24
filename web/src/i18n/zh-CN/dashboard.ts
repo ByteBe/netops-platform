@@ -10,5 +10,11 @@ export default {
   updatedAt: '更新于',
   nodeHealth: '分布式节点健康度',
   node: '节点', online: '在线', offline: '离线',
-  device: '设备', container: '容器'
+  device: '设备', container: '容器',
+  // 大屏 v2：四大模块
+  linkDetect: '链路检测', serverUsage: '服务器使用率', recentAlerts: '最新告警',
+  activeAlerts: '活跃告警', liveRate: '实时速率', latency: '延迟', loss: '丢包',
+  cpuUsage: 'CPU 使用率', memUsage: '内存使用率', lineBandwidth: '专线带宽',
+  noAlerts: '暂无告警', serverTotal: '服务器总数', serverOnline: '在线服务器',
+  linkOnlineRate: '链路在线率'
 }

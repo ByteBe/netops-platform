@@ -1,90 +1,280 @@
 <script setup lang="ts">
-// 数据大屏：KPI + 链路趋势 + 设备健康 + 专线流量 + 数据库健康（右上角入口）
-import { ref, onMounted, onBeforeUnmount, nextTick, computed, watch } from 'vue'
+// 数据大屏 v2：链路检测 / 专线流量 / 服务器使用率 / 告警 四大模块
+// 全新布局实现：不再沿用历史 histTooltip/hoverPaused/签名守卫补丁，
+// 图表统一内联标准配置（tooltip axis 触发 + confine + 禁用画布轴指针 + animation:false）
+import { ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import * as echarts from 'echarts'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { getEnc } from '@/utils/request'
 import { WSClient } from '@/utils/ws'
-import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
-import { fmtBps, fmtTime, cssVar, chartAxisColors } from '@/utils'
-import { histTooltip } from '@/utils/histTooltip'
-import NodeHealth from './components/NodeHealth.vue'
+import { fmtTime, cssVar, chartAxisColors } from '@/utils'
 
 const { t } = useI18n()
 const router = useRouter()
-const auth = useAuthStore()
 const appStore = useAppStore()
 
+// ---------- 数据类型 ----------
 interface Kpi {
-  link_total: number
-  link_up: number
-  link_down: number
-  device_total: number
-  device_online: number
-  device_offline: number
-  db_total: number
-  db_up: number
-  db_down: number
-  user_total: number
-  ip_used: number
+  link_total: number; link_up: number; link_down: number
+  device_total: number; device_online: number; device_offline: number
+  db_total: number; db_up: number; db_down: number
+  user_total: number; ip_used: number
 }
-interface Snapshot {
-  device_id?: number
-  name: string
-  ip: string
-  up: boolean
-  cpu: number
-  mem_used: number
-  rtt_ms?: number
-  rt_ms?: number
-  loss_pct?: number
-}
-interface Overview {
-  kpi: Kpi
-  links: Array<Record<string, unknown>>
-  devices: Snapshot[]
-  dbs: Array<Record<string, unknown>>
-  containers: { docker: boolean; k8s: boolean }
+interface LinkSnap { name: string; up: boolean; rt_ms?: number; loss_pct?: number }
+interface DeviceSnap { name: string; up: boolean; cpu: number; mem_used: number }
+interface TrafficItem { name: string; color?: string; in_bps: number; out_bps: number; line_rate: number }
+interface AlertItem {
+  id: number; level: string; target: string; message: string
+  count: number; acked: boolean; created_at: string
 }
 
 const kpi = ref<Kpi | null>(null)
-const nodeHealth = ref<{total:number;online:number;offline:number;device_total:number;container_total:number}|null>(null)
-const deployMode = ref<'standalone'|'distributed'>('standalone')
-const links = ref<Snapshot[]>([])
-const devices = ref<Snapshot[]>([])
-const dbs = ref<Snapshot[]>([])
+const links = ref<LinkSnap[]>([])
+const devices = ref<DeviceSnap[]>([])
+const trafficData = ref<TrafficItem[]>([])
+const alerts = ref<AlertItem[]>([])
+const alertTotal = ref(0)
 const now = ref(Date.now())
 
+// ---------- 图表引用 ----------
 const trendRef = ref<HTMLDivElement>()
-const healthRef = ref<HTMLDivElement>()
 const trafficRef = ref<HTMLDivElement>()
-const dbRef = ref<HTMLDivElement>()
-const gaugeRef = ref<HTMLDivElement>()
-
+const srvRef = ref<HTMLDivElement>()
 let trendChart: echarts.ECharts | null = null
-let healthChart: echarts.ECharts | null = null
 let trafficChart: echarts.ECharts | null = null
-let dbChart: echarts.ECharts | null = null
-let gaugeChart: echarts.ECharts | null = null
+let srvChart: echarts.ECharts | null = null
 let ws: WSClient | null = null
 let timer: number | null = null
-// WS 高频事件节流：monitor device_snapshot / traffic if_rate 推送频繁，合并为 2 秒一次
 let wsLoadTimer: number | null = null
 let wsTrafficTimer: number | null = null
-// 悬停暂停：鼠标进入任一图表容器时暂停全部重绘，彻底杜绝 hover 时柱子闪烁/消失
-let hoverPaused = false
-function bindHoverPause(el: HTMLDivElement | undefined) {
-  if (!el) return
-  el.addEventListener('mouseenter', () => { hoverPaused = true })
-  el.addEventListener('mouseleave', () => { hoverPaused = false })
+
+// 链路趋势缓冲（WS 实时累积 + 初值 seed，近 10 分钟）
+interface TrendSeries { name: string; color: string; points: Array<[number, number | null]> }
+const trendBuffer: Record<number, TrendSeries> = {}
+
+// ---------- 数据加载 ----------
+async function loadOverview() {
+  const o = await getEnc<{
+    kpi: Kpi; links: LinkSnap[]; devices: DeviceSnap[]
+  }>('/dashboard/overview')
+  kpi.value = o.kpi
+  links.value = o.links
+  devices.value = o.devices
+  now.value = Date.now()
 }
+
+async function loadTraffic() {
+  const list = await getEnc<TrafficItem[]>('/dashboard/traffic')
+  trafficData.value = list
+}
+
+async function loadAlerts() {
+  const r = await getEnc<{ total: number; list: AlertItem[] }>('/alert/events?page=1&size=8&acked=false')
+  alertTotal.value = r.total
+  alerts.value = r.list
+  now.value = Date.now()
+}
+
+async function seedTrends() {
+  try {
+    const o = await getEnc<{ series: Array<{ name: string; color: string; points: number[][] }> }>('/dashboard/link-trends')
+    const taskList = await getEnc<Array<{ id: number; name: string; color: string }>>('/linkdetect/tasks')
+    const idByName: Record<string, number> = {}
+    for (const t of taskList) idByName[t.name] = t.id
+    for (const s of o.series) {
+      const tid = idByName[s.name] ?? 0
+      trendBuffer[tid] = {
+        name: s.name, color: s.color,
+        points: s.points.map((p) => [p[0], p[1] > 0 ? p[1] : null] as [number, number | null])
+      }
+    }
+  } catch (e) { console.error('seedTrends', e) }
+}
+
+function pushTrendPoint(taskId: number, name: string, color: string, rtMs: number | null) {
+  const nowMs = Date.now()
+  const cutoff = nowMs - 10 * 60 * 1000
+  const buf = trendBuffer[taskId] ?? { name, color, points: [] as Array<[number, number | null]> }
+  buf.name = name || buf.name
+  buf.color = color || buf.color
+  const hist = buf.points.filter((p) => p[0] > cutoff)
+  const last = hist[hist.length - 1]
+  if (!last || nowMs - last[0] > 2000) hist.push([nowMs, rtMs])
+  else last[1] = rtMs
+  buf.points = hist
+  trendBuffer[taskId] = buf
+}
+
+// ---------- 图表渲染（全新标准配置） ----------
+function axisTooltip() {
+  return {
+    trigger: 'axis' as const,
+    confine: true,
+    // 禁用画布轴指针：hover 只在 tooltip DOM 上显示，不触发画布重绘（图表稳定不闪烁）
+    axisPointer: { type: 'none' as const },
+    backgroundColor: cssVar('--np-card-bg', '#ffffff'),
+    borderColor: cssVar('--np-border', '#e3e5e8'),
+    textStyle: { color: cssVar('--np-monitor-text', '#39424f'), fontSize: 12 }
+  }
+}
+
+function renderTrends() {
+  if (!trendRef.value) return
+  trendChart ??= echarts.init(trendRef.value)
+  const ca = chartAxisColors()
+  const nowMs = Date.now()
+  const startMs = nowMs - 10 * 60 * 1000
+  const series = Object.values(trendBuffer).map((s) => ({
+    name: s.name,
+    type: 'line' as const,
+    showSymbol: false,
+    smooth: true,
+    animation: false,
+    lineStyle: { width: 2, color: s.color || cssVar('--np-primary', '#d95f1f') },
+    itemStyle: { color: s.color || cssVar('--np-primary', '#d95f1f') },
+    areaStyle: { opacity: 0.1 },
+    data: s.points
+  }))
+  const option = {
+    backgroundColor: 'transparent',
+    tooltip: axisTooltip(),
+    legend: { textStyle: { color: ca.axis }, top: 0 },
+    grid: { left: 48, right: 16, top: 30, bottom: 22 },
+    xAxis: { type: 'time', min: startMs, max: nowMs, axisLine: { lineStyle: { color: ca.axisLine } } },
+    yAxis: { type: 'value', name: 'ms', min: 0, splitLine: { lineStyle: { color: ca.split } } },
+    series
+  }
+  // 系列数变化才全量重建，否则 merge 增量更新（不打断交互）
+  if (series.length !== lastTrendCount) {
+    trendChart.setOption(option, true)
+    lastTrendCount = series.length
+  } else {
+    trendChart.setOption(option)
+  }
+}
+let lastTrendCount = 0
+
+// 速率自适应短格式：>=1Mbps 显示 M，>=1Kbps 显示 K，否则 B
+function fmtShortBps(v: number): string {
+  if (!v || v <= 0) return '0'
+  if (v >= 1e6) return (v / 1e6).toFixed(2) + 'M'
+  if (v >= 1e3) return (v / 1e3).toFixed(1) + 'K'
+  return v.toFixed(0)
+}
+
+function renderTraffic() {
+  if (!trafficRef.value) return
+  trafficChart ??= echarts.init(trafficRef.value)
+  const ca = chartAxisColors()
+  trafficChart.setOption({
+    backgroundColor: 'transparent',
+    tooltip: axisTooltip(),
+    legend: { textStyle: { color: ca.axis }, top: 0 },
+    grid: { left: 68, right: 14, top: 30, bottom: 22 },
+    xAxis: { type: 'category', data: trafficData.value.map((x) => x.name), axisLabel: { color: ca.axis, interval: 0, rotate: 0, margin: 8 } },
+    yAxis: {
+      type: 'value', name: 'bps', min: 0,
+      // 小流量时 y 轴刻度自动放大（0.01~几十 Kbps 也能看清）
+      axisLabel: { color: ca.axis, formatter: (v: number) => fmtShortBps(v) },
+      splitLine: { lineStyle: { color: ca.split } }
+    },
+    series: [
+      {
+        name: t('traffic.in'),
+        type: 'bar',
+        barWidth: 12,
+        animation: false,
+        label: { show: true, position: 'top', color: ca.axis, fontSize: 10, formatter: fmtShortBps },
+        itemStyle: { color: cssVar('--np-info', '#3a6fb0'), borderRadius: [3, 3, 0, 0] },
+        data: trafficData.value.map((x) => x.in_bps)
+      },
+      {
+        name: t('traffic.out'),
+        type: 'bar',
+        barWidth: 12,
+        animation: false,
+        label: { show: true, position: 'top', color: ca.axis, fontSize: 10, formatter: fmtShortBps },
+        itemStyle: { color: cssVar('--np-warning', '#b5893a'), borderRadius: [3, 3, 0, 0] },
+        data: trafficData.value.map((x) => x.out_bps)
+      }
+    ]
+  })
+}
+
+function renderServer() {
+  if (!srvRef.value) return
+  srvChart ??= echarts.init(srvRef.value)
+  const ca = chartAxisColors()
+  const cpuColor = cssVar('--np-primary', '#d95f1f')
+  const memColor = cssVar('--np-success', '#3f9e63')
+  srvChart.setOption({
+    backgroundColor: 'transparent',
+    tooltip: axisTooltip(),
+    legend: { textStyle: { color: ca.axis }, top: 0 },
+    grid: { left: 48, right: 14, top: 30, bottom: 40 },
+    xAxis: { type: 'category', data: devices.value.map((d) => d.name), axisLabel: { color: ca.axis, interval: 0, rotate: 0, margin: 8 } },
+    yAxis: { type: 'value', max: 100, axisLabel: { color: ca.axis, formatter: '{value}%' }, splitLine: { lineStyle: { color: ca.split } } },
+    series: [
+      {
+        name: t('dashboard.cpuUsage'),
+        type: 'bar',
+        barWidth: 12,
+        animation: false,
+        label: { show: true, position: 'top', color: ca.axis, fontSize: 10, formatter: '{c}%' },
+        itemStyle: { color: cpuColor, borderRadius: [3, 3, 0, 0] },
+        data: devices.value.map((d) => d.cpu)
+      },
+      {
+        name: t('dashboard.memUsage'),
+        type: 'bar',
+        barWidth: 12,
+        animation: false,
+        label: { show: true, position: 'top', color: ca.axis, fontSize: 10, formatter: '{c}%' },
+        itemStyle: { color: memColor, borderRadius: [3, 3, 0, 0] },
+        data: devices.value.map((d) => d.mem_used)
+      }
+    ]
+  })
+}
+
+// ---------- 派生展示值 ----------
+function linkRate(): string {
+  const k = kpi.value
+  if (!k || !k.link_total) return '--'
+  return `${Math.round((k.link_up / k.link_total) * 100)}%`
+}
+function liveIn(): string {
+  return trafficData.value.length ? fmtShortBps(trafficData.value[0].in_bps) : '--'
+}
+function liveOut(): string {
+  return trafficData.value.length ? fmtShortBps(trafficData.value[0].out_bps) : '--'
+}
+function lineRateStr(): string {
+  const r = trafficData.value[0]
+  return r && r.line_rate ? `${r.line_rate} Mbps` : '--'
+}
+function alertLevelClass(level: string): string {
+  return level === 'critical' ? 'critical' : level === 'warning' ? 'warning' : 'info'
+}
+function alertLevelText(level: string): string {
+  if (level === 'critical') return t('alert.critical')
+  if (level === 'warning') return t('alert.warning')
+  return t('alert.info')
+}
+function alertTime(ts: string): string {
+  if (!ts) return ''
+  const d = new Date(ts)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+// ---------- WS / 定时刷新 ----------
 function wsLoadOverview() {
   if (wsLoadTimer) return
   wsLoadTimer = window.setTimeout(() => {
     wsLoadTimer = null
-    void loadOverview().then(() => { renderHealth(); renderDb(); renderGauge() }).catch(() => {})
+    void loadOverview().then(() => { renderServer() }).catch(() => {})
   }, 2000)
 }
 function wsLoadTraffic() {
@@ -95,325 +285,22 @@ function wsLoadTraffic() {
   }, 2000)
 }
 
-// 链路趋势本地缓冲（WebSocket 实时累积，与链路页面一致）
-interface TrendSeries { name: string; color: string; points: Array<[number, number | null]> }
-const trendBuffer: Record<number, TrendSeries & { taskId: number }> = {}
-
-async function loadOverview() {
-  const o = await getEnc<Overview>('/dashboard/overview')
-  kpi.value = o.kpi
-  links.value = o.links as unknown as Snapshot[]
-  devices.value = o.devices
-  dbs.value = o.dbs as unknown as Snapshot[]
-  try {
-    const self = await getEnc('/distributed/self')
-    deployMode.value = (self as any).deploy_mode || 'standalone'
-    if (deployMode.value === 'distributed') {
-      nodeHealth.value = await getEnc('/distributed/health')
-    }
-  } catch {}
-  now.value = Date.now()
-}
-
-function renderCharts() {
-  renderTrends()
-  renderHealth()
-  renderTraffic()
-  renderDb()
-  renderGauge()
-}
-
-async function seedTrends() {
-  try {
-    const o = await getEnc<{
-      series: Array<{ name: string; color: string; points: number[][] }>
-    }>('/dashboard/link-trends')
-    const taskList = await getEnc<Array<{ id: number; name: string; color: string }>>('/linkdetect/tasks')
-    const idByName: Record<string, number> = {}
-    for (const t of taskList) idByName[t.name] = t.id
-    for (const s of o.series) {
-      const tid = idByName[s.name] || 0
-      trendBuffer[tid] = {
-        taskId: tid, name: s.name, color: s.color,
-        points: s.points.map((p: number[]) => [p[0], p[1] > 0 ? p[1] : null] as [number, number | null])
-      }
-    }
-  } catch (e) { console.error('seedTrends', e) }
-}
-
-function pushTrendPoint(taskId: number, name: string, color: string, rtMs: number | null) {
-  const now = Date.now()
-  const cutoff = now - 10 * 60 * 1000
-  if (!trendBuffer[taskId]) {
-    trendBuffer[taskId] = { taskId, name, color, points: [] }
-  }
-  const buf = trendBuffer[taskId]
-  buf.color = color || buf.color
-  buf.name = name || buf.name
-  const hist = buf.points.filter((p) => p[0] > cutoff)
-  const last = hist[hist.length - 1]
-  if (!last || now - last[0] > 2000) hist.push([now, rtMs])
-  else last[1] = rtMs
-  buf.points = hist
-}
-
-async function renderTrends() {
-  if (!trendRef.value) return
-  if (hoverPaused) return // 悬停期间不重绘
-  trendChart ??= echarts.init(trendRef.value)
-  const ca = chartAxisColors()
-  const nowMs = Date.now()
-  const startMs = nowMs - 10 * 60 * 1000
-  const series = Object.values(trendBuffer).map((s) => ({
-    name: s.name,
-    type: 'line' as const,
-    showSymbol: false,
-    smooth: true,
-    animation: false, // 实时折线：关闭重绘动画，避免 hover 时曲线重放消失/闪烁
-    lineStyle: { width: 2, color: s.color || cssVar('--np-primary', '#d95f1f') },
-    itemStyle: { color: s.color || cssVar('--np-primary', '#d95f1f') },
-    areaStyle: { opacity: 0.12 },
-    connectNulls: false,
-    data: s.points
-  }))
-  const option = {
-    backgroundColor: 'transparent',
-    // 复用历史图表 tooltip 修复：固定右上角 + 禁用画布轴指针（hover 不触发画布重绘，避免曲线/柱子消失）
-    tooltip: histTooltip({ digits: 1, suffix: ' ms' }),
-    legend: { textStyle: { color: ca.axis }, top: 0 },
-    grid: { left: 50, right: 16, top: 32, bottom: 24 },
-    xAxis: { type: 'time', min: startMs, max: nowMs, axisLine: { lineStyle: { color: ca.axisLine } } },
-    yAxis: { type: 'value', name: 'ms', min: 0, splitLine: { lineStyle: { color: ca.split } } },
-    series
-  }
-  // 系列数量变化时全量重建（新增/删除链路）；否则 merge 增量更新，避免重绘打断 tooltip
-  if (series.length !== lastTrendSeriesCount) {
-    trendChart.setOption(option, true)
-    lastTrendSeriesCount = series.length
-  } else {
-    trendChart.setOption(option)
-  }
-}
-let lastTrendSeriesCount = 0
-
-let lastHealthSig = ''
-function renderHealth() {
-  if (!healthRef.value) return
-  if (hoverPaused) return // 悬停期间不重绘
-  healthChart ??= echarts.init(healthRef.value)
-  // 数据无变化不重绘（WS/定时器高频触发时避免重绘动画打断 hover）
-  const sig = JSON.stringify([devices.value.map((d) => d.name), devices.value.map((d) => d.cpu), devices.value.map((d) => d.mem_used)])
-  if (sig === lastHealthSig) return
-  lastHealthSig = sig
-  const ca = chartAxisColors()
-  healthChart.setOption({
-    backgroundColor: 'transparent',
-    // 固定右上角 + 禁用画布轴指针：hover 不触发画布重绘，柱子稳定不消失
-    tooltip: histTooltip({ digits: 1, suffix: '%' }),
-    legend: { textStyle: { color: ca.axis }, top: 0 },
-    grid: { left: 50, right: 16, top: 32, bottom: 40 },
-    xAxis: { type: 'category', data: devices.value.map((d) => d.name), axisLabel: { color: ca.axis, interval: 0, rotate: 0, margin: 8 } },
-    yAxis: { type: 'value', max: 100, splitLine: { lineStyle: { color: ca.split } } },
-    series: [
-      {
-        name: 'CPU %',
-        type: 'bar',
-        barWidth: 12,
-        animation: false,
-        // 柱子顶部显示数值：CPU 低占用时柱子贴底也能看清真实值（如 6%）
-        label: { show: true, position: 'top', color: ca.axis, fontSize: 10, formatter: '{c}%' },
-        itemStyle: { color: cssVar('--np-primary', '#d95f1f'), borderRadius: [3, 3, 0, 0] },
-        data: devices.value.map((d) => d.cpu)
-      },
-      {
-        name: 'MEM %',
-        type: 'bar',
-        barWidth: 12,
-        animation: false,
-        label: { show: true, position: 'top', color: ca.axis, fontSize: 10, formatter: '{c}%' },
-        itemStyle: { color: cssVar('--np-success', '#3f9e63'), borderRadius: [3, 3, 0, 0] },
-        data: devices.value.map((d) => d.mem_used)
-      }
-    ]
-  })
-}
-
-let lastTrafficSig = ''
-function renderTraffic() {
-  if (!trafficRef.value) return
-  if (hoverPaused) return // 悬停期间不重绘
-  trafficChart ??= echarts.init(trafficRef.value)
-  // 数据无变化不重绘（WS if_rate 高频触发时避免重绘动画打断 hover）
-  const sig = JSON.stringify([trafficData.value.map((x) => x.name), trafficData.value.map((x) => x.in_bps), trafficData.value.map((x) => x.out_bps)])
-  if (sig === lastTrafficSig) return
-  lastTrafficSig = sig
-  const ca = chartAxisColors()
-  trafficChart.setOption({
-    backgroundColor: 'transparent',
-    // 固定右上角 + 禁用画布轴指针；值按 Mbps 换算显示
-    tooltip: histTooltip({ fmt: (v: number) => (v / 1e6).toFixed(2) + ' Mbps' }),
-    legend: { textStyle: { color: ca.axis }, top: 0 },
-    grid: { left: 70, right: 16, top: 32, bottom: 24 },
-    xAxis: { type: 'category', data: trafficData.value.map((x) => x.name), axisLabel: { color: ca.axis } },
-    yAxis: {
-      type: 'value',
-      name: 'Mbps',
-      splitNumber: 3, // 小流量时避免刻度过密（0.00-0.06 只显示 3 段）
-      // 小流量(<1Mbps)保留两位小数，避免所有刻度取整后显示为 0
-      axisLabel: { color: ca.axis, formatter: (v: number) => (v / 1e6 >= 1 ? (v / 1e6).toFixed(0) : (v / 1e6).toFixed(2)) },
-      splitLine: { lineStyle: { color: ca.split } }
-    },
-    series: [
-      {
-        name: t('traffic.in'),
-        type: 'bar',
-        barWidth: 10,
-        animation: false,
-        // 柱子顶部显示实时速率（自适应单位），低流量也能看清真实数值
-        label: { show: true, position: 'top', color: ca.axis, fontSize: 10, formatter: fmtShortBps },
-        itemStyle: { color: cssVar('--np-info', '#3a6fb0'), borderRadius: [3,3,0,0] },
-        data: trafficData.value.map((x) => x.in_bps)
-      },
-      {
-        name: t('traffic.out'),
-        type: 'bar',
-        barWidth: 10,
-        animation: false,
-        label: { show: true, position: 'top', color: ca.axis, fontSize: 10, formatter: fmtShortBps },
-        itemStyle: { color: cssVar('--np-warning', '#b5893a'), borderRadius: [3,3,0,0] },
-        data: trafficData.value.map((x) => x.out_bps)
-      }
-    ]
-  })
-}
-
-const trafficData = ref<Array<{ name: string; in_bps: number; out_bps: number }>>([])
-
-// 速率自适应短格式：>=1Mbps 显示 M，>=1Kbps 显示 K，否则 B
-function fmtShortBps(v: number): string {
-  if (!v || v <= 0) return '0'
-  if (v >= 1e6) return (v / 1e6).toFixed(2) + 'M'
-  if (v >= 1e3) return (v / 1e3).toFixed(1) + 'K'
-  return v.toFixed(0)
-}
-
-async function loadTraffic() {
-  const list = await getEnc<Array<{ name: string; in_bps: number; out_bps: number }>>('/dashboard/traffic')
-  trafficData.value = list
-  if (trafficChart) renderTraffic()
-}
-
-let lastDbSig = ''
-function renderDb() {
-  if (!dbRef.value) return
-  if (hoverPaused) return // 悬停期间不重绘
-  dbChart ??= echarts.init(dbRef.value)
-  // 数据无变化不重绘（按在线状态签名）
-  const sig = JSON.stringify([dbs.value.map((d) => d.name), dbs.value.map((d) => !!d.up)])
-  if (sig === lastDbSig) return
-  lastDbSig = sig
-  const ca = chartAxisColors()
-  // 数据库健康 = 实例在线状态（在线1/离线0），不再显示连接数
-  const okColor = cssVar('--np-success', '#3f9e63')
-  const badColor = cssVar('--np-danger', '#c0503d')
-  dbChart.setOption({
-    backgroundColor: 'transparent',
-    // 跟随鼠标显示（position:null），避免固定右上角压住柱子顶部；仍禁用画布轴指针不触发重绘
-    tooltip: histTooltip({ digits: 0, suffix: '', position: null, fmt: (v: number) => (v === 1 ? t('dbmon.running') : t('dbmon.down')) }),
-    legend: { textStyle: { color: ca.axis }, top: 0 },
-    grid: { left: 50, right: 16, top: 32, bottom: 40 },
-    xAxis: { type: 'category', data: dbs.value.map((d) => d.name), axisLabel: { color: ca.axis, interval: 0, rotate: 0, margin: 8 } },
-    yAxis: { type: 'value', min: 0, max: 1, interval: 1, splitLine: { lineStyle: { color: ca.split } } },
-    series: [
-      {
-        name: t('dbmon.running'),
-        type: 'bar',
-        barWidth: 24,
-        animation: false,
-        label: {
-          show: true, position: 'top', color: ca.axis, fontSize: 11,
-          formatter: (p: { value: number }) => (p.value === 1 ? t('dbmon.running') : t('dbmon.down'))
-        },
-        data: dbs.value.map((d) => ({
-          value: d.up ? 1 : 0,
-          itemStyle: { color: d.up ? okColor : badColor, borderRadius: [3, 3, 0, 0] }
-        }))
-      }
-    ]
-  })
-}
-
-// 仪表盘：平均CPU/内存
-const avgCpu = computed(() => {
-  if (!devices.value.length) return 0
-  return Math.round(devices.value.reduce((s, d) => s + (d.cpu || 0), 0) / devices.value.length)
-})
-const avgMem = computed(() => {
-  if (!devices.value.length) return 0
-  return Math.round(devices.value.reduce((s, d) => s + (d.mem_used || 0), 0) / devices.value.length)
-})
-
-let lastGaugeSig = ''
-function renderGauge() {
-  if (!gaugeRef.value) return
-  if (hoverPaused) return // 悬停期间不重绘
-  gaugeChart ??= echarts.init(gaugeRef.value)
-  // 数值无变化不重绘
-  const sig = `${avgCpu.value}|${avgMem.value}`
-  if (sig === lastGaugeSig) return
-  lastGaugeSig = sig
-  const ca = chartAxisColors()
-  gaugeChart.setOption({
-    backgroundColor: 'transparent',
-    series: [
-      {
-        type: 'gauge',
-        center: ['50%', '60%'],
-        radius: '90%',
-        min: 0, max: 100,
-        startAngle: 200, endAngle: -20,
-        progress: { show: true, width: 10 },
-        axisLine: { lineStyle: { width: 10, color: [
-          [0.6, cssVar('--np-success', '#3f9e63')],
-          [0.85, cssVar('--np-warning', '#b5893a')],
-          [1, cssVar('--np-danger', '#c0503d')]
-        ] } },
-        axisTick: { show: false },
-        splitLine: { show: false },
-        axisLabel: { show: false },
-        pointer: { show: true, length: '60%', width: 4 },
-        detail: { valueAnimation: true, formatter: '{value}%', color: cssVar('--np-text-1', '#39424f'), fontSize: 22, offsetCenter: [0, '30%'] },
-        title: { offsetCenter: [0, '60%'], color: ca.axis, fontSize: 12 },
-        data: [{ value: avgCpu.value, name: t('dashboard.cpuAvg') }]
-      }
-    ]
-  })
-}
-
-// 主题切换时重绘图表（ECharts canvas 不感知 CSS 变量变化）
 watch(() => appStore.theme, () => {
-  nextTick(() => renderCharts())
+  nextTick(() => { renderTrends(); renderTraffic(); renderServer() })
 })
 
 onMounted(async () => {
   await nextTick()
-  // 悬停暂停：鼠标进入图表容器期间冻结刷新
-  bindHoverPause(trendRef.value)
-  bindHoverPause(healthRef.value)
-  bindHoverPause(trafficRef.value)
-  bindHoverPause(dbRef.value)
-  bindHoverPause(gaugeRef.value)
   try { await loadOverview() } catch (e) { console.error('overview', e) }
   try { await loadTraffic() } catch (e) { console.error('traffic', e) }
-  if (trendRef.value) { trendChart?.dispose(); trendChart = echarts.init(trendRef.value) }
-  if (healthRef.value) { healthChart?.dispose(); healthChart = echarts.init(healthRef.value) }
+  try { await loadAlerts() } catch (e) { console.error('alerts', e) }
   if (trafficRef.value) { trafficChart?.dispose(); trafficChart = echarts.init(trafficRef.value) }
-  if (dbRef.value) { dbChart?.dispose(); dbChart = echarts.init(dbRef.value) }
-  if (gaugeRef.value) { gaugeChart?.dispose(); gaugeChart = echarts.init(gaugeRef.value) }
-  renderHealth(); renderDb(); renderTraffic(); renderGauge()
+  if (srvRef.value) { srvChart?.dispose(); srvChart = echarts.init(srvRef.value) }
+  renderTraffic(); renderServer()
   try { await seedTrends() } catch (e) { console.error('seedTrends', e) }
+  if (trendRef.value) { trendChart?.dispose(); trendChart = echarts.init(trendRef.value) }
   renderTrends()
-  setTimeout(() => { trendChart?.resize(); healthChart?.resize(); trafficChart?.resize(); dbChart?.resize(); gaugeChart?.resize() }, 100)
+  setTimeout(() => { trendChart?.resize(); trafficChart?.resize(); srvChart?.resize() }, 100)
   window.addEventListener('resize', onResize)
   try {
     ws = new WSClient(['dashboard', 'linkdetect', 'monitor', 'traffic'])
@@ -435,12 +322,13 @@ onMounted(async () => {
     ws.connect()
   } catch (e) { console.error('ws', e) }
   timer = window.setInterval(() => {
-    void loadOverview().then(() => { renderHealth(); renderDb(); renderGauge() }).catch(() => {})
+    void loadOverview().then(() => renderServer()).catch(() => {})
     void loadTraffic().then(() => renderTraffic()).catch(() => {})
+    void loadAlerts().catch(() => {})
   }, 10000)
 })
 
-function onResize() { trendChart?.resize(); healthChart?.resize(); trafficChart?.resize(); dbChart?.resize(); gaugeChart?.resize() }
+function onResize() { trendChart?.resize(); trafficChart?.resize(); srvChart?.resize() }
 
 onBeforeUnmount(() => {
   ws?.close()
@@ -449,326 +337,376 @@ onBeforeUnmount(() => {
   if (wsTrafficTimer) window.clearTimeout(wsTrafficTimer)
   window.removeEventListener('resize', onResize)
   trendChart?.dispose()
-  healthChart?.dispose()
   trafficChart?.dispose()
-  dbChart?.dispose()
-  gaugeChart?.dispose()
+  srvChart?.dispose()
 })
-
-function kpiCards() {
-  const k = kpi.value
-  if (!k) return []
-  return [
-    { label: t('dashboard.linkTotal'), value: k.link_total, sub: `${t('dashboard.linkUp')} ${k.link_up} · ${t('dashboard.linkDown')} ${k.link_down}`, color: cssVar('--np-primary', '#d95f1f'), icon: 'Link', go: '/linkdetect' },
-    { label: t('dashboard.deviceTotal'), value: k.device_total, sub: `${t('dashboard.deviceOnline')} ${k.device_online} · ${t('dashboard.deviceOffline')} ${k.device_offline}`, color: cssVar('--np-success', '#3f9e63'), icon: 'Monitor', go: '/monitor' },
-    { label: t('dashboard.dbTotal'), value: k.db_total, sub: `${t('dashboard.dbUp')} ${k.db_up} · ${t('dashboard.dbDown')} ${k.db_down}`, color: cssVar('--np-info', '#3a6fb0'), icon: 'Coin', go: '/dbmon' },
-    { label: t('dashboard.userTotal'), value: k.user_total, sub: `${t('dashboard.ipUsed')} ${k.ip_used}`, color: cssVar('--np-warning', '#b5893a'), icon: 'User', go: '/ipam' }
-  ]
-}
 </script>
 
 <template>
-  <div class="np-monitor-screen">
-    <!-- 顶部栏：标题 + 返回按钮 -->
-    <div class="np-screen-topbar">
-      <div class="np-screen-title">
-        <span class="np-title-tick"></span>
-        {{ t('nav.dashboard') }}
+  <div class="np-screen">
+    <!-- 顶部栏 -->
+    <div class="np-topbar">
+      <div class="np-brand">
+        <span class="np-brand-mark"></span>
+        <span class="np-brand-title">NETOPS {{ t('dashboard.entry') }}</span>
+        <span class="np-brand-sub">{{ t('dashboard.realtimeStatus') }}</span>
       </div>
-      <el-button type="primary" size="small" @click="router.push('/linkdetect')">
-        {{ t('dashboard.backToAdmin') || '返回管理界面' }}
-      </el-button>
+      <div class="np-top-right">
+        <span class="np-clock">{{ fmtTime(now) }}</span>
+        <el-button size="small" plain @click="router.push('/linkdetect')">
+          {{ t('dashboard.backToAdmin') }}
+        </el-button>
+      </div>
     </div>
 
-    <!-- KPI 卡片 -->
-    <div class="np-kpi-grid">
-      <div v-for="c in kpiCards()" :key="c.label" class="np-kpi-card" :style="{ '--accent': c.color }" @click="c.go && router.push(c.go)">
-        <span class="np-kpi-icon">
-          <el-icon><component :is="c.icon" /></el-icon>
-        </span>
-        <div class="np-kpi-card-body">
-          <div class="np-kpi-value">{{ c.value }}</div>
-          <div class="np-kpi-label">{{ c.label }}</div>
-          <div class="np-kpi-sub">{{ c.sub }}</div>
+    <!-- KPI 带：链路 / 专线 / 服务器 / 告警 -->
+    <div class="np-kpis">
+      <div class="np-kpi np-kpi-link">
+        <div class="np-kpi-head">
+          <span class="np-kpi-icon np-ic-link"></span>{{ t('dashboard.linkDetect') }}
+        </div>
+        <div class="np-kpi-main">
+          <span class="np-kpi-big">{{ linkRate() }}</span>
+          <span class="np-kpi-unit">{{ t('dashboard.linkOnlineRate') }}</span>
+        </div>
+        <div class="np-kpi-sub">
+          {{ t('dashboard.linkUp') }} <b>{{ kpi?.link_up ?? '--' }}</b>
+          <span class="np-sep">·</span>
+          {{ t('dashboard.linkDown') }} <b>{{ kpi?.link_down ?? '--' }}</b>
         </div>
       </div>
-    </div>
 
-    <NodeHealth :data="nodeHealth" />
-
-    <!-- 链路实时趋势 -->
-    <div class="np-screen-card np-full">
-      <div class="np-screen-title">{{ t('dashboard.linkTrends') }}（10分钟）</div>
-      <div ref="trendRef" class="np-chart" style="height: 260px"></div>
-    </div>
-
-    <div class="np-grid-2">
-      <!-- 设备健康 -->
-      <div class="np-screen-card">
-        <div class="np-screen-title">{{ t('dashboard.deviceHealth') }}</div>
-        <div ref="healthRef" class="np-chart" style="height: 240px"></div>
-      </div>
-      <!-- 专线流量 -->
-      <div class="np-screen-card">
-        <div class="np-screen-title">{{ t('dashboard.traffic') }}</div>
-        <div ref="trafficRef" class="np-chart" style="height: 240px"></div>
-      </div>
-    </div>
-
-    <div class="np-grid-2">
-      <!-- 数据库健康 -->
-      <div class="np-screen-card">
-        <div class="np-screen-title">{{ t('dashboard.dbHealth') }}</div>
-        <div ref="dbRef" class="np-chart" style="height: 240px"></div>
-      </div>
-      <!-- 实时状态 -->
-      <div class="np-screen-card np-realtime">
-        <div class="np-screen-title">
-          <span class="np-live-dot"></span>
-          {{ t('dashboard.realtimeStatus') }}
+      <div class="np-kpi np-kpi-traffic">
+        <div class="np-kpi-head">
+          <span class="np-kpi-icon np-ic-traffic"></span>{{ t('dashboard.traffic') }}
         </div>
-        <div class="np-realtime-body">
-          <div class="np-gauge-wrap">
-            <div ref="gaugeRef" style="width: 100%; height: 180px"></div>
+        <div class="np-kpi-main np-kpi-main-duo">
+          <div class="np-duo">
+            <span class="np-duo-tag up">▲ {{ t('traffic.in') }}</span>
+            <span class="np-duo-val">{{ liveIn() }}</span>
           </div>
-          <div class="np-status-rows">
-            <div class="np-status-row" v-for="l in links.slice(0, 6)" :key="String(l.name)">
-              <span class="np-dot" :class="l.up ? 'up' : 'down'"></span>
-              <span class="np-status-name">{{ l.name }}</span>
-              <span class="np-status-val">{{ l.rt_ms != null ? `${Number(l.rt_ms).toFixed(1)}ms` : '--' }}</span>
-              <span class="np-status-loss" :class="{bad: Number(l.loss_pct) > 0}">{{ l.loss_pct != null ? `${Number(l.loss_pct).toFixed(0)}%` : '' }}</span>
-            </div>
-            <div v-if="!links.length" class="np-empty">{{ t('common.noData') }}</div>
+          <div class="np-duo">
+            <span class="np-duo-tag down">▼ {{ t('traffic.out') }}</span>
+            <span class="np-duo-val">{{ liveOut() }}</span>
           </div>
         </div>
-        <div class="np-screen-time">{{ t('dashboard.updatedAt') }} {{ fmtTime(now) }}</div>
+        <div class="np-kpi-sub">{{ t('dashboard.lineBandwidth') }} {{ lineRateStr() }}</div>
+      </div>
+
+      <div class="np-kpi np-kpi-srv">
+        <div class="np-kpi-head">
+          <span class="np-kpi-icon np-ic-srv"></span>{{ t('dashboard.serverUsage') }}
+        </div>
+        <div class="np-kpi-main">
+          <span class="np-kpi-big">{{ kpi?.device_online ?? '--' }}</span>
+          <span class="np-kpi-unit">/ {{ kpi?.device_total ?? '--' }}</span>
+        </div>
+        <div class="np-kpi-sub">
+          {{ t('dashboard.serverOnline') }}
+          <b class="np-ok">{{ kpi?.device_online ?? '--' }}</b>
+        </div>
+      </div>
+
+      <div class="np-kpi np-kpi-alert">
+        <div class="np-kpi-head">
+          <span class="np-kpi-icon np-ic-alert"></span>{{ t('dashboard.activeAlerts') }}
+        </div>
+        <div class="np-kpi-main">
+          <span class="np-kpi-big" :class="{ 'np-bad': alertTotal > 0 }">{{ alertTotal }}</span>
+        </div>
+        <div class="np-kpi-sub">{{ t('dashboard.recentAlerts') }} · {{ alerts.length }} 条</div>
+      </div>
+    </div>
+
+    <!-- 主体 -->
+    <div class="np-body">
+      <!-- 链路检测（左大卡） -->
+      <div class="np-panel np-panel-link">
+        <div class="np-panel-head">
+          <span class="np-panel-tick"></span>{{ t('dashboard.linkDetect') }}
+          <span class="np-panel-hint">{{ t('dashboard.linkTrends') }} · 10 min</span>
+        </div>
+        <div class="np-link-chips">
+          <div v-for="l in links" :key="l.name" class="np-link-chip" :class="l.up ? 'up' : 'down'">
+            <span class="np-link-dot"></span>
+            <span class="np-link-name">{{ l.name }}</span>
+            <span class="np-link-rt">{{ l.rt_ms != null ? `${Number(l.rt_ms).toFixed(1)}ms` : '--' }}</span>
+            <span class="np-link-loss" :class="{ bad: Number(l.loss_pct) > 0 }">{{ l.loss_pct != null ? `${Number(l.loss_pct).toFixed(0)}%` : '' }}</span>
+          </div>
+          <div v-if="!links.length" class="np-empty">{{ t('common.noData') }}</div>
+        </div>
+        <div ref="trendRef" class="np-chart" style="height: 210px"></div>
+      </div>
+
+      <!-- 专线流量（右上） -->
+      <div class="np-panel np-panel-traffic">
+        <div class="np-panel-head">
+          <span class="np-panel-tick"></span>{{ t('dashboard.traffic') }}
+          <span class="np-panel-hint">{{ t('dashboard.liveRate') }}</span>
+        </div>
+        <div ref="trafficRef" class="np-chart" style="height: 230px"></div>
+      </div>
+
+      <!-- 服务器使用率（右下） -->
+      <div class="np-panel np-panel-srv">
+        <div class="np-panel-head">
+          <span class="np-panel-tick"></span>{{ t('dashboard.serverUsage') }}
+        </div>
+        <div ref="srvRef" class="np-chart" style="height: 230px"></div>
+      </div>
+
+      <!-- 告警（底部通栏） -->
+      <div class="np-panel np-panel-alert">
+        <div class="np-panel-head">
+          <span class="np-panel-tick"></span>{{ t('dashboard.recentAlerts') }}
+          <span class="np-panel-hint" :class="{ 'np-hint-bad': alertTotal > 0 }">
+            {{ t('dashboard.activeAlerts') }} {{ alertTotal }}
+          </span>
+        </div>
+        <div v-if="alerts.length" class="np-alert-list">
+          <div v-for="a in alerts" :key="a.id" class="np-alert-row">
+            <span class="np-alert-level" :class="alertLevelClass(a.level)">{{ alertLevelText(a.level) }}</span>
+            <span class="np-alert-target">{{ a.target }}</span>
+            <span class="np-alert-msg">{{ a.message }}</span>
+            <span v-if="a.count > 1" class="np-alert-count">×{{ a.count }}</span>
+            <span class="np-alert-time">{{ alertTime(a.created_at) }}</span>
+          </div>
+        </div>
+        <div v-else class="np-empty np-empty-alert">{{ t('dashboard.noAlerts') }}</div>
       </div>
     </div>
   </div>
 </template>
 
 <style lang="scss">
-.np-monitor-screen {
-  padding: 18px;
+// ============ 数据大屏 v2 布局 ============
+.np-screen {
+  padding: 18px 20px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
   background: var(--np-monitor-bg);
   min-height: 100%;
 
-  .np-screen-topbar {
+  // ---- 顶部 ----
+  .np-topbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 2px 2px 4px;
-
-    .np-screen-title {
-      color: var(--np-monitor-text);
-      font-size: 20px;
-      font-weight: 700;
-      letter-spacing: -0.01em;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--np-border);
   }
-
-  .np-title-tick {
-    width: 6px;
-    height: 6px;
+  .np-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .np-brand-mark {
+    width: 12px;
+    height: 12px;
     transform: rotate(45deg);
-    border-radius: 1px;
-    background: var(--np-primary);
+    border-radius: 2px;
+    background: linear-gradient(135deg, var(--np-primary), color-mix(in oklch, var(--np-primary) 45%, var(--np-info)));
+    box-shadow: 0 0 10px color-mix(in oklch, var(--np-primary) 50%, transparent);
+  }
+  .np-brand-title {
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    color: var(--np-monitor-text);
+  }
+  .np-brand-sub {
+    font-size: 12px;
+    color: var(--np-text-3);
+    letter-spacing: 0.1em;
+  }
+  .np-top-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .np-clock {
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+    color: var(--np-text-2);
   }
 
-  .np-kpi-grid {
+  // ---- KPI 带 ----
+  .np-kpis {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 14px;
   }
-
-  .np-kpi-card {
+  .np-kpi {
     position: relative;
-    display: flex;
-    align-items: center;
-    gap: 14px;
     background: var(--np-card-bg);
     border: 1px solid var(--np-border);
     border-radius: $radius-lg;
-    padding: 16px 18px;
+    padding: 14px 16px 12px;
     box-shadow: var(--np-shadow-sm);
-    cursor: pointer;
-    transition: border-color 0.2s ease-out, box-shadow 0.2s ease-out, transform 0.2s ease-out;
-
-    // 左侧信号标线（随指标状态色）
+    overflow: hidden;
     &::before {
       content: '';
       position: absolute;
-      left: -1px;
-      top: 14px;
-      bottom: 14px;
-      width: 2px;
-      border-radius: 2px;
-      background: var(--accent, var(--np-primary));
+      inset: 0 0 auto 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--np-primary), color-mix(in oklch, var(--np-primary) 30%, transparent));
     }
-
-    &:hover {
-      border-color: var(--np-border-strong);
-      box-shadow: var(--np-shadow-md);
-      transform: translateY(-1px);
-    }
-
-    .np-kpi-icon {
-      flex: none;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 40px;
-      height: 40px;
-      border-radius: $radius-md;
-      font-size: 20px;
-      color: var(--accent, var(--np-primary));
-      background: color-mix(in oklch, var(--accent, var(--np-primary)) 12%, transparent);
-    }
-
-    .np-kpi-card-body {
-      flex: 1;
-      min-width: 0;
-    }
-
-    .np-kpi-value {
-      font-size: 28px;
-      font-weight: 700;
-      line-height: 1.2;
-      letter-spacing: -0.01em;
-      margin: 2px 0 4px;
-      font-variant-numeric: tabular-nums;
-      color: var(--np-monitor-text);
-    }
-    .np-kpi-label {
-      color: var(--np-text-3);
-      font-size: 11px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-    }
-    .np-kpi-sub {
-      margin-top: 6px;
-      color: var(--np-text-2);
-      font-size: 12px;
-      font-variant-numeric: tabular-nums;
-    }
+    &.np-kpi-traffic::before { background: linear-gradient(90deg, var(--np-info), color-mix(in oklch, var(--np-info) 30%, transparent)); }
+    &.np-kpi-srv::before { background: linear-gradient(90deg, var(--np-success), color-mix(in oklch, var(--np-success) 30%, transparent)); }
+    &.np-kpi-alert::before { background: linear-gradient(90deg, var(--np-danger), color-mix(in oklch, var(--np-danger) 30%, transparent)); }
   }
+  .np-kpi-head {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    color: var(--np-text-2);
+    letter-spacing: 0.06em;
+  }
+  .np-kpi-icon {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    background: color-mix(in oklch, var(--np-primary) 14%, transparent);
+  }
+  .np-kpi-main {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    margin: 6px 0 2px;
+  }
+  .np-kpi-big {
+    font-size: 32px;
+    font-weight: 800;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+    color: var(--np-monitor-text);
+    &.np-bad { color: var(--np-danger); }
+  }
+  .np-kpi-unit {
+    font-size: 13px;
+    color: var(--np-text-3);
+  }
+  .np-kpi-main-duo {
+    display: flex;
+    gap: 20px;
+    margin: 8px 0 2px;
+  }
+  .np-duo {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    .np-duo-tag { font-size: 11px; color: var(--np-text-3); &.up { color: var(--np-info); } &.down { color: var(--np-warning); } }
+    .np-duo-val { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--np-monitor-text); }
+  }
+  .np-kpi-sub {
+    font-size: 12px;
+    color: var(--np-text-2);
+    font-variant-numeric: tabular-nums;
+    b { color: var(--np-monitor-text); }
+    b.np-ok { color: var(--np-success); }
+  }
+  .np-sep { margin: 0 4px; color: var(--np-border-strong); }
 
-  .np-screen-card {
+  // ---- 主体网格 ----
+  .np-body {
+    display: grid;
+    grid-template-columns: 1.35fr 1fr;
+    gap: 14px;
+    .np-panel-link { grid-row: 1 / span 2; }
+  }
+  .np-panel {
     background: var(--np-card-bg);
     border: 1px solid var(--np-border);
     border-radius: $radius-lg;
-    padding: 16px 18px;
+    padding: 14px 16px;
     box-shadow: var(--np-shadow-sm);
-
-    .np-screen-title {
-      color: var(--np-monitor-text);
-      font-size: 14px;
-      font-weight: 600;
-      margin-bottom: 10px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      &::before {
-        content: '';
-        width: 5px;
-        height: 5px;
-        transform: rotate(45deg);
-        border-radius: 1px;
-        background: var(--np-primary);
-      }
-    }
-    .np-screen-time {
-      color: var(--np-text-3);
-      font-size: 12px;
-      text-align: right;
-      margin-top: 8px;
-      font-variant-numeric: tabular-nums;
-    }
+    min-width: 0;
   }
-
-  .np-chart {
-    width: 100%;
-  }
-
-  .np-live-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--np-success);
-    animation: np-pulse 1.5s infinite;
-  }
-
-  .np-grid-2 {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 14px;
-  }
-
-  .np-full {
-    grid-column: 1 / -1;
-  }
-
-  .np-realtime-body {
-    display: flex;
-    gap: 18px;
-    align-items: center;
-  }
-
-  .np-gauge-wrap {
-    flex: 0 0 45%;
-  }
-
-  .np-status-rows {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    max-height: 200px;
-    overflow-y: auto;
-  }
-  .np-status-row {
+  .np-panel-head {
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 13px;
+    font-size: 15px;
+    font-weight: 700;
     color: var(--np-monitor-text);
-    padding: 7px 10px;
+    margin-bottom: 12px;
+    .np-panel-tick {
+      width: 6px; height: 6px; transform: rotate(45deg); border-radius: 1px;
+      background: var(--np-primary);
+    }
+    .np-panel-hint {
+      margin-left: auto;
+      font-size: 12px;
+      font-weight: 400;
+      color: var(--np-text-3);
+      &.np-hint-bad { color: var(--np-danger); }
+    }
+  }
+  .np-chart { width: 100%; }
+
+  // ---- 链路状态 chips ----
+  .np-link-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .np-link-chip {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 10px;
+    border-radius: $radius-md;
+    font-size: 12px;
+    border: 1px solid var(--np-border);
+    background: var(--np-surface-1);
+    &.up { border-color: color-mix(in oklch, var(--np-success) 35%, var(--np-border)); }
+    &.down { border-color: color-mix(in oklch, var(--np-danger) 45%, var(--np-border)); }
+    .np-link-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--np-success); }
+    &.down .np-link-dot { background: var(--np-danger); }
+    .np-link-name { color: var(--np-monitor-text); font-weight: 600; }
+    .np-link-rt { color: var(--np-success); font-variant-numeric: tabular-nums; }
+    &.down .np-link-rt { color: var(--np-danger); }
+    .np-link-loss { color: var(--np-text-3); font-variant-numeric: tabular-nums; &.bad { color: var(--np-danger); } }
+  }
+
+  // ---- 告警列表 ----
+  .np-alert-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+  .np-alert-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
     border-radius: $radius-md;
     background: var(--np-surface-1);
     border: 1px solid var(--np-border);
-    transition: border-color 0.18s ease-out, background-color 0.18s ease-out;
-    &:hover {
-      background: var(--np-hover);
-    }
-    .np-status-name {
-      flex: 1;
-      @include ellipsis;
-    }
-    .np-status-val {
-      width: 76px;
-      text-align: right;
-      color: var(--np-success);
-      font-variant-numeric: tabular-nums;
-    }
-    .np-status-loss {
-      width: 44px;
-      text-align: right;
-      color: var(--np-text-3);
-      font-variant-numeric: tabular-nums;
-      &.bad { color: var(--np-danger); }
-    }
+    font-size: 12px;
+    color: var(--np-monitor-text);
   }
-}
-
-@keyframes np-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+  .np-alert-level {
+    flex: none;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    color: #fff;
+    &.critical { background: var(--np-danger); }
+    &.warning { background: var(--np-warning); }
+    &.info { background: var(--np-info); }
+  }
+  .np-alert-target { flex: none; font-weight: 600; max-width: 180px; @include ellipsis; }
+  .np-alert-msg { flex: 1; color: var(--np-text-2); @include ellipsis; }
+  .np-alert-count { flex: none; color: var(--np-warning); font-weight: 700; }
+  .np-alert-time { flex: none; color: var(--np-text-3); font-variant-numeric: tabular-nums; }
+  .np-empty { color: var(--np-text-3); font-size: 13px; padding: 12px 0; text-align: center; }
+  .np-empty-alert { padding: 24px 0; }
 }
 </style>

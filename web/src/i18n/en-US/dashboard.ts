@@ -10,5 +10,11 @@ export default {
   updatedAt: 'Updated at',
   nodeHealth: 'Distributed Node Health',
   node: 'Nodes', online: 'Online', offline: 'Offline',
-  device: 'Devices', container: 'Containers'
+  device: 'Devices', container: 'Containers',
+  // Dashboard v2: four modules
+  linkDetect: 'Link Detection', serverUsage: 'Server Usage', recentAlerts: 'Recent Alerts',
+  activeAlerts: 'Active Alerts', liveRate: 'Live Rate', latency: 'Latency', loss: 'Loss',
+  cpuUsage: 'CPU Usage', memUsage: 'Memory Usage', lineBandwidth: 'Line Bandwidth',
+  noAlerts: 'No Alerts', serverTotal: 'Servers', serverOnline: 'Servers Online',
+  linkOnlineRate: 'Link Online Rate'
 }
