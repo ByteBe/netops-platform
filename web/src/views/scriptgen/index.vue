@@ -42,8 +42,10 @@ function validMask(s: string): boolean {
   if (!validIP(s)) return false
   const n = s.split('.').reduce((a, x) => (a * 256 + +x) >>> 0, 0) >>> 0
   if (n === 0) return true
-  const ones = 32 - Math.clz32(n)
-  const expect = ((2 ** ones - 1) << (32 - ones)) >>> 0
+  // 数出 n 中 1 的个数（与后端 bits.OnesCount32 一致，不能用 clz32：0xFFFFFF00 最高位为 1 时 clz32 为 0）
+  let ones = 0, t = n
+  while (t) { ones += t & 1; t >>>= 1 }
+  const expect = (0xFFFFFFFF << (32 - ones)) >>> 0
   return n === expect
 }
 const macRe = /^(?:[0-9A-Fa-f]{4}\.){2}[0-9A-Fa-f]{4}$|^(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$/
@@ -108,7 +110,7 @@ async function gen() {
   for (const f of selected.value.fields) {
     if (!visible(f, params.value)) continue
     const err = validateField(f, selected.value.code, params.value[f.key] || '')
-    if (err) { errors.value[f.key] = err; ElMessage.error(`${f.label}：${err}`); return }
+    if (err) { errors.value[f.key] = err; return }
   }
   loading.value = true
   try {
