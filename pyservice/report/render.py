@@ -9,12 +9,6 @@ def _badge(status, color):
             "font-size:12px;font-weight:500;color:#fff;background:%s'>%s</span>" % (color, status))
 
 
-def _fmt(v, dot):
-    if v is None:
-        return "-"
-    return ("%%.%df" % dot) % v
-
-
 def render_link(rows):
     parts = ['<div class="section"><h3>【链路检测汇总】</h3><table><thead><tr>'
              '<th>链路名称</th><th>目标地址</th><th>当前状态</th><th>平均时延</th>'
@@ -24,16 +18,26 @@ def render_link(rows):
                      "<td>%d 次</td><td>%.2f%%</td></tr>" % (
                          r.get("name", ""), r.get("target", ""),
                          _badge(r.get("status", "未知"), r.get("color", "#909399")),
-                         r.get("avg_rt", 0.0), r.get("downs", 0), r.get("avail", 100.0)))
+                         _num(r, "avg_rt", 0.0), int(_num(r, "downs", 0)), _num(r, "avail", 100.0)))
     parts.append("</tbody></table></div>")
     return "".join(parts)
+
+
+# ---- 数值兜底：Go 传入 JSON 可能为 null，统一转 float/int（防御 None） ----
+
+def _num(r, key, default):
+    v = r.get(key)
+    try:
+        return float(v) if v is not None else float(default)
+    except (TypeError, ValueError):
+        return float(default)
 
 
 def render_dev(rows):
     parts = ['<div class="section"><h3>【服务器资源使用汇总】</h3><table><thead><tr>'
              '<th>设备</th><th>IP</th><th>状态</th><th>CPU(均值)</th><th>内存使用(均值)</th></tr></thead><tbody>']
     for r in rows:
-        cpu = r.get("cpu", 0.0)
+        cpu = _num(r, "cpu", 0.0)
         cpu_color = "#52c41a"
         if cpu > 80:
             cpu_color = "#f5222d"
@@ -43,7 +47,7 @@ def render_dev(rows):
                      "<td style='color:%s'>%.1f%%</td><td>%.1f%%</td></tr>" % (
                          r.get("name", ""), r.get("ip", ""),
                          _badge(r.get("status", "离线"), r.get("color", "#f5222d")),
-                         cpu_color, cpu, r.get("mem", 0.0)))
+                         cpu_color, cpu, _num(r, "mem", 0.0)))
     parts.append("</tbody></table></div>")
     return "".join(parts)
 
@@ -55,7 +59,7 @@ def render_db(rows):
         parts.append("<tr><td><b>%s</b></td><td>%s</td><td>%s</td><td>%.0f</td><td>%.0f</td></tr>" % (
             r.get("name", ""), r.get("type", ""),
             _badge(r.get("status", "异常"), r.get("color", "#f5222d")),
-            r.get("conns", 0.0), r.get("errors", 0.0)))
+            _num(r, "conns", 0.0), _num(r, "errors", 0.0)))
     parts.append("</tbody></table></div>")
     return "".join(parts)
 
@@ -72,7 +76,7 @@ def render_nginx(rows):
                          "<td>%.0f</td><td>%.1f</td></tr>" % (
                              r.get("name", ""), r.get("status_url", ""),
                              _badge("正常", "#52c41a"),
-                             r.get("active_conns", 0.0), r.get("requests", 0.0), r.get("qps", 0.0)))
+                             _num(r, "active_conns", 0.0), _num(r, "requests", 0.0), _num(r, "qps", 0.0)))
         else:
             parts.append("<tr><td><b>%s</b></td><td>%s</td><td>%s</td>"
                          "<td colspan='3' style='text-align:center;color:#999'>未采集</td></tr>" % (
@@ -103,11 +107,11 @@ def render_node(rows):
              '<th>容器数</th><th>最后上报</th></tr></thead><tbody>']
     for r in rows:
         color = "#52c41a" if r.get("status") == "online" else "#f5222d"
-        badge = "在线" if r.get("status") == "online" else "离线"
+        state = "在线" if r.get("status") == "online" else "离线"
         parts.append("<tr><td><b>%s</b></td><td><code>%s</code></td><td>%s</td>"
                      "<td><span style='color:%s'>%s</span></td><td>%d</td><td>%d</td><td>%s</td></tr>" % (
                          r.get("name", ""), r.get("uuid", ""), r.get("level", ""),
-                         color, badge, r.get("device_cnt", 0), r.get("container_cnt", 0),
+                         color, state, int(_num(r, "device_cnt", 0)), int(_num(r, "container_cnt", 0)),
                          r.get("last_seen", "")))
     parts.append("</tbody></table></div>")
     return "".join(parts)

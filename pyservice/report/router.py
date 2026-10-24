@@ -26,7 +26,9 @@ class RenderReq(BaseModel):
 @report_router.post("/render")
 def do_render(req: RenderReq):
     try:
-        html = render_html(req.dict())
+        # 兼容 pydantic v1(.dict) 与 v2(.model_dump)
+        data = req.model_dump() if hasattr(req, "model_dump") else req.dict()
+        html = render_html(data)
         if not html or len(html) < 200:
             raise HTTPException(status_code=400, detail="渲染结果为空")
         return {"html": html}
