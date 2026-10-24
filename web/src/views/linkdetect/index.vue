@@ -187,7 +187,7 @@ function doRenderRealtime() {
     xAxis: { type: 'time', min: axisStart, max: nowMs, axisLabel: { color: ca.axis, formatter: '{HH}:{mm}:{ss}' }, axisLine: { lineStyle: { color: ca.axisLine } } },
     yAxis: { type: 'value', min: 0, axisLabel: { color: ca.axis, formatter: (v: number) => v + ' ms' }, splitLine: { lineStyle: { color: ca.split } } },
     series: list.map((s) => ({
-      name: s.name, type: 'line', showSymbol: false, smooth: false,
+      name: s.name, type: 'line', showSymbol: false, smooth: false, animation: false,
       lineStyle: { width: 2, color: s.color || cssVar('--np-primary') }, itemStyle: { color: s.color || cssVar('--np-primary') },
       areaStyle: { opacity: 0.08 }, connectNulls: false, data: s.data
     }))

@@ -69,6 +69,23 @@ let dbChart: echarts.ECharts | null = null
 let gaugeChart: echarts.ECharts | null = null
 let ws: WSClient | null = null
 let timer: number | null = null
+// WS 高频事件节流：monitor device_snapshot / traffic if_rate 推送频繁，合并为 2 秒一次
+let wsLoadTimer: number | null = null
+let wsTrafficTimer: number | null = null
+function wsLoadOverview() {
+  if (wsLoadTimer) return
+  wsLoadTimer = window.setTimeout(() => {
+    wsLoadTimer = null
+    void loadOverview().then(() => { renderHealth(); renderDb(); renderGauge() }).catch(() => {})
+  }, 2000)
+}
+function wsLoadTraffic() {
+  if (wsTrafficTimer) return
+  wsTrafficTimer = window.setTimeout(() => {
+    wsTrafficTimer = null
+    void loadTraffic().then(() => renderTraffic()).catch(() => {})
+  }, 2000)
+}
 
 // 链路趋势本地缓冲（WebSocket 实时累积，与链路页面一致）
 interface TrendSeries { name: string; color: string; points: Array<[number, number | null]> }
@@ -143,6 +160,7 @@ async function renderTrends() {
     type: 'line' as const,
     showSymbol: false,
     smooth: true,
+    animation: false, // 实时折线：关闭重绘动画，避免 hover 时曲线重放消失/闪烁
     lineStyle: { width: 2, color: s.color || cssVar('--np-primary', '#d95f1f') },
     itemStyle: { color: s.color || cssVar('--np-primary', '#d95f1f') },
     areaStyle: { opacity: 0.12 },
@@ -168,9 +186,14 @@ async function renderTrends() {
 }
 let lastTrendSeriesCount = 0
 
+let lastHealthSig = ''
 function renderHealth() {
   if (!healthRef.value) return
   healthChart ??= echarts.init(healthRef.value)
+  // 数据无变化不重绘（WS/定时器高频触发时避免重绘动画打断 hover）
+  const sig = JSON.stringify([devices.value.map((d) => d.name), devices.value.map((d) => d.cpu), devices.value.map((d) => d.mem_used)])
+  if (sig === lastHealthSig) return
+  lastHealthSig = sig
   const ca = chartAxisColors()
   healthChart.setOption({
     backgroundColor: 'transparent',
@@ -184,6 +207,7 @@ function renderHealth() {
         name: 'CPU %',
         type: 'bar',
         barWidth: 12,
+        animation: false,
         itemStyle: { color: cssVar('--np-primary', '#d95f1f'), borderRadius: [3, 3, 0, 0] },
         data: devices.value.map((d) => d.cpu)
       },
@@ -191,6 +215,7 @@ function renderHealth() {
         name: 'MEM %',
         type: 'bar',
         barWidth: 12,
+        animation: false,
         itemStyle: { color: cssVar('--np-success', '#3f9e63'), borderRadius: [3, 3, 0, 0] },
         data: devices.value.map((d) => d.mem_used)
       }
@@ -198,9 +223,14 @@ function renderHealth() {
   })
 }
 
+let lastTrafficSig = ''
 function renderTraffic() {
   if (!trafficRef.value) return
   trafficChart ??= echarts.init(trafficRef.value)
+  // 数据无变化不重绘（WS if_rate 高频触发时避免重绘动画打断 hover）
+  const sig = JSON.stringify([trafficData.value.map((x) => x.name), trafficData.value.map((x) => x.in_bps), trafficData.value.map((x) => x.out_bps)])
+  if (sig === lastTrafficSig) return
+  lastTrafficSig = sig
   const ca = chartAxisColors()
   trafficChart.setOption({
     backgroundColor: 'transparent',
@@ -220,6 +250,7 @@ function renderTraffic() {
         name: t('traffic.in'),
         type: 'bar',
         barWidth: 10,
+        animation: false,
         itemStyle: { color: cssVar('--np-info', '#3a6fb0'), borderRadius: [3,3,0,0] },
         data: trafficData.value.map((x) => x.in_bps)
       },
@@ -227,6 +258,7 @@ function renderTraffic() {
         name: t('traffic.out'),
         type: 'bar',
         barWidth: 10,
+        animation: false,
         itemStyle: { color: cssVar('--np-warning', '#b5893a'), borderRadius: [3,3,0,0] },
         data: trafficData.value.map((x) => x.out_bps)
       }
@@ -242,9 +274,14 @@ async function loadTraffic() {
   if (trafficChart) renderTraffic()
 }
 
+let lastDbSig = ''
 function renderDb() {
   if (!dbRef.value) return
   dbChart ??= echarts.init(dbRef.value)
+  // 数据无变化不重绘
+  const sig = JSON.stringify([dbs.value.map((d) => d.name), dbs.value.map((d) => Number((d as unknown as { conns?: number }).conns || 0))])
+  if (sig === lastDbSig) return
+  lastDbSig = sig
   const ca = chartAxisColors()
   dbChart.setOption({
     backgroundColor: 'transparent',
@@ -257,6 +294,7 @@ function renderDb() {
       {
         name: t('dbmon.connections'),
         type: 'bar',
+        animation: false,
         itemStyle: { color: cssVar('--np-info', '#3a6fb0'), borderRadius: [3, 3, 0, 0] },
         data: dbs.value.map((d) => Number((d as unknown as { conns?: number }).conns || 0))
       }
@@ -274,9 +312,14 @@ const avgMem = computed(() => {
   return Math.round(devices.value.reduce((s, d) => s + (d.mem_used || 0), 0) / devices.value.length)
 })
 
+let lastGaugeSig = ''
 function renderGauge() {
   if (!gaugeRef.value) return
   gaugeChart ??= echarts.init(gaugeRef.value)
+  // 数值无变化不重绘
+  const sig = `${avgCpu.value}|${avgMem.value}`
+  if (sig === lastGaugeSig) return
+  lastGaugeSig = sig
   const ca = chartAxisColors()
   gaugeChart.setOption({
     backgroundColor: 'transparent',
@@ -326,7 +369,7 @@ onMounted(async () => {
   window.addEventListener('resize', onResize)
   try {
     ws = new WSClient(['dashboard', 'linkdetect', 'monitor', 'traffic'])
-    ws.on('dashboard', 'overview', () => void loadOverview())
+    ws.on('dashboard', 'overview', () => wsLoadOverview())
     ws.on('linkdetect', 'result', (msg: any) => {
       const s = msg?.data
       if (!s || !s.task_id) return
@@ -339,8 +382,8 @@ onMounted(async () => {
       pushTrendPoint(s.task_id, s.name, s.color, s.up ? (s.rt_ms || 0) : null)
       renderTrends()
     })
-    ws.on('monitor', 'device_snapshot', () => void loadOverview())
-    ws.on('traffic', 'if_rate', () => void loadTraffic())
+    ws.on('monitor', 'device_snapshot', () => wsLoadOverview())
+    ws.on('traffic', 'if_rate', () => wsLoadTraffic())
     ws.connect()
   } catch (e) { console.error('ws', e) }
   timer = window.setInterval(() => {
@@ -354,6 +397,8 @@ function onResize() { trendChart?.resize(); healthChart?.resize(); trafficChart?
 onBeforeUnmount(() => {
   ws?.close()
   if (timer) window.clearInterval(timer)
+  if (wsLoadTimer) window.clearTimeout(wsLoadTimer)
+  if (wsTrafficTimer) window.clearTimeout(wsTrafficTimer)
   window.removeEventListener('resize', onResize)
   trendChart?.dispose()
   healthChart?.dispose()
