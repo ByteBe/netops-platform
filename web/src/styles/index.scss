@@ -437,6 +437,15 @@ html.dark .el-table--striped .el-table__body tr.el-table__row--striped td.el-tab
 }
 
 // 确认弹窗（ElMessageBox）：按钮组居中显示
+// wrapper 显式固定全屏 flex 居中，防止样式未随按需加载时弹窗错位到左上角
+.el-message-box__wrapper {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
 .el-message-box {
   border-radius: $radius-lg;
   background: var(--np-bg-elevated);
