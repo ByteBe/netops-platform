@@ -49,6 +49,14 @@ let ws: WSClient | null = null
 let timer: number | null = null
 let wsLoadTimer: number | null = null
 let wsTrafficTimer: number | null = null
+// hover 保护：鼠标进入任一图表容器时暂停图表 setOption 重绘（数据仍照常拉取），
+// 避免定时器/WS 更新与鼠标悬停碰撞导致画布重绘、柱子闪烁消失
+let hoverPaused = false
+function bindHoverPause(el: HTMLDivElement | undefined) {
+  if (!el) return
+  el.addEventListener('mouseenter', () => { hoverPaused = true })
+  el.addEventListener('mouseleave', () => { hoverPaused = false })
+}
 
 // 链路趋势缓冲（WS 实时累积 + 初值 seed，近 10 分钟）
 interface TrendSeries { name: string; color: string; points: Array<[number, number | null]> }
@@ -123,6 +131,7 @@ function axisTooltip(fmt?: (v: number) => string) {
 
 function renderTrends() {
   if (!trendRef.value) return
+  if (hoverPaused) return // hover 期间不重绘
   trendChart ??= echarts.init(trendRef.value)
   const ca = chartAxisColors()
   const nowMs = Date.now()
@@ -165,9 +174,15 @@ function fmtShortBps(v: number): string {
   return v.toFixed(0)
 }
 
+let lastTrafficSig = ''
 function renderTraffic() {
   if (!trafficRef.value) return
+  if (hoverPaused) return // hover 期间不重绘
   trafficChart ??= echarts.init(trafficRef.value)
+  // 签名守卫：数据无变化不 setOption，避免高频 WS/定时器重绘打断 hover
+  const sig = JSON.stringify([trafficData.value.map((x) => x.name), trafficData.value.map((x) => x.in_bps), trafficData.value.map((x) => x.out_bps)])
+  if (sig === lastTrafficSig) return
+  lastTrafficSig = sig
   const ca = chartAxisColors()
   trafficChart.setOption({
     backgroundColor: 'transparent',
@@ -204,9 +219,15 @@ function renderTraffic() {
   })
 }
 
+let lastSrvSig = ''
 function renderServer() {
   if (!srvRef.value) return
+  if (hoverPaused) return // hover 期间不重绘
   srvChart ??= echarts.init(srvRef.value)
+  // 签名守卫：数据无变化不 setOption
+  const sig = JSON.stringify([devices.value.map((d) => d.name), devices.value.map((d) => d.cpu), devices.value.map((d) => d.mem_used)])
+  if (sig === lastSrvSig) return
+  lastSrvSig = sig
   const ca = chartAxisColors()
   const cpuColor = cssVar('--np-primary', '#d95f1f')
   const memColor = cssVar('--np-success', '#3f9e63')
@@ -292,6 +313,10 @@ watch(() => appStore.theme, () => {
 
 onMounted(async () => {
   await nextTick()
+  // hover 保护：鼠标在图表容器内时冻结图表重绘
+  bindHoverPause(trendRef.value)
+  bindHoverPause(trafficRef.value)
+  bindHoverPause(srvRef.value)
   try { await loadOverview() } catch (e) { console.error('overview', e) }
   try { await loadTraffic() } catch (e) { console.error('traffic', e) }
   try { await loadAlerts() } catch (e) { console.error('alerts', e) }
