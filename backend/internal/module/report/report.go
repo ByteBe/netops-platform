@@ -193,13 +193,23 @@ func sendReportViaChannels(a *core.App, title, content string) error {
 	// 未配置 email 通知渠道时，兜底用邮箱配置（默认收件人，缺省则发件账号自己）发送
 	if len(recipients) == 0 && len(cfgs) > 0 {
 		cfg0 := cfgs[0]
-		if cfg0.DefaultTo != "" {
+		// 优先读取系统设置中的报告默认收件人 report_default_to
+		var st model.SystemSetting
+		if err := a.DB.Where("`key` = ?", "report_default_to").First(&st).Error; err == nil && st.Value != "" {
+			for _, addr := range strings.Split(st.Value, ",") {
+				if addr = strings.TrimSpace(addr); addr != "" {
+					recipients = append(recipients, addr)
+				}
+			}
+		}
+		if len(recipients) == 0 && cfg0.DefaultTo != "" {
 			for _, addr := range strings.Split(cfg0.DefaultTo, ",") {
 				if addr = strings.TrimSpace(addr); addr != "" {
 					recipients = append(recipients, addr)
 				}
 			}
-		} else if cfg0.User != "" {
+		}
+		if len(recipients) == 0 && cfg0.User != "" {
 			recipients = []string{cfg0.User}
 		}
 	}
@@ -693,6 +703,8 @@ func sanitizeFilename(s string) string {
 //   - 每 10 分钟检查一次，每天首次检查（时间 >= 01:00）即执行当天任务，
 //     服务在凌晨任意时刻启动/重启都不会错过（不再依赖整点 tick 对齐）
 //   - lastRunDay 防同一天重复触发，DB 日期范围去重兜底
+//   - 错过补发：周一未生成周报时（近 7 天无自动周报且系统已运行超一周），
+//     周二至周日自动补发；月报同理（近 30 天无自动月报且运行超 30 天）
 //   - 自动生成的报告同步通过已配置通知渠道发送（失败仅记日志，不影响入库）
 func startReportScheduler(a *core.App) {
 	go func() {
@@ -705,31 +717,58 @@ func startReportScheduler(a *core.App) {
 				continue
 			}
 			lastRunDay = day
-			// 周一生成周报
-			if now.Weekday() == time.Monday {
-				generateAutoReport(a, "weekly")
+			// 周报：周一正常生成；非周一但近 7 天无自动周报且系统运行超一周 → 补发
+			if !hasRecentAutoReport(a, "自动巡检周报", 7*24*time.Hour, now) {
+				if now.Weekday() == time.Monday || sysDataAge(a) >= 7*24*time.Hour {
+					generateAutoReport(a, "weekly", now)
+				}
 			}
-			// 每月 1 号生成月报
-			if now.Day() == 1 {
-				generateAutoReport(a, "monthly")
+			// 月报：每月 1 号生成；错过且近 30 天无自动月报且系统运行超 30 天 → 补发
+			if now.Day() == 1 || (!hasRecentAutoReport(a, "自动巡检月报", 30*24*time.Hour, now) && sysDataAge(a) >= 30*24*time.Hour) {
+				generateAutoReport(a, "monthly", now)
 			}
 		}
 	}()
 }
 
-func generateAutoReport(a *core.App, kind string) {
-	end := time.Now()
+// hasRecentAutoReport 最近 dur 内是否存在指定前缀的自动报告
+func hasRecentAutoReport(a *core.App, prefix string, dur time.Duration, now time.Time) bool {
+	var cnt int64
+	a.DB.Model(&model.ReportRecord{}).Where("title LIKE ? AND created_at >= ?", prefix+"%", now.Add(-dur)).Count(&cnt)
+	return cnt > 0
+}
+
+// sysDataAge 系统数据最早时间（以系统设置表最早记录时间近似），用于判断是否有足够历史补发报告
+func sysDataAge(a *core.App) time.Duration {
+	var st model.SystemSetting
+	if err := a.DB.Order("updated_at asc").First(&st).Error; err != nil {
+		return 0
+	}
+	return time.Since(st.UpdatedAt)
+}
+
+func generateAutoReport(a *core.App, kind string, now time.Time) {
+	end := now
 	start := end.Add(-7 * 24 * time.Hour)
-	title := "自动巡检周报 " + end.Format("2006-01-02")
+	catchup := ""
+	if kind == "weekly" && end.Weekday() != time.Monday {
+		catchup = "(补发)"
+	}
+	title := "自动巡检周报" + catchup + " " + end.Format("2006-01-02")
+	prefix := "自动巡检周报"
 	if kind == "monthly" {
 		start = end.Add(-30 * 24 * time.Hour)
-		title = "自动巡检月报 " + end.Format("2006-01")
+		if end.Day() != 1 {
+			catchup = "(补发)"
+		}
+		title = "自动巡检月报" + catchup + " " + end.Format("2006-01")
+		prefix = "自动巡检月报"
 	}
-	// 避免重复生成：当天已生成则跳过（日期范围查询，兼容 SQLite/MySQL/PostgreSQL/国产库）
+	// 避免重复生成：当天已生成则跳过（日期范围 + 前缀查询，兼容 SQLite/MySQL/PostgreSQL/国产库）
 	dayStart := time.Date(end.Year(), end.Month(), end.Day(), 0, 0, 0, 0, time.Local)
 	var cnt int64
 	a.DB.Model(&model.ReportRecord{}).
-		Where("title = ? AND created_at >= ? AND created_at < ?", title, dayStart, dayStart.Add(24*time.Hour)).
+		Where("title LIKE ? AND created_at >= ? AND created_at < ?", prefix+"%", dayStart, dayStart.Add(24*time.Hour)).
 		Count(&cnt)
 	if cnt > 0 {
 		return

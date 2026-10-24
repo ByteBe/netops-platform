@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net/smtp"
 	"strings"
+
+	"netops/internal/common/secstore"
 )
 
 // Config 邮件配置
@@ -26,6 +28,8 @@ func Send(cfg Config, to []string, subject, bodyHTML string) error {
 	if !cfg.Enable {
 		return fmt.Errorf("邮箱功能未启用（%s）", cfg.Name)
 	}
+	// 密码可能为 secstore 密文（enc: 前缀），发送前统一解密（幂等：非密文原样返回）
+	cfg.Password = secstore.Open(cfg.Password)
 	if cfg.SMTPPort == 0 {
 		cfg.SMTPPort = 465
 	}
