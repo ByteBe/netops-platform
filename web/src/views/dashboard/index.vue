@@ -163,7 +163,7 @@ function renderTrends() {
     backgroundColor: 'transparent',
     tooltip: tooltipCfg((v) => `${v.toFixed(1)} ms`),
     legend: { textStyle: { color: ca.axis }, top: 0 },
-    grid: { left: 48, right: 16, top: 30, bottom: 24 },
+    grid: { left: 48, right: 16, top: 34, bottom: 26 },
     xAxis: { type: 'time', min: startMs, max: nowMs, axisLine: { lineStyle: { color: ca.axisLine } } },
     yAxis: { type: 'value', name: 'ms', min: 0, splitLine: { lineStyle: { color: ca.split } } },
     series
@@ -203,7 +203,12 @@ function renderTraffic() {
         type: 'bar',
         barWidth: 14,
         label: { show: true, position: 'top', color: ca.axis, fontSize: 10, formatter: (p: { value: number }) => fmtShortBps(p.value) },
-        itemStyle: { color: cssVar('--np-info', '#3a6fb0'), borderRadius: [3, 3, 0, 0] },
+        itemStyle: {
+          borderRadius: [4, 4, 0, 0],
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: '#6ea4d9' }, { offset: 1, color: '#3a6fb0' }
+          ])
+        },
         data: trafficData.value.map((x) => x.in_bps)
       }),
       seriesOpt({
@@ -211,7 +216,12 @@ function renderTraffic() {
         type: 'bar',
         barWidth: 14,
         label: { show: true, position: 'top', color: ca.axis, fontSize: 10, formatter: (p: { value: number }) => fmtShortBps(p.value) },
-        itemStyle: { color: cssVar('--np-warning', '#b5893a'), borderRadius: [3, 3, 0, 0] },
+        itemStyle: {
+          borderRadius: [4, 4, 0, 0],
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: '#d9ab5f' }, { offset: 1, color: '#b5893a' }
+          ])
+        },
         data: trafficData.value.map((x) => x.out_bps)
       })
     ]
@@ -241,7 +251,12 @@ function renderServer() {
         type: 'bar',
         barWidth: 14,
         label: { show: true, position: 'top', color: ca.axis, fontSize: 10, formatter: '{c}%' },
-        itemStyle: { color: cssVar('--np-primary', '#d95f1f'), borderRadius: [3, 3, 0, 0] },
+        itemStyle: {
+          borderRadius: [4, 4, 0, 0],
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: '#f0826a' }, { offset: 1, color: '#c84a1a' }
+          ])
+        },
         data: devices.value.map((d) => d.cpu)
       }),
       seriesOpt({
@@ -249,7 +264,12 @@ function renderServer() {
         type: 'bar',
         barWidth: 14,
         label: { show: true, position: 'top', color: ca.axis, fontSize: 10, formatter: '{c}%' },
-        itemStyle: { color: cssVar('--np-success', '#3f9e63'), borderRadius: [3, 3, 0, 0] },
+        itemStyle: {
+          borderRadius: [4, 4, 0, 0],
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: '#6fc394' }, { offset: 1, color: '#2f8557' }
+          ])
+        },
         data: devices.value.map((d) => d.mem_used)
       })
     ]
@@ -376,8 +396,7 @@ onBeforeUnmount(() => {
     <!-- KPI 带 -->
     <div class="np-kpis">
       <div class="np-kpi">
-        <div class="np-kpi-head"><span class="np-kpi-ico np-ico-link"></span>{{ t('dashboard.linkDetect') }}</div>
-        <div class="np-kpi-main">
+        <div class="np-kpi-head"><span class="np-kpi-ico np-ico-link"></span>{{ t('dashboard.linkDetect') }}</div>        <div class="np-kpi-main">
           <span class="np-kpi-big">{{ linkRate() }}</span>
           <span class="np-kpi-unit">{{ t('dashboard.linkOnlineRate') }}</span>
         </div>
@@ -386,8 +405,8 @@ onBeforeUnmount(() => {
       <div class="np-kpi">
         <div class="np-kpi-head"><span class="np-kpi-ico np-ico-traffic"></span>{{ t('dashboard.traffic') }}</div>
         <div class="np-kpi-main np-kpi-duo">
-          <div class="np-duo"><span class="np-duo-tag up">▲ {{ t('traffic.in') }}</span><span class="np-duo-val">{{ liveIn() }}</span></div>
-          <div class="np-duo"><span class="np-duo-tag down">▼ {{ t('traffic.out') }}</span><span class="np-duo-val">{{ liveOut() }}</span></div>
+          <div class="np-duo"><span class="np-duo-tag up">▼ {{ t('traffic.in') }}</span><span class="np-duo-val">{{ liveIn() }}</span></div>
+          <div class="np-duo"><span class="np-duo-tag down">▲ {{ t('traffic.out') }}</span><span class="np-duo-val">{{ liveOut() }}</span></div>
         </div>
         <div class="np-kpi-sub">{{ t('dashboard.lineBandwidth') }} {{ lineRateStr() }}</div>
       </div>
@@ -425,7 +444,7 @@ onBeforeUnmount(() => {
           </div>
           <div v-if="!links.length" class="np-empty">{{ t('common.noData') }}</div>
         </div>
-        <div ref="trendRef" class="np-chart" style="height: 230px"></div>
+        <div ref="trendRef" class="np-chart" style="height: 290px"></div>
       </div>
 
       <!-- 专线流量 -->
@@ -514,7 +533,15 @@ onBeforeUnmount(() => {
   .np-kpi:nth-child(3)::before { background: linear-gradient(90deg, var(--np-success), color-mix(in oklch, var(--np-success) 30%, transparent)); }
   .np-kpi:nth-child(4)::before { background: linear-gradient(90deg, var(--np-danger), color-mix(in oklch, var(--np-danger) 30%, transparent)); }
   .np-kpi-head { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--np-text-2); letter-spacing: 0.06em; }
-  .np-kpi-ico { width: 16px; height: 16px; border-radius: 4px; background: color-mix(in oklch, var(--np-primary) 14%, transparent); }
+  .np-kpi-ico {
+    width: 18px; height: 18px; border-radius: 5px; position: relative;
+    background: linear-gradient(135deg, color-mix(in oklch, var(--np-primary) 80%, #fff), color-mix(in oklch, var(--np-primary) 55%, transparent));
+    box-shadow: 0 2px 8px color-mix(in oklch, var(--np-primary) 40%, transparent), inset 0 1px 0 rgba(255,255,255,.5);
+    &::after { content: ''; position: absolute; inset: 2px; border-radius: 3px; border: 1px solid rgba(255,255,255,.45); }
+  }
+  .np-kpi:nth-child(2) .np-kpi-ico { background: linear-gradient(135deg, color-mix(in oklch, var(--np-info) 80%, #fff), color-mix(in oklch, var(--np-info) 55%, transparent)); box-shadow: 0 2px 8px color-mix(in oklch, var(--np-info) 40%, transparent), inset 0 1px 0 rgba(255,255,255,.5); }
+  .np-kpi:nth-child(3) .np-kpi-ico { background: linear-gradient(135deg, color-mix(in oklch, var(--np-success) 80%, #fff), color-mix(in oklch, var(--np-success) 55%, transparent)); box-shadow: 0 2px 8px color-mix(in oklch, var(--np-success) 40%, transparent), inset 0 1px 0 rgba(255,255,255,.5); }
+  .np-kpi:nth-child(4) .np-kpi-ico { background: linear-gradient(135deg, color-mix(in oklch, var(--np-danger) 80%, #fff), color-mix(in oklch, var(--np-danger) 55%, transparent)); box-shadow: 0 2px 8px color-mix(in oklch, var(--np-danger) 40%, transparent), inset 0 1px 0 rgba(255,255,255,.5); }
   .np-kpi-main { display: flex; align-items: baseline; gap: 6px; margin: 6px 0 2px; }
   .np-kpi-big { font-size: 32px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; color: var(--np-monitor-text); &.np-bad { color: var(--np-danger); } }
   .np-kpi-unit { font-size: 13px; color: var(--np-text-3); }
@@ -542,6 +569,8 @@ onBeforeUnmount(() => {
     padding: 14px 16px;
     box-shadow: var(--np-shadow-sm);
     min-width: 0;
+    transition: box-shadow .2s ease, transform .2s ease;
+    &:hover { box-shadow: var(--np-shadow-md); transform: translateY(-1px); }
   }
   .np-panel-head {
     display: flex; align-items: center; gap: 8px;
@@ -557,6 +586,8 @@ onBeforeUnmount(() => {
     display: flex; align-items: center; gap: 7px; padding: 6px 10px;
     border-radius: $radius-md; font-size: 12px;
     border: 1px solid var(--np-border); background: var(--np-surface-1);
+    transition: transform .15s ease, box-shadow .15s ease;
+    &:hover { transform: translateY(-1px); box-shadow: var(--np-shadow-sm); }
     &.up { border-color: color-mix(in oklch, var(--np-success) 35%, var(--np-border)); }
     &.down { border-color: color-mix(in oklch, var(--np-danger) 45%, var(--np-border)); }
     .np-link-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--np-success); }
@@ -568,11 +599,13 @@ onBeforeUnmount(() => {
   }
 
   // 告警
-  .np-alert-list { display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto; }
+  .np-alert-list { display: flex; flex-direction: column; gap: 6px; max-height: 210px; overflow-y: auto; }
   .np-alert-row {
     display: flex; align-items: center; gap: 10px; padding: 8px 10px;
     border-radius: $radius-md; background: var(--np-surface-1); border: 1px solid var(--np-border);
     font-size: 12px; color: var(--np-monitor-text);
+    transition: background .15s ease, border-color .15s ease;
+    &:hover { background: color-mix(in oklch, var(--np-primary) 6%, var(--np-surface-1)); border-color: color-mix(in oklch, var(--np-primary) 30%, var(--np-border)); }
   }
   .np-alert-level { flex: none; padding: 1px 8px; border-radius: 999px; font-size: 11px; color: #fff;
     &.critical { background: var(--np-danger); } &.warning { background: var(--np-warning); } &.info { background: var(--np-info); } }
