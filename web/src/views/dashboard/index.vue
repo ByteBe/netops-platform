@@ -209,7 +209,7 @@ function renderHealth() {
     tooltip: { trigger: 'axis', confine: true, valueFormatter: (v: number) => v == null ? '--' : v.toFixed(1) + '%' },
     legend: { textStyle: { color: ca.axis }, top: 0 },
     grid: { left: 50, right: 16, top: 32, bottom: 40 },
-    xAxis: { type: 'category', data: devices.value.map((d) => d.name), axisLabel: { color: ca.axis, rotate: 30 } },
+    xAxis: { type: 'category', data: devices.value.map((d) => d.name), axisLabel: { color: ca.axis, interval: 0, rotate: 0, margin: 8 } },
     yAxis: { type: 'value', max: 100, splitLine: { lineStyle: { color: ca.split } } },
     series: [
       {
@@ -251,6 +251,7 @@ function renderTraffic() {
     yAxis: {
       type: 'value',
       name: 'Mbps',
+      splitNumber: 3, // 小流量时避免刻度过密（0.00-0.06 只显示 3 段）
       // 小流量(<1Mbps)保留两位小数，避免所有刻度取整后显示为 0
       axisLabel: { color: ca.axis, formatter: (v: number) => (v / 1e6 >= 1 ? (v / 1e6).toFixed(0) : (v / 1e6).toFixed(2)) },
       splitLine: { lineStyle: { color: ca.split } }
@@ -299,7 +300,7 @@ function renderDb() {
     tooltip: { trigger: 'item', confine: true },
     legend: { textStyle: { color: ca.axis }, top: 0 },
     grid: { left: 50, right: 16, top: 32, bottom: 40 },
-    xAxis: { type: 'category', data: dbs.value.map((d) => d.name), axisLabel: { color: ca.axis, rotate: 20 } },
+    xAxis: { type: 'category', data: dbs.value.map((d) => d.name), axisLabel: { color: ca.axis, interval: 0, rotate: 0, margin: 8 } },
     yAxis: { type: 'value', splitLine: { lineStyle: { color: ca.split } } },
     series: [
       {
