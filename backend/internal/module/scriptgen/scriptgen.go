@@ -531,6 +531,20 @@ func wildcardOf(mask string) string {
 	return fmt.Sprintf("%d.%d.%d.%d", w>>24, (w>>16)&0xFF, (w>>8)&0xFF, w&0xFF)
 }
 
+// maskToDotted 把掩码统一为点分十进制（思科 ip route 要求点分掩码）。
+// 输入可为掩码长度(0-32)或点分掩码；非法输入原样返回。
+func maskToDotted(s string) string {
+	s = strings.TrimSpace(s)
+	if strings.Count(s, ".") == 3 {
+		return s
+	}
+	if n, err := strconv.Atoi(s); err == nil && n >= 0 && n <= 32 {
+		_, m := cidrMask(fmt.Sprintf("0.0.0.0/%d", n))
+		return m
+	}
+	return s
+}
+
 func build(code string, m map[string]string, vendor string) []string {
 	switch vendor {
 	case "h3c":

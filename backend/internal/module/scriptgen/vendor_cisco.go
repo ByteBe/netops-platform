@@ -52,7 +52,9 @@ func buildCisco(code string, m map[string]string) []string {
 		if p(m, "enable_vpn", "") == "on" && p(m, "vpn", "") != "" {
 			vrf = fmt.Sprintf(" vrf %s", p(m, "vpn", ""))
 		}
-		return []string{fmt.Sprintf("ip route%s %s %s %s", vrf, p(m, "dest", "0.0.0.0"), p(m, "mask", "0.0.0.0"), p(m, "nh", ""))}
+		// 思科 ip route 须点分掩码：0/24 → 0.0.0.0/255.255.255.0
+		dotmask := maskToDotted(p(m, "mask", "0.0.0.0"))
+		return []string{fmt.Sprintf("ip route%s %s %s %s", vrf, p(m, "dest", "0.0.0.0"), dotmask, p(m, "nh", ""))}
 	case "com_ssh":
 		user, pass, vty := p(m, "user", "admin"), p(m, "pass", ""), p(m, "vty", "0 15")
 		return []string{
@@ -116,16 +118,17 @@ func buildCisco(code string, m map[string]string) []string {
 	case "sw_stp":
 		return []string{"spanning-tree mode rapid-pvst", fmt.Sprintf("spanning-tree vlan %s root %s", p(m, "vlan", "1"), p(m, "root", "primary"))}
 	case "router_bgp":
-		return []string{
-			fmt.Sprintf("router bgp %s", p(m, "asn", "65001")),
-			fmt.Sprintf(" bgp router-id %s", p(m, "rid", "1.1.1.1")),
-			fmt.Sprintf(" neighbor %s remote-as %s", p(m, "peer_ip", ""), p(m, "peer_as", "65002")),
+		// 思科 neighbor 逐条输出（逗号分隔邻居列表）
+		lines := []string{fmt.Sprintf("router bgp %s", p(m, "asn", "65001")), fmt.Sprintf(" bgp router-id %s", p(m, "rid", "1.1.1.1"))}
+		for _, pip := range splitList(p(m, "peer_ip", "")) {
+			lines = append(lines, fmt.Sprintf(" neighbor %s remote-as %s", pip, p(m, "peer_as", "65002")))
 		}
+		return lines
 	case "router_isis":
+		// IOS IS-IS 视图无 router-id 命令，移除
 		return []string{
 			fmt.Sprintf("router isis %s", p(m, "pid", "1")),
 			fmt.Sprintf(" net %s", p(m, "net", "49.0001.0000.0000.0001.00")),
-			fmt.Sprintf(" router-id %s", p(m, "router_id", p(m, "rid", "1.1.1.1"))),
 			fmt.Sprintf(" is-type %s", p(m, "level", "level-2")),
 		}
 	case "route_policy":

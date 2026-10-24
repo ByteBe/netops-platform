@@ -60,3 +60,17 @@ def wildcard_of(mask: str) -> str:
     a, b, c, d = (int(x) for x in mask.strip().split("."))
     w = ~((a << 24) | (b << 16) | (c << 8) | d) & 0xFFFFFFFF
     return f"{(w >> 24) & 0xFF}.{(w >> 16) & 0xFF}.{(w >> 8) & 0xFF}.{w & 0xFF}"
+
+
+def mask_to_dotted(s: str) -> str:
+    """把掩码统一为点分十进制（思科 ip route 要求点分掩码）。
+    输入可为掩码长度(0-32)或点分掩码；非法输入原样返回。
+    """
+    s = s.strip()
+    if s.count(".") == 3:
+        return s
+    if s.isdigit():
+        prefix = int(s)
+        if 0 <= prefix <= 32:
+            return cidr_mask(f"0.0.0.0/{prefix}")[1]
+    return s

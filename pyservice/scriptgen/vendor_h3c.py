@@ -37,9 +37,10 @@ def build_h3c(code: str, m: Dict[str, str]) -> List[str]:
         vpn_line = ""
         if p(m, "enable_vpn", "") == "on" and p(m, "vpn", "") != "":
             vpn_line = f" vpn-instance {p(m, 'vpn', '')}"
+        # 华三 area 接受十进制（area 0/1/256），避免 0.0.0.%s 在 area>255 时非法
         return [
             f"ospf{vpn_line} {p(m, 'process', '1')} router-id {p(m, 'rid', '1.1.1.1')}",
-            f" area 0.0.0.{p(m, 'area', '0')}",
+            f" area {p(m, 'area', '0')}",
             f"  network {net} {wildcard_of(mask)}",
         ]
     if code in ("router_static", "sw_static"):

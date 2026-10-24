@@ -40,9 +40,10 @@ func buildH3c(code string, m map[string]string) []string {
 		if p(m, "enable_vpn", "") == "on" && p(m, "vpn", "") != "" {
 			vpnLine = fmt.Sprintf(" vpn-instance %s", p(m, "vpn", ""))
 		}
+		// 华三 area 接受十进制（area 0/1/256），避免 0.0.0.%s 在 area>255 时非法
 		return []string{
 			fmt.Sprintf("ospf%s %s router-id %s", vpnLine, p(m, "process", "1"), p(m, "rid", "1.1.1.1")),
-			fmt.Sprintf(" area 0.0.0.%s", p(m, "area", "0")),
+			fmt.Sprintf(" area %s", p(m, "area", "0")),
 			fmt.Sprintf("  network %s %s", net, wildcardOf(mask)),
 		}
 	case "router_static", "sw_static":

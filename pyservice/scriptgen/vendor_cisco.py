@@ -2,7 +2,7 @@
 """思科（IOS）脚本生成。"""
 from typing import Dict, List
 
-from scriptgen.utils import p, split_list, wild_of, wildcard_of
+from scriptgen.utils import p, split_list, wild_of, wildcard_of, mask_to_dotted
 
 
 def build_cisco(code: str, m: Dict[str, str]) -> List[str]:
@@ -46,7 +46,9 @@ def build_cisco(code: str, m: Dict[str, str]) -> List[str]:
         vrf = ""
         if p(m, "enable_vpn", "") == "on" and p(m, "vpn", "") != "":
             vrf = f" vrf {p(m, 'vpn', '')}"
-        return [f"ip route{vrf} {p(m, 'dest', '0.0.0.0')} {p(m, 'mask', '0.0.0.0')} {p(m, 'nh', '')}"]
+        # 思科 ip route 须点分掩码：0/24 → 0.0.0.0/255.255.255.0
+        dotmask = mask_to_dotted(p(m, "mask", "0.0.0.0"))
+        return [f"ip route{vrf} {p(m, 'dest', '0.0.0.0')} {dotmask} {p(m, 'nh', '')}"]
     if code == "com_ssh":
         user, passwd, vty = p(m, "user", "admin"), p(m, "pass", ""), p(m, "vty", "0 15")
         return [
@@ -108,16 +110,16 @@ def build_cisco(code: str, m: Dict[str, str]) -> List[str]:
     if code == "sw_stp":
         return [f"spanning-tree mode rapid-pvst", f"spanning-tree vlan {p(m, 'vlan', '1')} root {p(m, 'root', 'primary')}"]
     if code == "router_bgp":
-        return [
-            f"router bgp {p(m, 'asn', '65001')}",
-            f" bgp router-id {p(m, 'rid', '1.1.1.1')}",
-            f" neighbor {p(m, 'peer_ip', '')} remote-as {p(m, 'peer_as', '65002')}",
-        ]
+        # 思科 neighbor 逐条输出（逗号分隔邻居列表）
+        lines = [f"router bgp {p(m, 'asn', '65001')}", f" bgp router-id {p(m, 'rid', '1.1.1.1')}"]
+        for pip in split_list(p(m, "peer_ip", "")):
+            lines.append(f" neighbor {pip} remote-as {p(m, 'peer_as', '65002')}")
+        return lines
     if code == "router_isis":
+        # IOS IS-IS 视图无 router-id 命令，移除
         return [
             f"router isis {p(m, 'pid', '1')}",
             f" net {p(m, 'net', '49.0001.0000.0000.0001.00')}",
-            f" router-id {p(m, 'router_id', p(m, 'rid', '1.1.1.1'))}",
             f" is-type {p(m, 'level', 'level-2')}",
         ]
     if code == "route_policy":

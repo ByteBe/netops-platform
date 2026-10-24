@@ -132,6 +132,27 @@ check("router_ospf 校验通过", label == "" and msg == "", f"{label}:{msg}")
 label, msg = validate_req("router_ospf", {"process": "1", "rid": "bad", "net": "10.16.194.0", "netmask": "255.255.255.0", "area": "0"})
 check("router_ospf 校验失败", msg != "", f"{label}:{msg}")
 
+# ---- 厂商命令修复回归 ----
+# 思科静态路由：掩码长度须转点分（0→0.0.0.0，24→255.255.255.0）
+cis = build_cisco("router_static", {"dest": "0.0.0.0", "mask": "24", "nh": "192.168.1.1"})
+check("cisco 静态路由 掩码24转点分", cis[0] == "ip route 0.0.0.0 255.255.255.0 192.168.1.1", repr(cis))
+cis = build_cisco("router_static", {"dest": "0.0.0.0", "mask": "0", "nh": "192.168.1.1"})
+check("cisco 静态路由 掩码0转0.0.0.0", cis[0] == "ip route 0.0.0.0 0.0.0.0 192.168.1.1", repr(cis))
+# 思科 BGP：多邻居逐条输出
+cis = build_cisco("router_bgp", {"asn": "65001", "rid": "1.1.1.1", "peer_ip": "1.1.1.1,2.2.2.2", "peer_as": "65002"})
+check("cisco BGP 多邻居逐条", cis == [
+    "router bgp 65001", " bgp router-id 1.1.1.1",
+    " neighbor 1.1.1.1 remote-as 65002", " neighbor 2.2.2.2 remote-as 65002",
+], repr(cis))
+# 思科 IS-IS：无 router-id 行
+cis = build_cisco("router_isis", {"pid": "1", "net": "49.0001.0000.0000.0001.00", "level": "level-2", "router_id": "1.1.1.1"})
+check("cisco IS-IS 无router-id", all("router-id" not in l for l in cis), repr(cis))
+# 华三 OSPF：area 原样输出（支持>255）
+h3 = build_h3c("router_ospf", {"process": "1", "rid": "1.1.1.1", "net": "10.16.194.0", "netmask": "255.255.255.0", "area": "0"})
+check("h3c OSPF area 0 原样", " area 0" in h3, repr(h3))
+h3 = build_h3c("router_ospf", {"process": "1", "rid": "1.1.1.1", "net": "10.16.194.0", "netmask": "255.255.255.0", "area": "256"})
+check("h3c OSPF area 256 原样", " area 256" in h3, repr(h3))
+
 print()
 print("TOTAL FAIL:", len(FAILED))
 sys.exit(1 if FAILED else 0)
