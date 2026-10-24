@@ -800,8 +800,8 @@ onBeforeUnmount(() => {
 .tl-title { font-weight: 600; margin-bottom: 2px; }
 .tl-group { display: flex; flex-direction: column; gap: 3px; }
 .tl-name { color: var(--np-text-2, #5a6070); font-size: 11px; }
-.tl-row { display: flex; align-items: center; gap: 6px; }
-.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.tl-row { display: flex; align-items: center; gap: 7px; line-height: 1.2; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; box-shadow: 0 0 0 2px var(--np-bg-raise, rgba(255,255,255,.96)), 0 1px 3px rgba(0,0,0,.25); }
 
 /* 详情 */
 .topo-detail { display: flex; flex-direction: column; gap: 12px; }
