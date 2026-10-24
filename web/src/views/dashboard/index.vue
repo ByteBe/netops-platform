@@ -301,8 +301,8 @@ function renderDb() {
   const ca = chartAxisColors()
   dbChart.setOption({
     backgroundColor: 'transparent',
-    // 固定右上角 + 禁用画布轴指针：hover 不触发画布重绘，柱子稳定不消失（整数显示）
-    tooltip: histTooltip({ digits: 0, suffix: '' }),
+    // 跟随鼠标显示（position:null），避免固定右上角压住时序数据库柱子顶部；仍禁用画布轴指针不触发重绘
+    tooltip: histTooltip({ digits: 0, suffix: '', position: null }),
     legend: { textStyle: { color: ca.axis }, top: 0 },
     grid: { left: 50, right: 16, top: 32, bottom: 40 },
     xAxis: { type: 'category', data: dbs.value.map((d) => d.name), axisLabel: { color: ca.axis, interval: 0, rotate: 0, margin: 8 } },

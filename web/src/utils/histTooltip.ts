@@ -6,6 +6,7 @@ export interface HistTooltipOpts {
   digits?: number // 值小数位，默认 2
   suffix?: string // 值单位后缀，如 ' ms' / '%'
   fmt?: (v: number) => string // 自定义值格式化（优先级最高）
+  position?: any // tooltip 位置：不传=固定右上角['right','top']（宽图防遮挡）；传 null=跟随鼠标（窄卡片图避免压住柱子/图例）
 }
 
 function fmtTs(axisValue: unknown, axisValueLabel?: string): string {
@@ -23,8 +24,9 @@ export function histTooltip(opts: HistTooltipOpts = {}) {
   return {
     trigger: 'axis',
     confine: true,
-    // 固定显示在图表右上角，不跟随鼠标：无论 hover 任何位置，曲线区域零遮挡
-    position: ['right', 'top'],
+    // 默认固定显示在图表右上角，不跟随鼠标：无论 hover 任何位置，曲线区域零遮挡
+    // 传入 null 时跟随鼠标（窄卡片图右上角贴近柱子/图例的场景使用）
+    position: opts.position === undefined ? ['right', 'top'] : opts.position,
     // 禁用 canvas 轴指针：hover 仅显示 DOM tooltip，不触发画布重绘（避免部分环境重绘导致曲线消失）
     axisPointer: { type: 'none' },
     // 半透明背景：即使 tooltip 覆盖到曲线区域，曲线仍透过可见，避免"曲线消失"
