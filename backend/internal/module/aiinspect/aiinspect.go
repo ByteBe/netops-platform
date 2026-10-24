@@ -150,6 +150,7 @@ type DeviceStat struct {
 	Name     string  `json:"name"`
 	IP       string  `json:"ip"`
 	Up       bool    `json:"up"`
+	Status   string  `json:"status"` // up/down/unknown（来自设备表，供报告明细展示）
 	CPU      float64 `json:"cpu"`
 	Mem      float64 `json:"mem"`
 	Disk     float64 `json:"disk"` // 最大挂载点使用率
@@ -171,11 +172,32 @@ func collectSnapshot(a *core.App) Snapshot {
 	a.DB.Model(&model.DeviceLog{}).Where("created_at > ? AND level = ?", time.Now().Add(-24*time.Hour), "warning").Count(&s.LogWarn24h)
 
 	// 各设备（含本机，若已纳管）资源明细：CPU/内存/磁盘/运行时间
+	// 先取设备表状态（ip -> status），供报告明细区分 unknown
+	statusByIP := map[string]string{}
+	{
+		var rows []struct {
+			IP     string
+			Status string
+		}
+		if err := a.DB.Model(&model.MonitorDevice{}).Select("ip, status").Find(&rows).Error; err == nil {
+			for _, r := range rows {
+				statusByIP[r.IP] = r.Status
+			}
+		}
+	}
 	hasLocal := false
 	for _, snap := range a.SnmpMgr.Snapshot() {
 		ds := DeviceStat{
 			Name: snap.Name, IP: snap.IP, Up: snap.Up,
 			CPU: snap.CPU, Mem: snap.MemUsed, Uptime: snap.Uptime, Message: snap.Message,
+		}
+		ds.Status = statusByIP[snap.IP]
+		if ds.Status == "" {
+			if snap.Up {
+				ds.Status = "up"
+			} else {
+				ds.Status = "unknown"
+			}
 		}
 		if snap.IP == "127.0.0.1" || snap.IP == "::1" || snap.IP == "localhost" {
 			ds.IsLocal = true
@@ -206,7 +228,7 @@ func collectSnapshot(a *core.App) Snapshot {
 
 // collectLocalHost 采集本服务器资源（/proc），用于本机未纳管时兜底
 func collectLocalHost() *DeviceStat {
-	ds := &DeviceStat{Name: "本服务器", IP: "127.0.0.1", Up: true, IsLocal: true}
+	ds := &DeviceStat{Name: "本服务器", IP: "127.0.0.1", Up: true, Status: "up", IsLocal: true}
 	// CPU 使用率：两帧 /proc/stat
 	if c1, t1, ok := readCPU(); ok {
 		time.Sleep(100 * time.Millisecond)
@@ -245,9 +267,12 @@ func buildPrompt(s Snapshot) string {
 		if d.IsLocal {
 			who = "本服务器"
 		}
-		status := "离线"
-		if d.Up {
+		status := "未知"
+		switch d.Status {
+		case "up":
 			status = "在线"
+		case "down":
+			status = "离线"
 		}
 		fmt.Fprintf(&b, "- [%s] %s(%s)：%s，CPU %.1f%%，内存 %.1f%%，磁盘 %.1f%%，运行 %.0f 小时",
 			who, d.Name, d.IP, status, d.CPU, d.Mem, d.Disk, d.Uptime/3600)

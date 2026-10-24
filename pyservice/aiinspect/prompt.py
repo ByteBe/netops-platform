@@ -50,7 +50,7 @@ def build_prompt(snapshot: Dict[str, Any], extra: Dict[str, Any], trends: Option
         lines.append("- 暂无设备数据")
     for d in devs:
         who = "本服务器" if d.get("is_local") else "远程设备"
-        status = "在线" if d.get("up") else "离线"
+        status = {"up": "在线", "down": "离线"}.get(d.get("status") or "", "未知")
         lines.append(f"- [{who}] {d.get('name', '-')}({d.get('ip', '-')})：{status}，CPU {d.get('cpu', 0)}%，内存 {d.get('mem', 0)}%，磁盘 {d.get('disk', 0)}%")
         if d.get("message"):
             lines.append("，" + d["message"])
