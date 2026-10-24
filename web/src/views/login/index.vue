@@ -21,6 +21,24 @@ const loading = ref(false)
 const forceChange = ref(route.query.force === '1')
 const captchaId = ref('')
 const captchaImg = ref('')
+const captchaFail = ref(false)
+const captchaLeft = ref(0) // 剩余秒数
+let captchaExpireAt = 0
+let captchaTimer = 0
+
+// 验证码倒计时：显示剩余时间，最后 10 秒自动刷新并提示
+function startCaptchaCountdown() {
+  if (captchaTimer) clearInterval(captchaTimer)
+  captchaExpireAt = Date.now() + 5 * 60 * 1000
+  captchaTimer = window.setInterval(() => {
+    const left = Math.max(0, Math.round((captchaExpireAt - Date.now()) / 1000))
+    captchaLeft.value = left
+    if (left > 0 && left <= 10 && captchaImg.value) {
+      refreshCaptcha()
+      ElMessage.info(t('login.captchaRefreshed'))
+    }
+  }, 1000)
+}
 
 const pwdForm = reactive<ChangePwdForm>({ oldPassword: '', newPassword: '', confirm: '' })
 const pwdLoading = ref(false)
@@ -32,8 +50,13 @@ async function refreshCaptcha() {
     const cap = await fetchCaptcha()
     captchaId.value = cap.captcha_id
     captchaImg.value = 'data:image/png;base64,' + cap.image_base64
+    captchaFail.value = false
+    form.captchaCode = ''
+    startCaptchaCountdown()
   } catch {
     captchaImg.value = ''
+    captchaFail.value = true
+    captchaLeft.value = 0
   }
 }
 
@@ -47,6 +70,11 @@ async function onLogin() {
   }
   if (!captchaId.value || !form.captchaCode) {
     ElMessage.warning(t('login.captchaPlaceholder'))
+    return
+  }
+  if (captchaFail.value || !captchaImg.value) {
+    ElMessage.warning(t('login.captchaLoadFail'))
+    refreshCaptcha()
     return
   }
   loading.value = true
@@ -117,6 +145,7 @@ onMounted(async () => {
   initParticles()
 })
 onBeforeUnmount(() => {
+  if (captchaTimer) clearInterval(captchaTimer)
   cancelAnimationFrame(raf)
   window.removeEventListener('resize', onBgResize)
 })
@@ -226,7 +255,16 @@ function drawLoop() {
         <el-form-item :label="t('login.captcha')">
           <div class="np-login-captcha">
             <el-input v-model="form.captchaCode" size="large" :placeholder="t('login.captchaPlaceholder')" maxlength="4" @keyup.enter="onLogin" />
-            <img v-if="captchaImg" class="np-login-captcha-img" :src="captchaImg" alt="captcha" title="点击刷新" @click="refreshCaptcha" />
+            <img v-if="captchaImg" class="np-login-captcha-img" :src="captchaImg" alt="captcha" :title="t('login.captchaRefresh')" @click="refreshCaptcha" />
+            <div v-else class="np-login-captcha-fallback" @click="refreshCaptcha">
+              {{ captchaFail ? t('login.captchaLoadFail') : t('login.captchaLoading') }}
+            </div>
+          </div>
+          <div v-if="captchaLeft > 0" class="np-login-captcha-tip">
+            {{ t('login.captchaExpireTip') }} {{ captchaLeft }}s
+          </div>
+          <div v-else-if="captchaFail" class="np-login-captcha-tip is-danger">
+            {{ t('login.captchaLoadFail') }}，{{ t('login.captchaClickRetry') }}
           </div>
         </el-form-item>
         <el-button type="primary" size="large" class="np-login-btn" :loading="loading" @click="onLogin">
