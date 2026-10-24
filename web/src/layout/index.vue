@@ -168,24 +168,20 @@ function miShadow(name: string) {
             <span>{{ t('dashboard.entry') }}</span>
           </el-button>
 
-          <el-tooltip :content="appStore.lang === 'zh-CN' ? 'English' : '中文'" placement="bottom">
-            <el-dropdown trigger="click" @command="(cmd: string) => appStore.setLang(cmd)">
-              <el-icon class="np-header-icon np-hdr-lang"><Switch /></el-icon>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item command="zh-CN">中文</el-dropdown-item>
-                  <el-dropdown-item command="en-US">English</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-          </el-tooltip>
+          <el-dropdown trigger="click" @command="(cmd: string) => appStore.setLang(cmd)">
+            <el-icon class="np-header-icon np-hdr-lang"><Switch /></el-icon>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="zh-CN">中文</el-dropdown-item>
+                <el-dropdown-item command="en-US">English</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
 
-          <el-tooltip :content="appStore.theme === 'light' ? t('theme.dark') : t('theme.light')" placement="bottom">
-            <el-icon class="np-header-icon np-hdr-theme" @click="appStore.toggleTheme()">
-              <Moon v-if="appStore.theme === 'light'" />
-              <Sunny v-else />
-            </el-icon>
-          </el-tooltip>
+          <el-icon class="np-header-icon np-hdr-theme" @click="appStore.toggleTheme()">
+            <Moon v-if="appStore.theme === 'light'" />
+            <Sunny v-else />
+          </el-icon>
 
           <el-dropdown trigger="click" @command="(cmd: string) => cmd === 'logout' ? logout() : router.push('/profile')">
             <span class="np-user">
