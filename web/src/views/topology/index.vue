@@ -258,7 +258,7 @@ import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick, reactive } 
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Refresh, Position, FullScreen, Download, Search, Plus, Link } from '@element-plus/icons-vue'
-import * as echarts from 'echarts'
+import * as echarts from '@/utils/echarts'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getEnc, postEnc, putEnc, delEnc } from '@/utils/request'
 import { useAppStore } from '@/stores/app'

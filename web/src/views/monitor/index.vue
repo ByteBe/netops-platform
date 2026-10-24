@@ -3,7 +3,7 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
-import * as echarts from 'echarts'
+import * as echarts from '@/utils/echarts'
 import { getEnc, postEnc, putEnc, delEnc } from '@/utils/request'
 import { WSClient } from '@/utils/ws'
 import { useAppStore } from '@/stores/app'

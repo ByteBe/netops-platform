@@ -6,7 +6,7 @@ const rtHistoryGlobal: Record<number, Array<[number, number | null]>> = {}
 import { ref, reactive, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
-import * as echarts from 'echarts'
+import * as echarts from '@/utils/echarts'
 import { getEnc, postEnc, putEnc, delEnc } from '@/utils/request'
 import { WSClient } from '@/utils/ws'
 import { pickColor, fmtTime, cssVar, chartAxisColors } from '@/utils'

@@ -7,7 +7,7 @@
 //  4. hoverPaused —— 鼠标在图表内时暂停 setOption 重绘（数据照常拉取）
 //  5. 签名守卫 —— 数据无变化不 setOption
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
-import * as echarts from 'echarts'
+import * as echarts from '@/utils/echarts'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { getEnc } from '@/utils/request'
