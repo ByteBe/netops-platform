@@ -677,33 +677,39 @@ func renderReport(a *core.App, title string, start, end time.Time, include map[s
 var reportTpl = template.Must(template.New("report").Parse(`<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>{{.Title}}</title>
 <style>
 *{box-sizing:border-box}
-body{font-family:"Noto Sans CJK SC","WenQuanYi Micro Hei","WenQuanYi Zen Hei","Microsoft YaHei",sans-serif;margin:0;padding:32px;background:linear-gradient(180deg,#e9eef6 0%,#f5f7fa 100%);color:#2c3e50;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.wrap{max-width:920px;margin:0 auto;background:#fff;border-radius:12px;box-shadow:0 4px 20px rgba(26,115,232,.10);overflow:hidden}
-.header{padding:30px 40px 20px;background:linear-gradient(135deg,#1a73e8 0%,#0d47a1 100%);border-radius:12px 12px 0 0}
-.header h1{margin:0;font-size:24px;font-weight:700;color:#fff;letter-spacing:1px}
-.header .meta{margin-top:8px;font-size:13px;color:#d6e4ff}
-.summary{width:calc(100% - 72px);margin:26px 36px 10px;border-collapse:separate;border-spacing:10px 0}
-.summary td{width:25%;text-align:center;padding:16px 8px;background:#f6f9ff;border:1px solid #e4ecfb;border-radius:10px}
-.summary .num{font-size:28px;font-weight:700;line-height:1.2}
-.summary .lbl{font-size:12px;color:#7a8798;margin-top:6px}
-.section{padding:22px 40px}
-h3{margin:0 0 14px;font-size:16px;color:#1a73e8;padding:7px 12px;border-left:4px solid #1a73e8;background:#eef4ff;border-radius:4px}
-table{width:100%;border-collapse:collapse;font-size:13px}
-thead th{background:#1a73e8;padding:10px 12px;text-align:left;font-weight:600;color:#fff;border:none}
-tbody td{padding:10px 12px;border-bottom:1px solid #eef1f5}
+body{font-family:"Noto Sans CJK SC","WenQuanYi Micro Hei","Microsoft YaHei",sans-serif;margin:0;padding:0;background:#eef1f6;color:#2c3e50;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.wrap{max-width:960px;margin:0 auto;background:#fff;min-height:100vh;box-shadow:0 2px 16px rgba(15,76,129,.10)}
+.header{position:relative;padding:34px 44px 26px;background:#0d3b66;background:linear-gradient(135deg,#0d3b66 0%,#1a73e8 55%,#3f9bff 100%);color:#fff;overflow:hidden}
+.header:before{content:"";position:absolute;right:-70px;top:-70px;width:230px;height:230px;border-radius:50%;background:rgba(255,255,255,.09)}
+.header:after{content:"";position:absolute;right:70px;bottom:-90px;width:170px;height:170px;border-radius:50%;background:rgba(255,255,255,.06)}
+.header h1{margin:0;font-size:25px;font-weight:700;letter-spacing:2px;position:relative}
+.header .meta{margin-top:10px;font-size:12.5px;color:#d3e3ff;position:relative}
+.header .meta span{margin-right:22px}
+.header .tag{display:inline-block;margin-top:14px;padding:4px 14px;border-radius:20px;background:rgba(255,255,255,.16);font-size:12px;color:#fff;border:1px solid rgba(255,255,255,.35);position:relative}
+.summary{width:calc(100% - 80px);margin:22px 40px 6px;border-collapse:separate;border-spacing:12px 0}
+.summary td{width:25%;text-align:center;padding:16px 8px;background:#f8fbff;border:1px solid #e3edfc;border-radius:10px}
+.summary .num{font-size:30px;font-weight:800;line-height:1.15}
+.summary .lbl{font-size:12px;color:#7a8798;margin-top:5px}
+.section{padding:18px 40px 4px}
+h3{margin:0 0 14px;font-size:15px;color:#0d3b66;padding:8px 14px;border-left:4px solid #1a73e8;background:#eef4ff;background:linear-gradient(90deg,#eef4ff 0%,#f8fbff 100%);border-radius:0 6px 6px 0;letter-spacing:1px}
+table{width:100%;border-collapse:collapse;font-size:12.5px;box-shadow:0 1px 5px rgba(15,76,129,.07);border-radius:8px;overflow:hidden}
+thead th{background:#0d3b66;background:linear-gradient(180deg,#1a73e8 0%,#0d3b66 100%);padding:10px 12px;text-align:left;font-weight:600;color:#fff;border:none}
+tbody td{padding:9px 12px;border-bottom:1px solid #eef1f5}
 tbody tr:nth-child(even){background:#f7f9fc}
 tbody tr:hover{background:#eef4ff}
-.footer{padding:18px 40px;text-align:center;color:#8a97a8;font-size:12px;border-top:1px solid #eef1f5;background:#f7f9fc}
+.footer{padding:16px 40px;text-align:center;color:#9aa7b8;font-size:11px;letter-spacing:1px;border-top:1px solid #eef1f5;background:#fafbfd}
+@media print{body{background:#fff}.wrap{box-shadow:none}}
 </style></head><body><div class="wrap">
 <div class="header">
 <h1>{{.Title}}</h1>
-<div class="meta">巡检周期：{{.Start}} 至 {{.End}} ｜ 生成时间：{{.Now}}</div>
+<div class="meta"><span>巡检周期：{{.Start}} 至 {{.End}}</span><span>生成时间：{{.Now}}</span></div>
+<div class="tag">NetOps 网络运维监控平台 · 自动生成</div>
 </div>
 <table class="summary"><tr>
 <td><div class="num" style="color:#1a73e8">{{.Total}}</div><div class="lbl">监控对象总数</div></td>
-<td><div class="num" style="color:#52c41a">{{.Up}}</div><div class="lbl">正常</div></td>
-<td><div class="num" style="color:#f5222d">{{.Down}}</div><div class="lbl">异常/离线</div></td>
-<td><div class="num" style="color:#faad14">{{.Warn}}</div><div class="lbl">告警</div></td>
+<td><div class="num" style="color:#34a853">{{.Up}}</div><div class="lbl">正常</div></td>
+<td><div class="num" style="color:#ea4335">{{.Down}}</div><div class="lbl">异常/离线</div></td>
+<td><div class="num" style="color:#f9ab00">{{.Warn}}</div><div class="lbl">告警</div></td>
 </tr></table>
 {{.LinkSection}}{{.DevSection}}{{.DBSection}}{{.ContainerSection}}{{.NodeSection}}{{.NginxSection}}
 <div class="footer">本报告由 NetOps 网络运维监控平台自动生成</div>
