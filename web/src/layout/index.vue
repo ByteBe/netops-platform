@@ -170,7 +170,7 @@ function miShadow(name: string) {
 
           <el-tooltip :content="appStore.lang === 'zh-CN' ? 'English' : '中文'" placement="bottom">
             <el-dropdown trigger="click" @command="(cmd: string) => appStore.setLang(cmd)">
-              <el-icon class="np-header-icon"><Switch /></el-icon>
+              <el-icon class="np-header-icon np-hdr-lang"><Switch /></el-icon>
               <template #dropdown>
                 <el-dropdown-menu>
                   <el-dropdown-item command="zh-CN">中文</el-dropdown-item>
@@ -181,7 +181,7 @@ function miShadow(name: string) {
           </el-tooltip>
 
           <el-tooltip :content="appStore.theme === 'light' ? t('theme.dark') : t('theme.light')" placement="bottom">
-            <el-icon class="np-header-icon" @click="appStore.toggleTheme()">
+            <el-icon class="np-header-icon np-hdr-theme" @click="appStore.toggleTheme()">
               <Moon v-if="appStore.theme === 'light'" />
               <Sunny v-else />
             </el-icon>
@@ -350,11 +350,27 @@ function miShadow(name: string) {
   font-size: 19px;
   cursor: pointer;
   color: var(--np-text-2);
-  transition: background-color 0.18s ease-out, color 0.18s ease-out;
+  transition: background-color 0.18s ease-out, color 0.18s ease-out, filter 0.18s ease-out;
   &:hover {
     color: var(--np-text-1);
     background: var(--np-hover);
   }
+}
+
+/* 中英文切换与亮暗切换：彩色渐变立体球形图标 */
+.np-header-icon.np-hdr-lang {
+  border-radius: 50%;
+  background: linear-gradient(145deg, #4db8ff 0%, #1270e0 100%);
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .18), 0 4px 10px rgba(18, 112, 224, .45), inset 0 1px 0 rgba(255, 255, 255, .45);
+  &:hover { color: #fff; background: linear-gradient(145deg, #57c0ff 0%, #1a7cf0 100%); }
+}
+.np-header-icon.np-hdr-theme {
+  border-radius: 50%;
+  background: linear-gradient(145deg, #9f7bff 0%, #5b3ff0 100%);
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .18), 0 4px 10px rgba(91, 63, 240, .45), inset 0 1px 0 rgba(255, 255, 255, .45);
+  &:hover { color: #fff; background: linear-gradient(145deg, #ac8bff 0%, #6a4cf5 100%); }
 }
 
 .np-page-title {
