@@ -77,10 +77,14 @@ func buildH3c(code string, m map[string]string) []string {
 	case "com_snmp":
 		return buildHuaweiSnmp(m)
 	case "sw_vlan":
-		vlans := p(m, "vlan", "")
+		// 华三 vlan 命令不支持逗号列表：逐条 vlan X、连续范围 vlan X to Y
 		lines := []string{}
-		if vlans != "" {
-			lines = append(lines, "vlan "+vlans)
+		for _, item := range splitList(p(m, "vlan", "")) {
+			if rg := strings.Split(item, "-"); len(rg) == 2 && rg[0] != "" && rg[1] != "" {
+				lines = append(lines, fmt.Sprintf("vlan %s to %s", strings.TrimSpace(rg[0]), strings.TrimSpace(rg[1])))
+			} else {
+				lines = append(lines, "vlan "+strings.TrimSpace(item))
+			}
 		}
 		if vif := p(m, "vlanif", ""); vif != "" && p(m, "ip", "") != "" {
 			lines = append(lines, fmt.Sprintf("interface Vlan-interface%s", vif), fmt.Sprintf(" ip address %s", p(m, "ip", "")))
@@ -99,7 +103,14 @@ func buildH3c(code string, m map[string]string) []string {
 		}
 		return lines
 	case "sw_dhcp":
-		return buildHuaweiDhcp(m)
+		// 华三 Comware DHCP 服务器视图：dhcp server ip-pool（与华为 ip pool 不同）
+		addr, mask := cidrMask(p(m, "net", ""))
+		pool := p(m, "pool", "pool1")
+		lines := []string{"dhcp enable", fmt.Sprintf("dhcp server ip-pool %s", pool), fmt.Sprintf(" network %s mask %s", addr, mask), fmt.Sprintf(" gateway-list %s", p(m, "gw", ""))}
+		if dns := p(m, "dns", ""); dns != "" {
+			lines = append(lines, " dns-list "+strings.ReplaceAll(dns, ",", " "))
+		}
+		return lines
 	case "sw_stp":
 		return buildHuaweiStp(m)
 	case "router_bgp":
@@ -117,11 +128,21 @@ func buildH3c(code string, m map[string]string) []string {
 		}
 		lines = append(lines, fmt.Sprintf("route-policy %s permit node %s", name, seq))
 		if p(m, "enable_prefix", "") == "on" && p(m, "prefix", "") != "" {
-			lines = append(lines, fmt.Sprintf(" if-match ip prefix-list %s", p(m, "prefix", "")))
+			lines = append(lines, fmt.Sprintf(" if-match ip-prefix %s", p(m, "prefix", "")))
 		}
 		return lines
 	case "router_policy":
-		return buildHuawei(code, m)
+		// 华三 Comware 行为视图重定向：apply next-hop（华为为 redirect ip-nexthop）
+		return []string{
+			"traffic classifier c1 operator or",
+			fmt.Sprintf(" if-match acl %s", p(m, "acl", "3000")),
+			"traffic behavior b1",
+			fmt.Sprintf(" apply next-hop %s", p(m, "nh", "")),
+			"traffic policy p1",
+			" classifier c1 behavior b1",
+			fmt.Sprintf("interface %s", p(m, "iface", "")),
+			" traffic-policy p1 inbound",
+		}
 	}
 	return nil
 }

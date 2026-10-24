@@ -2,6 +2,7 @@ package scriptgen
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -19,7 +20,8 @@ func buildCisco(code string, m map[string]string) []string {
 		}
 		if acltype := p(m, "acltype", "三层"); acltype == "二层" {
 			srcMac := p(m, "srcmac", "0000.0000.0000")
-			return []string{fmt.Sprintf("mac access-list extended %s", num), fmt.Sprintf(" %s host %s any", act, srcMac)}
+			// 思科 MAC ACL 为命名式（编号式 700-799 与 IP ACL 编号冲突）
+			return []string{fmt.Sprintf("mac access-list extended MAC-ACL-%s", num), fmt.Sprintf(" %s host %s any", act, srcMac)}
 		}
 		rule := fmt.Sprintf("%s %s %s %s", act, proto, srcAddr, wild)
 		if dst := p(m, "dst", ""); dst != "" {
@@ -75,7 +77,18 @@ func buildCisco(code string, m map[string]string) []string {
 	case "sw_vlan":
 		lines := []string{}
 		for _, v := range splitList(p(m, "vlan", "")) {
-			lines = append(lines, "vlan "+v, " name VLAN_"+v)
+			// 思科 vlan 不支持 x-y 范围，展开为逐条
+			if rg := strings.Split(v, "-"); len(rg) == 2 && rg[0] != "" && rg[1] != "" {
+				start, _ := strconv.Atoi(strings.TrimSpace(rg[0]))
+				end, _ := strconv.Atoi(strings.TrimSpace(rg[1]))
+				if start > 0 && end >= start && end <= 4094 {
+					for i := start; i <= end; i++ {
+						lines = append(lines, "vlan "+strconv.Itoa(i), " name VLAN_"+strconv.Itoa(i))
+					}
+					continue
+				}
+			}
+			lines = append(lines, "vlan "+strings.TrimSpace(v), " name VLAN_"+strings.TrimSpace(v))
 		}
 		if vif := p(m, "vlanif", ""); vif != "" && p(m, "ip", "") != "" {
 			lines = append(lines, fmt.Sprintf("interface Vlan%s", vif), fmt.Sprintf(" ip address %s", p(m, "ip", "")))
@@ -108,6 +121,13 @@ func buildCisco(code string, m map[string]string) []string {
 			fmt.Sprintf(" bgp router-id %s", p(m, "rid", "1.1.1.1")),
 			fmt.Sprintf(" neighbor %s remote-as %s", p(m, "peer_ip", ""), p(m, "peer_as", "65002")),
 		}
+	case "router_isis":
+		return []string{
+			fmt.Sprintf("router isis %s", p(m, "pid", "1")),
+			fmt.Sprintf(" net %s", p(m, "net", "49.0001.0000.0000.0001.00")),
+			fmt.Sprintf(" router-id %s", p(m, "router_id", p(m, "rid", "1.1.1.1"))),
+			fmt.Sprintf(" is-type %s", p(m, "level", "level-2")),
+		}
 	case "route_policy":
 		name := p(m, "name", "RP1")
 		seq := p(m, "seq", "10")
@@ -130,7 +150,7 @@ func buildCisco(code string, m map[string]string) []string {
 			" ip policy route-map P",
 		}
 	case "mpls_vpn":
-		return buildHuawei(code, m)
+		return []string{"// Cisco IOS 不适用 MPLS VPN 模板，请选择华为/华三厂商"} // 思科无对应命令
 	}
 	return nil
 }

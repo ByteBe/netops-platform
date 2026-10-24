@@ -68,7 +68,7 @@ func buildHuaweiDhcp(m map[string]string) []string {
 	pool := p(m, "pool", "pool1")
 	lines := []string{"dhcp enable", fmt.Sprintf("ip pool %s", pool), fmt.Sprintf(" network %s %s", addr, mask), fmt.Sprintf(" gateway-list %s", p(m, "gw", ""))}
 	if dns := p(m, "dns", ""); dns != "" {
-		lines = append(lines, " dns-list "+dns)
+		lines = append(lines, " dns-list "+strings.ReplaceAll(dns, ",", " "))
 	}
 	return lines
 }
@@ -81,14 +81,27 @@ func buildHuaweiStp(m map[string]string) []string {
 		lines = append(lines, "stp region-configuration", fmt.Sprintf(" instance %s vlan %s", inst, p(m, "vlan", "")), " active region-configuration")
 	}
 	root := p(m, "root", "none")
-	if root == "primary" {
-		lines = append(lines, fmt.Sprintf("stp instance %s root primary", inst))
-	}
-	if root == "secondary" {
-		lines = append(lines, fmt.Sprintf("stp instance %s root secondary", inst))
-	}
-	if root == "none" && p(m, "pri", "") != "" {
-		lines = append(lines, fmt.Sprintf("stp instance %s priority %s", inst, p(m, "pri", "")))
+	// stp instance 仅在 MSTP 模式有效；stp/rstp 模式用全局 stp root 命令
+	if mode == "mstp" {
+		if root == "primary" {
+			lines = append(lines, fmt.Sprintf("stp instance %s root primary", inst))
+		}
+		if root == "secondary" {
+			lines = append(lines, fmt.Sprintf("stp instance %s root secondary", inst))
+		}
+		if root == "none" && p(m, "pri", "") != "" {
+			lines = append(lines, fmt.Sprintf("stp instance %s priority %s", inst, p(m, "pri", "")))
+		}
+	} else {
+		if root == "primary" {
+			lines = append(lines, "stp root primary")
+		}
+		if root == "secondary" {
+			lines = append(lines, "stp root secondary")
+		}
+		if root == "none" && p(m, "pri", "") != "" {
+			lines = append(lines, fmt.Sprintf("stp priority %s", p(m, "pri", "")))
+		}
 	}
 	return append(lines, "stp enable")
 }
@@ -131,7 +144,8 @@ func buildHuaweiBgp(m map[string]string) []string {
 		for _, line := range strings.Split(p(m, "vpn_export", ""), "\n") {
 			line = strings.TrimSpace(line)
 			if line != "" && p(m, "enable_export", "") == "on" {
-				lines = append(lines, "  export-route "+line)
+				// VRP 无 export-route 命令，VPN 实例视图发布路由用 import-route 引入
+				lines = append(lines, "  import-route "+line)
 			}
 		}
 	}

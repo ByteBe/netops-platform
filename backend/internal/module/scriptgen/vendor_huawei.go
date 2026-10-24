@@ -133,7 +133,7 @@ func buildHuawei(code string, m map[string]string) []string {
 		seq := p(m, "seq", "10")
 		lines := []string{}
 		if p(m, "enable_prefix", "") == "on" && p(m, "prefix", "") != "" {
-			lines = append(lines, fmt.Sprintf("ip ip-prefix %s index %s %s %s %s", p(m, "prefix", ""), p(m, "pfx_index", "10"), p(m, "pfx_action", "permit"), p(m, "pfx_net", ""), p(m, "pfx_masklen", "")))
+			lines = append(lines, fmt.Sprintf("ip ip-prefix %s index %s %s %s %s", p(m, "prefix", ""), p(m, "pfx_index", "10"), p(m, "pfx_action", "permit"), p(m, "pfx_net", ""), p(m, "pfx_masklen", "24")))
 		}
 		lines = append(lines, fmt.Sprintf("route-policy %s permit node %s", name, seq))
 		if p(m, "enable_prefix", "") == "on" && p(m, "prefix", "") != "" {
