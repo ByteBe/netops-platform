@@ -418,19 +418,23 @@ onBeforeUnmount(() => {
       <div class="np-panel np-panel-link">
         <div class="np-panel-head">
           <span class="np-panel-tick"></span>{{ t('dashboard.linkDetect') }}
-          <span class="np-panel-rate">{{ t('dashboard.linkOnlineRate') }} {{ linkRate() }}</span>
           <span class="np-panel-hint">{{ t('dashboard.linkTrends') }} · 10 min</span>
+        </div>
+        <div class="np-link-stats">
+          <span class="np-ls"><i class="np-ls-dot rate"></i>{{ t('dashboard.linkOnlineRate') }} <b class="np-rate">{{ linkRate() }}</b></span>
+          <span class="np-ls"><i class="np-ls-dot ok"></i>{{ t('dashboard.linkUp') }} <b class="np-ok">{{ kpi?.link_up ?? '--' }}</b></span>
+          <span class="np-ls"><i class="np-ls-dot bad"></i>{{ t('dashboard.linkDown') }} <b :class="(kpi?.link_down ?? 0) > 0 ? 'np-bad' : 'np-ok'">{{ kpi?.link_down ?? '--' }}</b></span>
         </div>
         <div class="np-link-chips">
           <div v-for="l in sortedLinks" :key="l.name" class="np-link-chip" :class="l.up ? 'up' : 'down'">
             <span class="np-link-dot"></span>
             <span class="np-link-name">{{ l.name }}</span>
             <span class="np-link-rt">{{ l.rt_ms != null ? `${Number(l.rt_ms).toFixed(1)}ms` : '--' }}</span>
-            <span class="np-link-loss" :class="{ bad: Number(l.loss_pct) > 0 }">{{ l.loss_pct != null ? `${Number(l.loss_pct).toFixed(0)}%` : '' }}</span>
+            <span v-if="Number(l.loss_pct) > 0" class="np-link-loss bad">{{ Number(l.loss_pct).toFixed(0) }}%</span>
           </div>
           <div v-if="!links.length" class="np-empty">{{ t('common.noData') }}</div>
         </div>
-        <div ref="trendRef" class="np-chart" style="height: 290px"></div>
+        <div ref="trendRef" class="np-chart" style="height: 266px"></div>
       </div>
 
       <!-- 专线流量 -->
@@ -506,18 +510,18 @@ onBeforeUnmount(() => {
     background: var(--np-card-bg);
     border: 1px solid var(--np-border);
     border-radius: $radius-lg;
-    padding: 14px 16px 12px;
+    padding: 14px 16px;
     box-shadow: var(--np-shadow-sm);
     transition: border-color 0.2s ease-out, box-shadow 0.2s ease-out;
     &:hover { border-color: var(--np-border-strong); }
   }
   .np-kpi-head { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--np-text-2); letter-spacing: 0.06em; }
   .np-kpi-ico { width: 16px; height: 16px; border-radius: 4px; background: color-mix(in oklch, var(--np-primary) 12%, transparent); }
-  .np-kpi-main { display: flex; align-items: baseline; gap: 6px; margin: 6px 0 2px; }
+  .np-kpi-main { display: flex; align-items: baseline; gap: 6px; margin: 10px 0 4px; }
   .np-kpi-big { font-size: 32px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; color: var(--np-text-1); &.np-bad { color: var(--np-danger); } }
   .np-kpi-unit { font-size: 13px; color: var(--np-text-3); }
-  .np-kpi-duo { display: flex; gap: 20px; margin: 8px 0 2px; }
-  .np-duo { display: flex; flex-direction: column; gap: 2px;
+  .np-kpi-duo { display: flex; gap: 28px; margin: 10px 0 4px; }
+  .np-duo { display: flex; flex-direction: column; gap: 3px;
     .np-duo-tag { font-size: 11px; color: var(--np-text-3); &.up { color: var(--np-info); } &.down { color: var(--np-warning); } }
     .np-duo-val { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--np-text-1); }
   }
@@ -549,15 +553,27 @@ onBeforeUnmount(() => {
     display: flex; align-items: center; gap: 8px;
     font-size: 14px; font-weight: 600; color: var(--np-text-1); margin-bottom: 12px;
     .np-panel-tick { width: 5px; height: 5px; transform: rotate(45deg); border-radius: 1px; background: var(--np-primary); }
-    .np-panel-rate { font-size: 12px; font-weight: 600; color: var(--np-success); font-variant-numeric: tabular-nums; }
     .np-panel-hint { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--np-text-3); &.np-hint-bad { color: var(--np-danger); } }
   }
   .np-chart { width: 100%; }
 
+  // 链路状态行（在线率/正常/异常，显示在图表区）
+  .np-link-stats { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: -2px 0 10px; font-size: 12px; color: var(--np-text-2); }
+  .np-ls { display: flex; align-items: center; gap: 6px; white-space: nowrap;
+    b { font-variant-numeric: tabular-nums; }
+    .np-ls-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .np-ls-dot.rate { background: var(--np-primary); box-shadow: 0 0 0 3px color-mix(in oklch, var(--np-primary) 16%, transparent); }
+    .np-ls-dot.ok { background: var(--np-success); }
+    .np-ls-dot.bad { background: var(--np-danger); }
+    .np-rate { color: var(--np-primary); font-weight: 700; }
+    .np-ok { color: var(--np-success); }
+    .np-bad { color: var(--np-danger); }
+  }
+
   // 链路 chips
   .np-link-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
   .np-link-chip {
-    display: flex; align-items: center; gap: 7px; padding: 6px 10px;
+    display: flex; align-items: center; gap: 8px; padding: 7px 12px;
     border-radius: $radius-md; font-size: 12px;
     border: 1px solid var(--np-border); background: var(--np-surface-1);
     transition: background-color 0.18s ease-out, border-color 0.18s ease-out;
@@ -569,7 +585,7 @@ onBeforeUnmount(() => {
     .np-link-name { color: var(--np-text-1); font-weight: 600; }
     .np-link-rt { color: var(--np-success); font-variant-numeric: tabular-nums; }
     &.down .np-link-rt { color: var(--np-danger); }
-    .np-link-loss { color: var(--np-text-3); font-variant-numeric: tabular-nums; &.bad { color: var(--np-danger); } }
+    .np-link-loss { color: var(--np-danger); font-variant-numeric: tabular-nums; font-weight: 600; }
   }
 
   // 告警
