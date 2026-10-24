@@ -53,6 +53,8 @@ export default {
   fullscreen: '全屏',
   exportPng: '导出图片',
   exitFullscreen: '退出全屏',
+  fsUnsupported: '当前浏览器不支持全屏',
+  fsDenied: '全屏请求被拒绝，请检查浏览器权限设置',
   history: '历史趋势',
   basics: '基本信息',
   range1h: '近 1 小时',

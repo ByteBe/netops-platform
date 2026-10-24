@@ -683,14 +683,21 @@ function onResize() { chart?.resize() }
 
 // 全屏
 function toggleFullscreen() {
-  if (!mainRef.value) return
   if (document.fullscreenElement) {
     document.exitFullscreen().catch(() => {})
     fs.value = false
-  } else {
-    mainRef.value.requestFullscreen().catch(() => {})
-    fs.value = true
+    return
   }
+  if (!document.fullscreenEnabled) {
+    ElMessage.warning(t('topology.fsUnsupported'))
+    return
+  }
+  // 优先全屏画布主体，兜底全屏整个文档
+  const el: Element = mainRef.value || document.documentElement
+  el.requestFullscreen().then(() => { fs.value = true }).catch(() => {
+    ElMessage.warning(t('topology.fsDenied'))
+    fs.value = false
+  })
 }
 function onFsChange() { fs.value = !!document.fullscreenElement }
 function exportPng() {

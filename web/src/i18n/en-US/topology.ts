@@ -53,6 +53,8 @@ export default {
   fullscreen: 'Fullscreen',
   exportPng: 'Export PNG',
   exitFullscreen: 'Exit Fullscreen',
+  fsUnsupported: 'Fullscreen is not supported in this browser',
+  fsDenied: 'Fullscreen request was denied, please check browser permissions',
   history: 'History',
   basics: 'Basics',
   range1h: 'Last 1 hour',
