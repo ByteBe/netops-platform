@@ -1,8 +1,11 @@
 package report
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"html/template"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -65,28 +68,8 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			include = map[string]bool{"link": true, "monitor": true, "db": true, "nginx": true}
 		}
 
-		var linkSection, devSection, dbSection, containerSection, nodeSection, nginxSection string
 		stats := map[string]int{"total": 0, "up": 0, "down": 0, "warn": 0}
-		if include["link"] {
-			linkSection = renderLinkSection(a, start, end, stats)
-		}
-		if include["monitor"] {
-			devSection = renderDevSection(a, start, end, stats)
-		}
-		if include["db"] {
-			dbSection = renderDBSection(a, stats)
-		}
-		if include["container"] {
-			containerSection = renderContainerSection(a, stats)
-		}
-		if include["node"] {
-			nodeSection = renderNodeSection(a, stats)
-		}
-		if include["nginx"] {
-			nginxSection = renderNginxSection(a, stats)
-		}
-
-		content := renderHTML(title, start, end, linkSection, devSection, dbSection, containerSection, nodeSection, nginxSection, stats)
+		content := renderReport(a, title, start, end, include, stats)
 
 		username, _ := c.Get(middleware.KeyUsername)
 		rec := model.ReportRecord{
@@ -291,11 +274,44 @@ func badge(status, color string) string {
 	return fmt.Sprintf("<span style='display:inline-block;padding:2px 10px;border-radius:10px;font-size:12px;font-weight:500;color:#fff;background:%s'>%s</span>", color, status)
 }
 
+// stripBlocks 移除 <tag>...</tag> 块（CSS/JS 非正文，避免占满通知渠道文本截断预算）
+func stripBlocks(s, tag string) string {
+	start := "<" + tag
+	end := "</" + tag + ">"
+	for {
+		i := strings.Index(s, start)
+		if i < 0 {
+			return s
+		}
+		j := strings.Index(s[i:], ">")
+		if j < 0 {
+			return s
+		}
+		openEnd := i + j + 1
+		k := strings.Index(s[openEnd:], end)
+		if k < 0 {
+			return s
+		}
+		s = s[:i] + s[openEnd+k+len(end):]
+	}
+}
+
 func renderLinkSection(a *core.App, start, end time.Time, stats map[string]int) string {
-	var tasks []model.LinkTask
-	a.DB.Find(&tasks)
 	var sb strings.Builder
 	sb.WriteString(`<div class="section"><h3>【链路检测汇总】</h3><table><thead><tr><th>链路名称</th><th>目标地址</th><th>当前状态</th><th>平均时延</th><th>累计中断</th><th>可用率</th></tr></thead><tbody>`)
+	for _, r := range collectLinkRows(a, start, end, stats) {
+		sb.WriteString(fmt.Sprintf("<tr><td><b>%s</b></td><td>%s</td><td>%s</td><td>%.1f ms</td><td>%d 次</td><td>%.2f%%</td></tr>",
+			r["name"], r["target"], badge(fmt.Sprint(r["status"]), fmt.Sprint(r["color"])), r["avg_rt"], r["downs"], r["avail"]))
+	}
+	sb.WriteString("</tbody></table></div>")
+	return sb.String()
+}
+
+// collectLinkRows 链路检测数据收集（供 Python 渲染；本地 fallback 同源）
+func collectLinkRows(a *core.App, start, end time.Time, stats map[string]int) []map[string]any {
+	var tasks []model.LinkTask
+	a.DB.Find(&tasks)
+	var rows []map[string]any
 	for _, t := range tasks {
 		stats["total"]++
 		tags := map[string]string{"task_id": strconv.FormatUint(uint64(t.ID), 10)}
@@ -335,18 +351,37 @@ func renderLinkSection(a *core.App, start, end time.Time, stats map[string]int) 
 			status, color = "中断", "#f5222d"
 			stats["down"]++
 		}
-		sb.WriteString(fmt.Sprintf("<tr><td><b>%s</b></td><td>%s</td><td>%s</td><td>%.1f ms</td><td>%d 次</td><td>%.2f%%</td></tr>",
-			t.Name, t.Target, badge(status, color), avgRT, total-upCnt, avail))
+		rows = append(rows, map[string]any{
+			"name": t.Name, "target": t.Target, "status": status, "color": color,
+			"avg_rt": avgRT, "downs": total - upCnt, "avail": avail,
+		})
+	}
+	return rows
+}
+
+func renderDevSection(a *core.App, start, end time.Time, stats map[string]int) string {
+	var sb strings.Builder
+	sb.WriteString(`<div class="section"><h3>【服务器资源使用汇总】</h3><table><thead><tr><th>设备</th><th>IP</th><th>状态</th><th>CPU(均值)</th><th>内存使用(均值)</th></tr></thead><tbody>`)
+	for _, r := range collectDevRows(a, start, end, stats) {
+		cpuColor := "#52c41a"
+		cpu := r["cpu"].(float64)
+		if cpu > 80 {
+			cpuColor = "#f5222d"
+		} else if cpu > 60 {
+			cpuColor = "#faad14"
+		}
+		sb.WriteString(fmt.Sprintf("<tr><td><b>%s</b></td><td>%s</td><td>%s</td><td style='color:%s'>%.1f%%</td><td>%.1f%%</td></tr>",
+			r["name"], r["ip"], badge(fmt.Sprint(r["status"]), fmt.Sprint(r["color"])), cpuColor, cpu, r["mem"]))
 	}
 	sb.WriteString("</tbody></table></div>")
 	return sb.String()
 }
 
-func renderDevSection(a *core.App, start, end time.Time, stats map[string]int) string {
+// collectDevRows 服务器资源数据收集（供 Python 渲染；本地 fallback 同源）
+func collectDevRows(a *core.App, start, end time.Time, stats map[string]int) []map[string]any {
 	var devices []model.MonitorDevice
 	a.DB.Where("type = ?", "server").Or("type = ?", "other").Find(&devices)
-	var sb strings.Builder
-	sb.WriteString(`<div class="section"><h3>【服务器资源使用汇总】</h3><table><thead><tr><th>设备</th><th>IP</th><th>状态</th><th>CPU(均值)</th><th>内存使用(均值)</th></tr></thead><tbody>`)
+	var rows []map[string]any
 	for _, d := range devices {
 		stats["total"]++
 		tags := map[string]string{"device_id": strconv.FormatUint(uint64(d.ID), 10)}
@@ -361,22 +396,25 @@ func renderDevSection(a *core.App, start, end time.Time, stats map[string]int) s
 		} else {
 			stats["down"]++
 		}
-		cpuColor := "#52c41a"
-		if cpu > 80 {
-			cpuColor = "#f5222d"
-		} else if cpu > 60 {
-			cpuColor = "#faad14"
-		}
-		sb.WriteString(fmt.Sprintf("<tr><td><b>%s</b></td><td>%s</td><td>%s</td><td style='color:%s'>%.1f%%</td><td>%.1f%%</td></tr>",
-			d.Name, d.IP, badge(status, color), cpuColor, cpu, mem))
+		rows = append(rows, map[string]any{"name": d.Name, "ip": d.IP, "status": status, "color": color, "cpu": cpu, "mem": mem})
 	}
-	sb.WriteString("</tbody></table></div>")
-	return sb.String()
+	return rows
 }
 
 func renderDBSection(a *core.App, stats map[string]int) string {
 	var sb strings.Builder
 	sb.WriteString(`<div class="section"><h3>【数据库状态汇总】</h3><table><thead><tr><th>实例</th><th>类型</th><th>状态</th><th>数据库数</th><th>错误数</th></tr></thead><tbody>`)
+	for _, r := range collectDBRows(a, stats) {
+		sb.WriteString(fmt.Sprintf("<tr><td><b>%s</b></td><td>%s</td><td>%s</td><td>%.0f</td><td>%.0f</td></tr>",
+			r["name"], r["type"], badge(fmt.Sprint(r["status"]), fmt.Sprint(r["color"])), r["conns"], r["errors"]))
+	}
+	sb.WriteString("</tbody></table></div>")
+	return sb.String()
+}
+
+// collectDBRows 数据库状态数据收集（供 Python 渲染；本地 fallback 同源）
+func collectDBRows(a *core.App, stats map[string]int) []map[string]any {
+	var rows []map[string]any
 	for _, s := range a.DBProbe.SnapshotAll() {
 		stats["total"]++
 		status, color := "异常", "#f5222d"
@@ -386,61 +424,87 @@ func renderDBSection(a *core.App, stats map[string]int) string {
 		} else {
 			stats["down"]++
 		}
-		sb.WriteString(fmt.Sprintf("<tr><td><b>%s</b></td><td>%s</td><td>%s</td><td>%.0f</td><td>%.0f</td></tr>",
-			s.Name, s.Type, badge(status, color), s.Conns, s.Errors))
+		rows = append(rows, map[string]any{"name": s.Name, "type": s.Type, "status": status, "color": color, "conns": s.Conns, "errors": s.Errors})
 	}
-	sb.WriteString("</tbody></table></div>")
-	return sb.String()
+	return rows
 }
 
 // renderNginxSection Nginx 状态汇总（读取 nginx_instances 表 + 采集器实时快照）
 func renderNginxSection(a *core.App, stats map[string]int) string {
-	var insts []model.NginxInstance
-	a.DB.Order("id asc").Find(&insts)
-	snapMap := map[uint]nginxprobe.Snapshot{}
-	for _, s := range a.NginxM.SnapshotAll() {
-		snapMap[s.InstanceID] = s
-	}
-
 	var sb strings.Builder
 	sb.WriteString(`<div class="section"><h3>【Nginx 状态汇总】</h3><table><thead><tr><th>实例</th><th>状态页地址</th><th>状态</th><th>活跃连接</th><th>累计请求</th><th>QPS(次/秒)</th></tr></thead><tbody>`)
-	if len(insts) == 0 {
+	rows := collectNginxRows(a, stats)
+	if len(rows) == 0 {
 		sb.WriteString("<tr><td colspan='6' style='text-align:center;color:#999'>暂无 Nginx 监控实例</td></tr>")
 	}
-	for _, d := range insts {
-		stats["total"]++
-		status, color := "异常", "#f5222d"
-		if s, ok := snapMap[d.ID]; ok && s.Up {
-			status, color = "正常", "#52c41a"
-			stats["up"]++
+	for _, r := range rows {
+		if r["up"].(bool) {
 			sb.WriteString(fmt.Sprintf("<tr><td><b>%s</b></td><td>%s</td><td>%s</td><td>%.0f</td><td>%.0f</td><td>%.1f</td></tr>",
-				d.Name, d.StatusURL, badge(status, color), s.ActiveConns, s.Requests, s.QPS))
+				r["name"], r["status_url"], badge("正常", "#52c41a"), r["active_conns"], r["requests"], r["qps"]))
 		} else {
-			stats["down"]++
 			sb.WriteString(fmt.Sprintf("<tr><td><b>%s</b></td><td>%s</td><td>%s</td><td colspan='3' style='text-align:center;color:#999'>未采集</td></tr>",
-				d.Name, d.StatusURL, badge(status, color)))
+				r["name"], r["status_url"], badge("异常", "#f5222d")))
 		}
 	}
 	sb.WriteString("</tbody></table></div>")
 	return sb.String()
 }
 
+// collectNginxRows Nginx 状态数据收集（供 Python 渲染；本地 fallback 同源）
+func collectNginxRows(a *core.App, stats map[string]int) []map[string]any {
+	var insts []model.NginxInstance
+	a.DB.Order("id asc").Find(&insts)
+	snapMap := map[uint]nginxprobe.Snapshot{}
+	for _, s := range a.NginxM.SnapshotAll() {
+		snapMap[s.InstanceID] = s
+	}
+	var rows []map[string]any
+	for _, d := range insts {
+		stats["total"]++
+		if s, ok := snapMap[d.ID]; ok && s.Up {
+			stats["up"]++
+			rows = append(rows, map[string]any{"name": d.Name, "status_url": d.StatusURL, "up": true,
+				"active_conns": s.ActiveConns, "requests": s.Requests, "qps": s.QPS})
+		} else {
+			stats["down"]++
+			rows = append(rows, map[string]any{"name": d.Name, "status_url": d.StatusURL, "up": false,
+				"active_conns": float64(0), "requests": float64(0), "qps": float64(0)})
+		}
+	}
+	return rows
+}
+
 func renderContainerSection(a *core.App, stats map[string]int) string {
+	var sb strings.Builder
+	sb.WriteString(`<div class="section"><h3>【容器与 Kubernetes 汇总】</h3><table><thead><tr><th>节点</th><th>IP/地址</th><th>类型</th><th>状态</th><th>容器/Pod 数</th><th>异常数</th></tr></thead><tbody>`)
+	rows := collectContainerRows(a, stats)
+	if len(rows) == 0 {
+		sb.WriteString("<tr><td colspan='6' style='text-align:center;color:#999'>暂无 Docker/K8s 节点监控</td></tr>")
+	}
+	for _, r := range rows {
+		cnt, abnormal := "-", "-"
+		if r["count"] != nil {
+			cnt = fmt.Sprint(r["count"])
+		}
+		if r["abnormal"] != nil {
+			abnormal = fmt.Sprint(r["abnormal"])
+		}
+		sb.WriteString(fmt.Sprintf("<tr><td><b>%s</b></td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>",
+			r["name"], r["addr"], r["kind"], badge(fmt.Sprint(r["status"]), fmt.Sprint(r["color"])), cnt, abnormal))
+	}
+	sb.WriteString("</tbody></table></div>")
+	return sb.String()
+}
+
+// collectContainerRows 容器/K8s 状态数据收集（供 Python 渲染；本地 fallback 同源）
+func collectContainerRows(a *core.App, stats map[string]int) []map[string]any {
 	var hosts []model.DockerHost
 	a.DB.Order("id asc").Find(&hosts)
 	var clusters []model.K8sCluster
 	a.DB.Order("id asc").Find(&clusters)
 
-	var sb strings.Builder
-	sb.WriteString(`<div class="section"><h3>【容器与 Kubernetes 汇总】</h3><table><thead><tr><th>节点</th><th>IP/地址</th><th>类型</th><th>状态</th><th>容器/Pod 数</th><th>异常数</th></tr></thead><tbody>`)
-
-	if len(hosts) == 0 && len(clusters) == 0 {
-		sb.WriteString("<tr><td colspan='6' style='text-align:center;color:#999'>暂无 Docker/K8s 节点监控</td></tr>")
-	}
-
 	dockerStatus := a.DockerM.HostStatus()
 	containers := a.DockerM.Snapshot()
-	// 统计每个 host 上的容器数和异常数
 	containerCount := map[string]int{}
 	abnormalCount := map[string]int{}
 	for _, c := range containers {
@@ -454,6 +518,7 @@ func renderContainerSection(a *core.App, stats map[string]int) string {
 		}
 	}
 
+	var rows []map[string]any
 	for _, h := range hosts {
 		stats["total"]++
 		online := false
@@ -480,8 +545,8 @@ func renderContainerSection(a *core.App, stats map[string]int) string {
 		if addr == "" {
 			addr = "本机"
 		}
-		sb.WriteString(fmt.Sprintf("<tr><td><b>%s</b></td><td>%s</td><td>docker</td><td>%s</td><td>%d</td><td>%d</td></tr>",
-			h.Name, addr, badge(status, color), containerCount[key], abnormalCount[key]))
+		rows = append(rows, map[string]any{"name": h.Name, "addr": addr, "kind": "docker",
+			"status": status, "color": color, "count": containerCount[key], "abnormal": abnormalCount[key]})
 	}
 
 	k8sStatus := a.K8sM.ClusterStatus()
@@ -498,12 +563,10 @@ func renderContainerSection(a *core.App, stats map[string]int) string {
 		} else {
 			stats["down"]++
 		}
-		sb.WriteString(fmt.Sprintf("<tr><td><b>%s</b></td><td>%s</td><td>k8s</td><td>%s</td><td>-</td><td>0</td></tr>",
-			k.Name, k.APIServer, badge(status, color)))
+		rows = append(rows, map[string]any{"name": k.Name, "addr": k.APIServer, "kind": "k8s",
+			"status": status, "color": color, "count": nil, "abnormal": nil})
 	}
-
-	sb.WriteString("</tbody></table></div>")
-	return sb.String()
+	return rows
 }
 
 func avgOf(series []tsdb.Series) float64 {
@@ -519,6 +582,96 @@ func avgOf(series []tsdb.Series) float64 {
 		return 0
 	}
 	return sum / n
+}
+
+// collectReportData 组装报告渲染所需全部结构化数据（Python 渲染使用；本地 fallback 同源）
+func collectReportData(a *core.App, start, end time.Time, include map[string]bool, stats map[string]int) map[string]any {
+	sections := []string{}
+	if include["link"] {
+		sections = append(sections, "link")
+	}
+	if include["monitor"] {
+		sections = append(sections, "dev")
+	}
+	if include["db"] {
+		sections = append(sections, "db")
+	}
+	if include["container"] {
+		sections = append(sections, "container")
+	}
+	if include["node"] {
+		sections = append(sections, "node")
+	}
+	if include["nginx"] {
+		sections = append(sections, "nginx")
+	}
+	payload := map[string]any{
+		"title":  "",
+		"start":  start.Format("2006-01-02 15:04"),
+		"end":    end.Format("2006-01-02 15:04"),
+		"now":    time.Now().Format("2006-01-02 15:04:05"),
+		"stats":  map[string]int{"total": stats["total"], "up": stats["up"], "down": stats["down"], "warn": stats["warn"]},
+		"sections": sections,
+		"link": collectLinkRows(a, start, end, stats),
+		"dev": collectDevRows(a, start, end, stats),
+		"db":  collectDBRows(a, stats),
+		"nginx": collectNginxRows(a, stats),
+		"container": collectContainerRows(a, stats),
+		"node": collectNodeRows(a, stats),
+	}
+	return payload
+}
+
+// callPythonRender 转发 Python 渲染报告 HTML；失败返回 error（调用方回退本地渲染）
+func callPythonRender(a *core.App, payload map[string]any) (string, error) {
+	base := strings.TrimRight(a.Cfg.Server.PythonSvcURL, "/")
+	if base == "" {
+		return "", fmt.Errorf("python svc url empty")
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Post(base+"/internal/report/render", "application/json", bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("python svc status %d", resp.StatusCode)
+	}
+	var out struct {
+		HTML string `json:"html"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return "", err
+	}
+	if len(out.HTML) < 200 {
+		return "", fmt.Errorf("python render empty")
+	}
+	return out.HTML, nil
+}
+
+// renderReport 渲染报告 HTML：优先 Python（Jinja 模板渲染），失败自动回退本地渲染。
+// 注意：Python 失败时本地渲染会再次更新 stats，故使用独立 stats 副本避免重复计数。
+func renderReport(a *core.App, title string, start, end time.Time, include map[string]bool, stats map[string]int) string {
+	pyStats := map[string]int{}
+	payload := collectReportData(a, start, end, include, pyStats)
+	payload["title"] = title
+	if html, err := callPythonRender(a, payload); err == nil {
+		for k, v := range pyStats {
+			stats[k] = v
+		}
+		return html
+	}
+	linkS := renderLinkSection(a, start, end, stats)
+	devS := renderDevSection(a, start, end, stats)
+	dbS := renderDBSection(a, stats)
+	containerS := renderContainerSection(a, stats)
+	nodeS := renderNodeSection(a, stats)
+	nginxS := renderNginxSection(a, stats)
+	return renderHTML(title, start, end, linkS, devS, dbS, containerS, nodeS, nginxS, stats)
 }
 
 var reportTpl = template.Must(template.New("report").Parse(`<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>{{.Title}}</title>
@@ -568,38 +721,51 @@ func renderHTML(title string, start, end time.Time, linkS, devS, dbS, containerS
 }
 
 func renderNodeSection(a *core.App, stats map[string]int) string {
-	var nodes []model.Node
-	a.DB.Order("level asc, id asc").Find(&nodes)
 	var sb strings.Builder
 	sb.WriteString(`<div class="section"><h3>节点健康性</h3><table><thead><tr><th>节点名称</th><th>UUID</th><th>层级</th><th>状态</th><th>设备数</th><th>容器数</th><th>最后上报</th></tr></thead><tbody>`)
+	for _, r := range collectNodeRows(a, stats) {
+		sb.WriteString(fmt.Sprintf("<tr><td><b>%s</b></td><td><code>%s</code></td><td>%s</td><td><span style='color:%s'>%s</span></td><td>%d</td><td>%d</td><td>%s</td></tr>",
+			r["name"], r["uuid"], r["level"], r["color"], r["status"], r["device_cnt"], r["container_cnt"], r["last_seen"]))
+	}
+	sb.WriteString("</tbody></table></div>")
+	return sb.String()
+}
+
+// collectNodeRows 节点健康数据收集（供 Python 渲染；本地 fallback 同源）
+func collectNodeRows(a *core.App, stats map[string]int) []map[string]any {
+	var nodes []model.Node
+	a.DB.Order("level asc, id asc").Find(&nodes)
+	var rows []map[string]any
 	for _, n := range nodes {
 		stats["total"]++
 		color := "#52c41a"
-		badge := "在线"
+		status := "在线"
 		if n.Status != "online" {
 			color = "#f5222d"
-			badge = "离线"
+			status = "离线"
 			stats["down"]++
 		} else {
 			stats["up"]++
 		}
 		level := []string{"总部", "省级", "市级", "县级"}[n.Level]
-		if n.Level >= len(level) {
+		if n.Level >= 4 {
 			level = fmt.Sprintf("L%d", n.Level)
 		}
-		sb.WriteString(fmt.Sprintf("<tr><td><b>%s</b></td><td><code>%s</code></td><td>%s</td><td><span style='color:%s'>%s</span></td><td>%d</td><td>%d</td><td>%s</td></tr>",
-			n.Name, n.NodeUUID, level, color, badge, n.DeviceCnt, n.ContainerCnt, n.LastSeenAt.Format("2006-01-02 15:04:05")))
+		rows = append(rows, map[string]any{"name": n.Name, "uuid": n.NodeUUID, "level": level,
+			"status": status, "color": color, "device_cnt": n.DeviceCnt, "container_cnt": n.ContainerCnt,
+			"last_seen": n.LastSeenAt.Format("2006-01-02 15:04:05")})
 	}
-	sb.WriteString("</tbody></table></div>")
-	return sb.String()
+	return rows
 }
 
 func init() {
 	modreg.RegisterProtected("report", RegisterProtected)
 }
 
-// stripHTML 去掉 HTML 标签，提取纯文本行
+// stripHTML 去掉 HTML 标签，提取纯文本行（先剥离 style/script 块）
 func stripHTML(html string) []string {
+	html = stripBlocks(html, "style")
+	html = stripBlocks(html, "script")
 	html = strings.ReplaceAll(html, "<br", "\n<br")
 	html = strings.ReplaceAll(html, "</tr>", "\n")
 	html = strings.ReplaceAll(html, "</div>", "\n")
@@ -774,13 +940,7 @@ func generateAutoReport(a *core.App, kind string, now time.Time) {
 		return
 	}
 	stats := map[string]int{}
-	linkS := renderLinkSection(a, start, end, stats)
-	devS := renderDevSection(a, start, end, stats)
-	dbS := renderDBSection(a, stats)
-	containerS := renderContainerSection(a, stats)
-	nodeS := renderNodeSection(a, stats)
-	nginxS := renderNginxSection(a, stats)
-	content := renderHTML(title, start, end, linkS, devS, dbS, containerS, nodeS, nginxS, stats)
+	content := renderReport(a, title, start, end, nil, stats)
 	rec := model.ReportRecord{Title: title, StartAt: start, EndAt: end, Content: content, Creator: "system", SendEmail: true}
 	if err := a.DB.Create(&rec).Error; err != nil {
 		logger.Errorf("[report] 自动报告生成失败 %s: %v", title, err)

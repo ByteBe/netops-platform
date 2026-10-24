@@ -35,6 +35,11 @@ from scriptgen.router import router as scriptgen_router
 
 app.include_router(scriptgen_router)
 
+# 挂载报告渲染子路由（Go 收集数据后转发渲染 HTML）
+from report.router import report_router
+
+app.include_router(report_router)
+
 
 class RunRequest(BaseModel):
     snapshot: Dict[str, Any] = {}
