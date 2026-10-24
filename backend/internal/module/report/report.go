@@ -298,7 +298,7 @@ func stripBlocks(s, tag string) string {
 
 func renderLinkSection(a *core.App, start, end time.Time, stats map[string]int) string {
 	var sb strings.Builder
-	sb.WriteString(`<div class="section"><h3>【链路检测汇总】</h3><table><thead><tr><th>链路名称</th><th>目标地址</th><th>当前状态</th><th>平均时延</th><th>累计中断</th><th>可用率</th></tr></thead><tbody>`)
+	sb.WriteString(`<div class="section"><h3>` + iconSVG("link", "#0d3b66", 17, true) + `【链路检测汇总】</h3><table><thead><tr><th>链路名称</th><th>目标地址</th><th>当前状态</th><th>平均时延</th><th>累计中断</th><th>可用率</th></tr></thead><tbody>`)
 	for _, r := range collectLinkRows(a, start, end, stats) {
 		sb.WriteString(fmt.Sprintf("<tr><td><b>%s</b></td><td>%s</td><td>%s</td><td>%.1f ms</td><td>%d 次</td><td>%.2f%%</td></tr>",
 			r["name"], r["target"], badge(fmt.Sprint(r["status"]), fmt.Sprint(r["color"])), r["avg_rt"], r["downs"], r["avail"]))
@@ -361,7 +361,7 @@ func collectLinkRows(a *core.App, start, end time.Time, stats map[string]int) []
 
 func renderDevSection(a *core.App, start, end time.Time, stats map[string]int) string {
 	var sb strings.Builder
-	sb.WriteString(`<div class="section"><h3>【服务器资源使用汇总】</h3><table><thead><tr><th>设备</th><th>IP</th><th>状态</th><th>CPU(均值)</th><th>内存使用(均值)</th></tr></thead><tbody>`)
+	sb.WriteString(`<div class="section"><h3>` + iconSVG("server", "#0d3b66", 17, true) + `【服务器资源使用汇总】</h3><table><thead><tr><th>设备</th><th>IP</th><th>状态</th><th>CPU(均值)</th><th>内存使用(均值)</th></tr></thead><tbody>`)
 	for _, r := range collectDevRows(a, start, end, stats) {
 		cpuColor := "#52c41a"
 		cpu := r["cpu"].(float64)
@@ -403,7 +403,7 @@ func collectDevRows(a *core.App, start, end time.Time, stats map[string]int) []m
 
 func renderDBSection(a *core.App, stats map[string]int) string {
 	var sb strings.Builder
-	sb.WriteString(`<div class="section"><h3>【数据库状态汇总】</h3><table><thead><tr><th>实例</th><th>类型</th><th>状态</th><th>数据库数</th><th>错误数</th></tr></thead><tbody>`)
+	sb.WriteString(`<div class="section"><h3>` + iconSVG("db", "#0d3b66", 17, true) + `【数据库状态汇总】</h3><table><thead><tr><th>实例</th><th>类型</th><th>状态</th><th>数据库数</th><th>错误数</th></tr></thead><tbody>`)
 	for _, r := range collectDBRows(a, stats) {
 		sb.WriteString(fmt.Sprintf("<tr><td><b>%s</b></td><td>%s</td><td>%s</td><td>%.0f</td><td>%.0f</td></tr>",
 			r["name"], r["type"], badge(fmt.Sprint(r["status"]), fmt.Sprint(r["color"])), r["conns"], r["errors"]))
@@ -432,7 +432,7 @@ func collectDBRows(a *core.App, stats map[string]int) []map[string]any {
 // renderNginxSection Nginx 状态汇总（读取 nginx_instances 表 + 采集器实时快照）
 func renderNginxSection(a *core.App, stats map[string]int) string {
 	var sb strings.Builder
-	sb.WriteString(`<div class="section"><h3>【Nginx 状态汇总】</h3><table><thead><tr><th>实例</th><th>状态页地址</th><th>状态</th><th>活跃连接</th><th>累计请求</th><th>QPS(次/秒)</th></tr></thead><tbody>`)
+	sb.WriteString(`<div class="section"><h3>` + iconSVG("nginx", "#0d3b66", 17, true) + `【Nginx 状态汇总】</h3><table><thead><tr><th>实例</th><th>状态页地址</th><th>状态</th><th>活跃连接</th><th>累计请求</th><th>QPS(次/秒)</th></tr></thead><tbody>`)
 	rows := collectNginxRows(a, stats)
 	if len(rows) == 0 {
 		sb.WriteString("<tr><td colspan='6' style='text-align:center;color:#999'>暂无 Nginx 监控实例</td></tr>")
@@ -476,7 +476,7 @@ func collectNginxRows(a *core.App, stats map[string]int) []map[string]any {
 
 func renderContainerSection(a *core.App, stats map[string]int) string {
 	var sb strings.Builder
-	sb.WriteString(`<div class="section"><h3>【容器与 Kubernetes 汇总】</h3><table><thead><tr><th>节点</th><th>IP/地址</th><th>类型</th><th>状态</th><th>容器/Pod 数</th><th>异常数</th></tr></thead><tbody>`)
+	sb.WriteString(`<div class="section"><h3>` + iconSVG("box", "#0d3b66", 17, true) + `【容器与 Kubernetes 汇总】</h3><table><thead><tr><th>节点</th><th>IP/地址</th><th>类型</th><th>状态</th><th>容器/Pod 数</th><th>异常数</th></tr></thead><tbody>`)
 	rows := collectContainerRows(a, stats)
 	if len(rows) == 0 {
 		sb.WriteString("<tr><td colspan='6' style='text-align:center;color:#999'>暂无 Docker/K8s 节点监控</td></tr>")
@@ -674,6 +674,32 @@ func renderReport(a *core.App, title string, start, end time.Time, include map[s
 	return renderHTML(title, start, end, linkS, devS, dbS, containerS, nodeS, nginxS, stats)
 }
 
+// iconSVG 返回内联 SVG 图标（与 Python render.py 保持一致）；color 控制图形颜色。
+func iconSVG(name, color string, size int, margin bool) string {
+	paths := map[string]string{
+		"gauge": `<path d="M12 2a10 10 0 1 0 10 10" fill="none" stroke-width="2.2" stroke-linecap="round"/><path d="M12 12l5-5" fill="none" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="12" r="1.6"/>`,
+		"ok":    `<path d="M4.5 12.5l5 5L19.5 6.5" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`,
+		"down":  `<path d="M12 4v9" fill="none" stroke-width="2.4" stroke-linecap="round"/><circle cx="12" cy="18.5" r="1.7"/>`,
+		"warn":  `<path d="M12 2.5l10 18H2z" fill="none" stroke-width="2" stroke-linejoin="round"/><path d="M12 10v5" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="18" r="1.3"/>`,
+		"link":  `<path d="M3 12h4l3-7 4 14 3-7h4" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`,
+		"server": `<rect x="3.5" y="3.5" width="17" height="17" rx="2.5" fill="none" stroke-width="2"/><path d="M8 8.5h8M8 12h8M8 15.5h8" stroke-width="1.8" stroke-linecap="round"/>`,
+		"db":    `<ellipse cx="12" cy="5" rx="8" ry="3" fill="none" stroke-width="2"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5" fill="none" stroke-width="2"/>`,
+		"box":   `<path d="M12 2.5l9 4.5v10l-9 4.5-9-4.5V7z" fill="none" stroke-width="2" stroke-linejoin="round"/><path d="M3 7l9 4.5L21 7M12 11.5V21" fill="none" stroke-width="2"/>`,
+		"node":  `<circle cx="12" cy="4.5" r="2.2"/><circle cx="4.5" cy="19" r="2.2"/><circle cx="19.5" cy="19" r="2.2"/><path d="M12 6.7v3.8M6.4 17.6l4.6-6.6M17.6 17.6l-4.6-6.6" fill="none" stroke-width="1.8"/>`,
+		"nginx": `<path d="M4 12a8 8 0 0 1 14-5M20 12a8 8 0 0 1-14 5" fill="none" stroke-width="2.2" stroke-linecap="round"/><path d="M18 3v4h-4M6 21v-4h4" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`,
+	}
+	body := paths[name]
+	if body == "" {
+		body = paths["gauge"]
+	}
+	mr := ""
+	if margin {
+		mr = "margin-right:6px;"
+	}
+	return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="%d" height="%d" style="vertical-align:-3px;%s" fill="%s" stroke="%s">%s</svg>`,
+		size, size, mr, color, color, body)
+}
+
 var reportTpl = template.Must(template.New("report").Parse(`<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>{{.Title}}</title>
 <style>
 *{box-sizing:border-box}
@@ -706,10 +732,10 @@ tbody tr:hover{background:#eef4ff}
 <div class="tag">NetOps 网络运维监控平台 · 自动生成</div>
 </div>
 <table class="summary"><tr>
-<td><div class="num" style="color:#1a73e8">{{.Total}}</div><div class="lbl">监控对象总数</div></td>
-<td><div class="num" style="color:#34a853">{{.Up}}</div><div class="lbl">正常</div></td>
-<td><div class="num" style="color:#ea4335">{{.Down}}</div><div class="lbl">异常/离线</div></td>
-<td><div class="num" style="color:#f9ab00">{{.Warn}}</div><div class="lbl">告警</div></td>
+<td><div class="ic" style="background:#1a73e8">{{.IconGauge}}</div><div class="num" style="color:#1a73e8">{{.Total}}</div><div class="lbl">监控对象总数</div></td>
+<td><div class="ic" style="background:#34a853">{{.IconOk}}</div><div class="num" style="color:#34a853">{{.Up}}</div><div class="lbl">正常</div></td>
+<td><div class="ic" style="background:#ea4335">{{.IconDown}}</div><div class="num" style="color:#ea4335">{{.Down}}</div><div class="lbl">异常/离线</div></td>
+<td><div class="ic" style="background:#f9ab00">{{.IconWarn}}</div><div class="num" style="color:#f9ab00">{{.Warn}}</div><div class="lbl">告警</div></td>
 </tr></table>
 {{.LinkSection}}{{.DevSection}}{{.DBSection}}{{.ContainerSection}}{{.NodeSection}}{{.NginxSection}}
 <div class="footer">本报告由 NetOps 网络运维监控平台自动生成</div>
@@ -722,13 +748,17 @@ func renderHTML(title string, start, end time.Time, linkS, devS, dbS, containerS
 		"Now":         time.Now().Format("2006-01-02 15:04:05"),
 		"LinkSection": template.HTML(linkS), "DevSection": template.HTML(devS), "DBSection": template.HTML(dbS), "ContainerSection": template.HTML(containerS), "NodeSection": template.HTML(nodeS), "NginxSection": template.HTML(nginxS),
 		"Total": stats["total"], "Up": stats["up"], "Down": stats["down"], "Warn": stats["warn"],
+		"IconGauge": template.HTML(iconSVG("gauge", "#ffffff", 18, false)),
+		"IconOk":    template.HTML(iconSVG("ok", "#ffffff", 18, false)),
+		"IconDown":  template.HTML(iconSVG("down", "#ffffff", 18, false)),
+		"IconWarn":  template.HTML(iconSVG("warn", "#ffffff", 18, false)),
 	})
 	return sb.String()
 }
 
 func renderNodeSection(a *core.App, stats map[string]int) string {
 	var sb strings.Builder
-	sb.WriteString(`<div class="section"><h3>节点健康性</h3><table><thead><tr><th>节点名称</th><th>UUID</th><th>层级</th><th>状态</th><th>设备数</th><th>容器数</th><th>最后上报</th></tr></thead><tbody>`)
+	sb.WriteString(`<div class="section"><h3>` + iconSVG("node", "#0d3b66", 17, true) + `节点健康性</h3><table><thead><tr><th>节点名称</th><th>UUID</th><th>层级</th><th>状态</th><th>设备数</th><th>容器数</th><th>最后上报</th></tr></thead><tbody>`)
 	for _, r := range collectNodeRows(a, stats) {
 		sb.WriteString(fmt.Sprintf("<tr><td><b>%s</b></td><td><code>%s</code></td><td>%s</td><td><span style='color:%s'>%s</span></td><td>%d</td><td>%d</td><td>%s</td></tr>",
 			r["name"], r["uuid"], r["level"], r["color"], r["status"], r["device_cnt"], r["container_cnt"], r["last_seen"]))

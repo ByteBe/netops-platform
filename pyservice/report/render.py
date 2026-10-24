@@ -2,6 +2,44 @@
 """报告 HTML 渲染：原生模板替换（零第三方依赖），样式与 Go 版 report.go 保持一致。"""
 import re
 
+# ---- 图标（内联 SVG，viewBox 24，stroke/fill 白色，section 标题用深蓝） ----
+
+def _icon(name, color="#ffffff", size=16, margin=True):
+    """返回内联 SVG 图标；color 控制图形颜色，margin 控制是否带右侧间距。"""
+    paths = {
+        "gauge": '<path d="M12 2a10 10 0 1 0 10 10" fill="none" stroke-width="2.2" stroke-linecap="round"/>'
+                 '<path d="M12 12l5-5" fill="none" stroke-width="2.2" stroke-linecap="round"/>'
+                 '<circle cx="12" cy="12" r="1.6"/>',
+        "ok": '<path d="M4.5 12.5l5 5L19.5 6.5" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>',
+        "down": '<path d="M12 4v9" fill="none" stroke-width="2.4" stroke-linecap="round"/>'
+                '<circle cx="12" cy="18.5" r="1.7"/>',
+        "warn": '<path d="M12 2.5l10 18H2z" fill="none" stroke-width="2" stroke-linejoin="round"/>'
+                '<path d="M12 10v5" stroke-width="2" stroke-linecap="round"/>'
+                '<circle cx="12" cy="18" r="1.3"/>',
+        "link": '<path d="M3 12h4l3-7 4 14 3-7h4" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
+        "server": '<rect x="3.5" y="3.5" width="17" height="17" rx="2.5" fill="none" stroke-width="2"/>'
+                  '<path d="M8 8.5h8M8 12h8M8 15.5h8" stroke-width="1.8" stroke-linecap="round"/>',
+        "db": '<ellipse cx="12" cy="5" rx="8" ry="3" fill="none" stroke-width="2"/>'
+              '<path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5" fill="none" stroke-width="2"/>',
+        "box": '<path d="M12 2.5l9 4.5v10l-9 4.5-9-4.5V7z" fill="none" stroke-width="2" stroke-linejoin="round"/>'
+               '<path d="M3 7l9 4.5L21 7M12 11.5V21" fill="none" stroke-width="2"/>',
+        "node": '<circle cx="12" cy="4.5" r="2.2"/><circle cx="4.5" cy="19" r="2.2"/><circle cx="19.5" cy="19" r="2.2"/>'
+                '<path d="M12 6.7v3.8M6.4 17.6l4.6-6.6M17.6 17.6l-4.6-6.6" fill="none" stroke-width="1.8"/>',
+        "nginx": '<path d="M4 12a8 8 0 0 1 14-5M20 12a8 8 0 0 1-14 5" fill="none" stroke-width="2.2" stroke-linecap="round"/>'
+                 '<path d="M18 3v4h-4M6 21v-4h4" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
+    }
+    body = paths.get(name, paths["gauge"])
+    mr = "margin-right:6px;" if margin else ""
+    return ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="%d" height="%d" '
+            'style="vertical-align:-3px;%s" fill="%s" stroke="%s">%s</svg>'
+            % (size, size, mr, color, color, body))
+
+
+def _section_head(text, icon):
+    return ('<div class="section"><h3>%s<span style="margin-right:6px"></span>%s</h3>'
+            % (_icon(icon, "#0d3b66", 17), text))
+
+
 # ---- 各 section 的表格行 HTML 生成（与 Go renderXxxSection 输出一致） ----
 
 def _badge(status, color):
@@ -10,7 +48,8 @@ def _badge(status, color):
 
 
 def render_link(rows):
-    parts = ['<div class="section"><h3>【链路检测汇总】</h3><table><thead><tr>'
+    parts = [_section_head("【链路检测汇总】", "link"),
+             '<table><thead><tr>'
              '<th>链路名称</th><th>目标地址</th><th>当前状态</th><th>平均时延</th>'
              '<th>累计中断</th><th>可用率</th></tr></thead><tbody>']
     for r in rows:
@@ -34,7 +73,8 @@ def _num(r, key, default):
 
 
 def render_dev(rows):
-    parts = ['<div class="section"><h3>【服务器资源使用汇总】</h3><table><thead><tr>'
+    parts = [_section_head("【服务器资源使用汇总】", "server"),
+             '<table><thead><tr>'
              '<th>设备</th><th>IP</th><th>状态</th><th>CPU(均值)</th><th>内存使用(均值)</th></tr></thead><tbody>']
     if not rows:
         parts.append("<tr><td colspan='5' style='text-align:center;color:#999'>暂无服务器监控数据</td></tr>")
@@ -55,7 +95,8 @@ def render_dev(rows):
 
 
 def render_db(rows):
-    parts = ['<div class="section"><h3>【数据库状态汇总】</h3><table><thead><tr>'
+    parts = [_section_head("【数据库状态汇总】", "db"),
+             '<table><thead><tr>'
              '<th>实例</th><th>类型</th><th>状态</th><th>数据库数</th><th>错误数</th></tr></thead><tbody>']
     for r in rows:
         parts.append("<tr><td><b>%s</b></td><td>%s</td><td>%s</td><td>%.0f</td><td>%.0f</td></tr>" % (
@@ -67,7 +108,8 @@ def render_db(rows):
 
 
 def render_nginx(rows):
-    parts = ['<div class="section"><h3>【Nginx 状态汇总】</h3><table><thead><tr>'
+    parts = [_section_head("【Nginx 状态汇总】", "nginx"),
+             '<table><thead><tr>'
              '<th>实例</th><th>状态页地址</th><th>状态</th><th>活跃连接</th>'
              '<th>累计请求</th><th>QPS(次/秒)</th></tr></thead><tbody>']
     if not rows:
@@ -88,7 +130,8 @@ def render_nginx(rows):
 
 
 def render_container(rows):
-    parts = ['<div class="section"><h3>【容器与 Kubernetes 汇总】</h3><table><thead><tr>'
+    parts = [_section_head("【容器与 Kubernetes 汇总】", "box"),
+             '<table><thead><tr>'
              '<th>节点</th><th>IP/地址</th><th>类型</th><th>状态</th><th>容器/Pod 数</th>'
              '<th>异常数</th></tr></thead><tbody>']
     if not rows:
@@ -104,7 +147,8 @@ def render_container(rows):
 
 
 def render_node(rows):
-    parts = ['<div class="section"><h3>节点健康性</h3><table><thead><tr>'
+    parts = [_section_head("节点健康性", "node"),
+             '<table><thead><tr>'
              '<th>节点名称</th><th>UUID</th><th>层级</th><th>状态</th><th>设备数</th>'
              '<th>容器数</th><th>最后上报</th></tr></thead><tbody>']
     if not rows:
@@ -136,7 +180,8 @@ body{font-family:"Noto Sans CJK SC","WenQuanYi Micro Hei","Microsoft YaHei",sans
 .header .meta span{margin-right:22px}
 .header .tag{display:inline-block;margin-top:14px;padding:4px 14px;border-radius:20px;background:rgba(255,255,255,.16);font-size:12px;color:#fff;border:1px solid rgba(255,255,255,.35);position:relative}
 .summary{width:calc(100% - 80px);margin:22px 40px 6px;border-collapse:separate;border-spacing:12px 0}
-.summary td{width:25%;text-align:center;padding:16px 8px;background:#f8fbff;border:1px solid #e3edfc;border-radius:10px;position:relative}
+.summary td{width:25%;text-align:center;padding:14px 8px 12px;background:#f8fbff;border:1px solid #e3edfc;border-radius:10px;position:relative}
+.summary .ic{width:32px;height:32px;border-radius:50%;margin:0 auto 4px;text-align:center;line-height:34px;box-shadow:0 2px 6px rgba(15,76,129,.15)}
 .summary .num{font-size:30px;font-weight:800;line-height:1.15}
 .summary .lbl{font-size:12px;color:#7a8798;margin-top:5px}
 .section{padding:18px 40px 4px}
@@ -155,10 +200,10 @@ tbody tr:hover{background:#eef4ff}
 <div class="tag">NetOps 网络运维监控平台 · 自动生成</div>
 </div>
 <table class="summary"><tr>
-<td><div class="num" style="color:#1a73e8">__TOTAL__</div><div class="lbl">监控对象总数</div></td>
-<td><div class="num" style="color:#34a853">__UP__</div><div class="lbl">正常</div></td>
-<td><div class="num" style="color:#ea4335">__DOWN__</div><div class="lbl">异常/离线</div></td>
-<td><div class="num" style="color:#f9ab00">__WARN__</div><div class="lbl">告警</div></td>
+<td><div class="ic" style="background:#1a73e8">__ICON_GAUGE__</div><div class="num" style="color:#1a73e8">__TOTAL__</div><div class="lbl">监控对象总数</div></td>
+<td><div class="ic" style="background:#34a853">__ICON_OK__</div><div class="num" style="color:#34a853">__UP__</div><div class="lbl">正常</div></td>
+<td><div class="ic" style="background:#ea4335">__ICON_DOWN__</div><div class="num" style="color:#ea4335">__DOWN__</div><div class="lbl">异常/离线</div></td>
+<td><div class="ic" style="background:#f9ab00">__ICON_WARN__</div><div class="num" style="color:#f9ab00">__WARN__</div><div class="lbl">告警</div></td>
 </tr></table>
 __LINK____DEV____DB____CONTAINER____NODE____NGINX__
 <div class="footer">本报告由 NetOps 网络运维监控平台自动生成</div>
@@ -186,6 +231,10 @@ def render_html(payload):
             .replace("__UP__", str(stats.get("up", 0)))
             .replace("__DOWN__", str(stats.get("down", 0)))
             .replace("__WARN__", str(stats.get("warn", 0)))
+            .replace("__ICON_GAUGE__", _icon("gauge", "#ffffff", 18, margin=False))
+            .replace("__ICON_OK__", _icon("ok", "#ffffff", 18, margin=False))
+            .replace("__ICON_DOWN__", _icon("down", "#ffffff", 18, margin=False))
+            .replace("__ICON_WARN__", _icon("warn", "#ffffff", 18, margin=False))
             .replace("__LINK__", sections[0]).replace("__DEV__", sections[1])
             .replace("__DB__", sections[2]).replace("__NGINX__", sections[3])
             .replace("__CONTAINER__", sections[4]).replace("__NODE__", sections[5]))
