@@ -700,8 +700,8 @@ func sanitizeFilename(s string) string {
 }
 
 // startReportScheduler 定时生成周报/月报：
-//   - 每 10 分钟检查一次，每天首次检查（时间 >= 01:00）即执行当天任务，
-//     服务在凌晨任意时刻启动/重启都不会错过（不再依赖整点 tick 对齐）
+//   - 每 10 分钟检查一次，每天首次检查（时间 >= 20:00）即执行当天任务，
+//     服务在晚间任意时刻启动/重启都不会错过（不再依赖整点 tick 对齐）
 //   - lastRunDay 防同一天重复触发，DB 日期范围去重兜底
 //   - 错过补发：周一未生成周报时（近 7 天无自动周报且系统已运行超一周），
 //     周二至周日自动补发；月报同理（近 30 天无自动月报且运行超 30 天）
@@ -713,7 +713,7 @@ func startReportScheduler(a *core.App) {
 		lastRunDay := ""
 		for now := range tk.C {
 			day := now.Format("2006-01-02")
-			if now.Hour() < 1 || day == lastRunDay {
+			if now.Hour() < 20 || day == lastRunDay {
 				continue
 			}
 			lastRunDay = day
