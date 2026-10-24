@@ -108,7 +108,7 @@ function pushTrendPoint(taskId: number, name: string, color: string, rtMs: numbe
 }
 
 // ---------- 图表渲染（全新标准配置） ----------
-function axisTooltip() {
+function axisTooltip(fmt?: (v: number) => string) {
   return {
     trigger: 'axis' as const,
     confine: true,
@@ -116,7 +116,8 @@ function axisTooltip() {
     axisPointer: { type: 'none' as const },
     backgroundColor: cssVar('--np-card-bg', '#ffffff'),
     borderColor: cssVar('--np-border', '#e3e5e8'),
-    textStyle: { color: cssVar('--np-monitor-text', '#39424f'), fontSize: 12 }
+    textStyle: { color: cssVar('--np-monitor-text', '#39424f'), fontSize: 12 },
+    ...(fmt ? { valueFormatter: (v: unknown) => fmt(Number(v)) } : {})
   }
 }
 
@@ -139,7 +140,7 @@ function renderTrends() {
   }))
   const option = {
     backgroundColor: 'transparent',
-    tooltip: axisTooltip(),
+    tooltip: axisTooltip((v) => `${v.toFixed(1)} ms`),
     legend: { textStyle: { color: ca.axis }, top: 0 },
     grid: { left: 48, right: 16, top: 30, bottom: 22 },
     xAxis: { type: 'time', min: startMs, max: nowMs, axisLine: { lineStyle: { color: ca.axisLine } } },
@@ -170,7 +171,7 @@ function renderTraffic() {
   const ca = chartAxisColors()
   trafficChart.setOption({
     backgroundColor: 'transparent',
-    tooltip: axisTooltip(),
+    tooltip: axisTooltip((v) => fmtShortBps(v)),
     legend: { textStyle: { color: ca.axis }, top: 0 },
     grid: { left: 68, right: 14, top: 30, bottom: 22 },
     xAxis: { type: 'category', data: trafficData.value.map((x) => x.name), axisLabel: { color: ca.axis, interval: 0, rotate: 0, margin: 8 } },
@@ -211,7 +212,7 @@ function renderServer() {
   const memColor = cssVar('--np-success', '#3f9e63')
   srvChart.setOption({
     backgroundColor: 'transparent',
-    tooltip: axisTooltip(),
+    tooltip: axisTooltip((v) => `${v.toFixed(1)}%`),
     legend: { textStyle: { color: ca.axis }, top: 0 },
     grid: { left: 48, right: 14, top: 30, bottom: 40 },
     xAxis: { type: 'category', data: devices.value.map((d) => d.name), axisLabel: { color: ca.axis, interval: 0, rotate: 0, margin: 8 } },
