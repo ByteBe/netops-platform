@@ -72,6 +72,13 @@ let timer: number | null = null
 // WS 高频事件节流：monitor device_snapshot / traffic if_rate 推送频繁，合并为 2 秒一次
 let wsLoadTimer: number | null = null
 let wsTrafficTimer: number | null = null
+// 悬停暂停：鼠标进入任一图表容器时暂停全部重绘，彻底杜绝 hover 时柱子闪烁/消失
+let hoverPaused = false
+function bindHoverPause(el: HTMLDivElement | undefined) {
+  if (!el) return
+  el.addEventListener('mouseenter', () => { hoverPaused = true })
+  el.addEventListener('mouseleave', () => { hoverPaused = false })
+}
 function wsLoadOverview() {
   if (wsLoadTimer) return
   wsLoadTimer = window.setTimeout(() => {
@@ -151,6 +158,7 @@ function pushTrendPoint(taskId: number, name: string, color: string, rtMs: numbe
 
 async function renderTrends() {
   if (!trendRef.value) return
+  if (hoverPaused) return // 悬停期间不重绘
   trendChart ??= echarts.init(trendRef.value)
   const ca = chartAxisColors()
   const nowMs = Date.now()
@@ -189,6 +197,7 @@ let lastTrendSeriesCount = 0
 let lastHealthSig = ''
 function renderHealth() {
   if (!healthRef.value) return
+  if (hoverPaused) return // 悬停期间不重绘
   healthChart ??= echarts.init(healthRef.value)
   // 数据无变化不重绘（WS/定时器高频触发时避免重绘动画打断 hover）
   const sig = JSON.stringify([devices.value.map((d) => d.name), devices.value.map((d) => d.cpu), devices.value.map((d) => d.mem_used)])
@@ -226,6 +235,7 @@ function renderHealth() {
 let lastTrafficSig = ''
 function renderTraffic() {
   if (!trafficRef.value) return
+  if (hoverPaused) return // 悬停期间不重绘
   trafficChart ??= echarts.init(trafficRef.value)
   // 数据无变化不重绘（WS if_rate 高频触发时避免重绘动画打断 hover）
   const sig = JSON.stringify([trafficData.value.map((x) => x.name), trafficData.value.map((x) => x.in_bps), trafficData.value.map((x) => x.out_bps)])
@@ -277,6 +287,7 @@ async function loadTraffic() {
 let lastDbSig = ''
 function renderDb() {
   if (!dbRef.value) return
+  if (hoverPaused) return // 悬停期间不重绘
   dbChart ??= echarts.init(dbRef.value)
   // 数据无变化不重绘
   const sig = JSON.stringify([dbs.value.map((d) => d.name), dbs.value.map((d) => Number((d as unknown as { conns?: number }).conns || 0))])
@@ -315,6 +326,7 @@ const avgMem = computed(() => {
 let lastGaugeSig = ''
 function renderGauge() {
   if (!gaugeRef.value) return
+  if (hoverPaused) return // 悬停期间不重绘
   gaugeChart ??= echarts.init(gaugeRef.value)
   // 数值无变化不重绘
   const sig = `${avgCpu.value}|${avgMem.value}`
@@ -355,6 +367,12 @@ watch(() => appStore.theme, () => {
 
 onMounted(async () => {
   await nextTick()
+  // 悬停暂停：鼠标进入图表容器期间冻结刷新
+  bindHoverPause(trendRef.value)
+  bindHoverPause(healthRef.value)
+  bindHoverPause(trafficRef.value)
+  bindHoverPause(dbRef.value)
+  bindHoverPause(gaugeRef.value)
   try { await loadOverview() } catch (e) { console.error('overview', e) }
   try { await loadTraffic() } catch (e) { console.error('traffic', e) }
   if (trendRef.value) { trendChart?.dispose(); trendChart = echarts.init(trendRef.value) }
