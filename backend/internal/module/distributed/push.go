@@ -113,13 +113,14 @@ func StartPusher(a *core.App) {
 	}()
 }
 
-// startWeeklyReport 每周一 09:00 自动生成巡检周报记录
+// startWeeklyReport 每周五 20:00 自动生成巡检周报记录
 func startWeeklyReport(a *core.App) {
 	defer func() { recover() }()
 	for {
 		now := time.Now()
-		next := time.Date(now.Year(), now.Month(), now.Day(), 9, 0, 0, 0, now.Location())
-		days := (8 - int(now.Weekday())) % 7
+		next := time.Date(now.Year(), now.Month(), now.Day(), 20, 0, 0, 0, now.Location())
+		// 目标：周五（time.Friday == 5）
+		days := (5 - int(now.Weekday()) + 7) % 7
 		if days == 0 {
 			days = 7
 		}

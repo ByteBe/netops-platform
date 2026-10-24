@@ -703,8 +703,8 @@ func sanitizeFilename(s string) string {
 //   - 每 10 分钟检查一次，每天首次检查（时间 >= 20:00）即执行当天任务，
 //     服务在晚间任意时刻启动/重启都不会错过（不再依赖整点 tick 对齐）
 //   - lastRunDay 防同一天重复触发，DB 日期范围去重兜底
-//   - 错过补发：周一未生成周报时（近 7 天无自动周报且系统已运行超一周），
-//     周二至周日自动补发；月报同理（近 30 天无自动月报且运行超 30 天）
+//   - 错过补发：周五未生成周报时（近 7 天无自动周报且系统已运行超一周），
+//     其余日期自动补发；月报同理（近 30 天无自动月报且运行超 30 天）
 //   - 自动生成的报告同步通过已配置通知渠道发送（失败仅记日志，不影响入库）
 func startReportScheduler(a *core.App) {
 	go func() {
@@ -717,9 +717,9 @@ func startReportScheduler(a *core.App) {
 				continue
 			}
 			lastRunDay = day
-			// 周报：周一正常生成；非周一但近 7 天无自动周报且系统运行超一周 → 补发
+			// 周报：周五 20:00 正常生成；其余日期但近 7 天无自动周报且系统运行超一周 → 补发
 			if !hasRecentAutoReport(a, "自动巡检周报", 7*24*time.Hour, now) {
-				if now.Weekday() == time.Monday || sysDataAge(a) >= 7*24*time.Hour {
+				if now.Weekday() == time.Friday || sysDataAge(a) >= 7*24*time.Hour {
 					generateAutoReport(a, "weekly", now)
 				}
 			}
@@ -751,7 +751,7 @@ func generateAutoReport(a *core.App, kind string, now time.Time) {
 	end := now
 	start := end.Add(-7 * 24 * time.Hour)
 	catchup := ""
-	if kind == "weekly" && end.Weekday() != time.Monday {
+	if kind == "weekly" && end.Weekday() != time.Friday {
 		catchup = "(补发)"
 	}
 	title := "自动巡检周报" + catchup + " " + end.Format("2006-01-02")
