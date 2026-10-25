@@ -688,10 +688,13 @@ onBeforeUnmount(() => {
     <!-- 设备地理图管理弹窗 -->
     <el-dialog v-model="manageOpen" :title="t('dashboard.geoManage')" width="780px" append-to-body>
       <div class="np-geo-editor">
+        <el-upload drag :show-file-list="false" accept="image/*" :http-request="uploadGeoImage" class="np-geo-upload">
+          <div class="np-geo-upload-inner">
+            <div class="np-geo-upload-title">{{ t('dashboard.geoUpload') }}</div>
+            <div class="np-geo-upload-hint">{{ t('dashboard.geoUploadHint') }}</div>
+          </div>
+        </el-upload>
         <div class="np-geo-toolbar">
-          <el-upload :show-file-list="false" accept="image/*" :http-request="uploadGeoImage">
-            <el-button size="small" type="primary">{{ t('dashboard.geoUpload') }}</el-button>
-          </el-upload>
           <el-input v-model="geoUrl" size="small" :placeholder="t('dashboard.geoUrlPlaceholder')" clearable style="width: 260px" @keyup.enter="importGeoUrl" />
           <el-button size="small" :disabled="!geoUrl.trim()" @click="importGeoUrl">{{ t('dashboard.geoImportUrl') }}</el-button>
           <el-select v-model="placingDevice" size="small" :placeholder="t('dashboard.geoSelectDevice')" clearable style="width: 200px">
@@ -825,6 +828,11 @@ onBeforeUnmount(() => {
 
   // 地理图管理弹窗
   .np-geo-editor { display: flex; flex-direction: column; gap: 10px; }
+  .np-geo-upload { width: 100%; }
+  .np-geo-upload :deep(.el-upload-dragger) { padding: 14px 0; }
+  .np-geo-upload-inner { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .np-geo-upload-title { font-size: 13px; font-weight: 600; color: var(--np-primary); }
+  .np-geo-upload-hint { font-size: 12px; color: var(--np-text-3); }
   .np-geo-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .np-geo-tip { font-size: 12px; color: var(--np-text-3); }
   .np-geo-canvas {

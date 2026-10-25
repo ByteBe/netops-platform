@@ -36,7 +36,7 @@ export default {
   devSwitch: 'Switch', devRouter: 'Router', devServer: 'Server', devFirewall: 'Firewall', devOther: 'Other',
   // Device Geo Map
   geoMap: 'Device Geo Map', geoManage: 'Manage', geoNoImage: 'No base map uploaded, click "Upload" or paste an image URL',
-  geoUpload: 'Upload Base Map', geoSelectDevice: 'Select Device', geoClickPlace: 'Click blank area on the map to place the selected device',
+  geoUpload: 'Upload Base Map', geoUploadHint: 'Click or drag an image here to upload (local file, png/jpg/webp, ≤5MB)', geoSelectDevice: 'Select Device', geoClickPlace: 'Click blank area on the map to place the selected device',
   geoRemove: 'Remove', geoPlaced: 'Placed',
   geoUrlPlaceholder: 'Paste image URL to import', geoImportUrl: 'Import URL',
   alertCenter: 'Alert Center'
