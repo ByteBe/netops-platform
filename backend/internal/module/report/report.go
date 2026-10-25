@@ -2,7 +2,6 @@ package report
 
 import (
 	"fmt"
-	"html/template"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -66,7 +65,11 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		}
 
 		stats := map[string]int{"total": 0, "up": 0, "down": 0, "warn": 0}
-		content := renderReport(a, title, start, end, include, stats)
+		content, err := renderReport(a, title, start, end, include, stats)
+		if err != nil {
+			response.Fail(c, 502, 50200, "报告渲染服务不可用，请检查 Python 智能外围（netops-python）服务状态")
+			return
+		}
 
 		username, _ := c.Get(middleware.KeyUsername)
 		rec := model.ReportRecord{
@@ -293,18 +296,6 @@ func stripBlocks(s, tag string) string {
 	}
 }
 
-func renderLinkSection(a *core.App, start, end time.Time, stats map[string]int) string {
-	var sb strings.Builder
-	sb.WriteString(`<div class="section"><h3>` + iconSVG("link", "color", 22, true) + `【链路检测汇总】</h3><table><thead><tr><th>链路名称</th><th>目标地址</th><th>当前状态</th><th>平均时延</th><th>累计中断</th><th>可用率</th></tr></thead><tbody>`)
-	for _, r := range collectLinkRows(a, start, end, stats) {
-		sb.WriteString(fmt.Sprintf("<tr><td><b>%s</b></td><td>%s</td><td>%s</td><td>%.1f ms</td><td>%d 次</td><td>%.2f%%</td></tr>",
-			r["name"], r["target"], badge(fmt.Sprint(r["status"]), fmt.Sprint(r["color"])), r["avg_rt"], r["downs"], r["avail"]))
-	}
-	sb.WriteString("</tbody></table></div>")
-	return sb.String()
-}
-
-// collectLinkRows 链路检测数据收集（供 Python 渲染；本地 fallback 同源）
 func collectLinkRows(a *core.App, start, end time.Time, stats map[string]int) []map[string]any {
 	var tasks []model.LinkTask
 	a.DB.Find(&tasks)
@@ -356,25 +347,6 @@ func collectLinkRows(a *core.App, start, end time.Time, stats map[string]int) []
 	return rows
 }
 
-func renderDevSection(a *core.App, start, end time.Time, stats map[string]int) string {
-	var sb strings.Builder
-	sb.WriteString(`<div class="section"><h3>` + iconSVG("server", "color", 22, true) + `【服务器资源使用汇总】</h3><table><thead><tr><th>设备</th><th>IP</th><th>状态</th><th>CPU(均值)</th><th>内存使用(均值)</th></tr></thead><tbody>`)
-	for _, r := range collectDevRows(a, start, end, stats) {
-		cpuColor := "#52c41a"
-		cpu := r["cpu"].(float64)
-		if cpu > 80 {
-			cpuColor = "#f5222d"
-		} else if cpu > 60 {
-			cpuColor = "#faad14"
-		}
-		sb.WriteString(fmt.Sprintf("<tr><td><b>%s</b></td><td>%s</td><td>%s</td><td style='color:%s'>%.1f%%</td><td>%.1f%%</td></tr>",
-			r["name"], r["ip"], badge(fmt.Sprint(r["status"]), fmt.Sprint(r["color"])), cpuColor, cpu, r["mem"]))
-	}
-	sb.WriteString("</tbody></table></div>")
-	return sb.String()
-}
-
-// collectDevRows 服务器资源数据收集（供 Python 渲染；本地 fallback 同源）
 func collectDevRows(a *core.App, start, end time.Time, stats map[string]int) []map[string]any {
 	var devices []model.MonitorDevice
 	a.DB.Where("type = ?", "server").Or("type = ?", "other").Find(&devices)
@@ -398,18 +370,6 @@ func collectDevRows(a *core.App, start, end time.Time, stats map[string]int) []m
 	return rows
 }
 
-func renderDBSection(a *core.App, stats map[string]int) string {
-	var sb strings.Builder
-	sb.WriteString(`<div class="section"><h3>` + iconSVG("db", "color", 22, true) + `【数据库状态汇总】</h3><table><thead><tr><th>实例</th><th>类型</th><th>状态</th><th>数据库数</th><th>错误数</th></tr></thead><tbody>`)
-	for _, r := range collectDBRows(a, stats) {
-		sb.WriteString(fmt.Sprintf("<tr><td><b>%s</b></td><td>%s</td><td>%s</td><td>%.0f</td><td>%.0f</td></tr>",
-			r["name"], r["type"], badge(fmt.Sprint(r["status"]), fmt.Sprint(r["color"])), r["conns"], r["errors"]))
-	}
-	sb.WriteString("</tbody></table></div>")
-	return sb.String()
-}
-
-// collectDBRows 数据库状态数据收集（供 Python 渲染；本地 fallback 同源）
 func collectDBRows(a *core.App, stats map[string]int) []map[string]any {
 	var rows []map[string]any
 	for _, s := range a.DBProbe.SnapshotAll() {
@@ -426,28 +386,6 @@ func collectDBRows(a *core.App, stats map[string]int) []map[string]any {
 	return rows
 }
 
-// renderNginxSection Nginx 状态汇总（读取 nginx_instances 表 + 采集器实时快照）
-func renderNginxSection(a *core.App, stats map[string]int) string {
-	var sb strings.Builder
-	sb.WriteString(`<div class="section"><h3>` + iconSVG("nginx", "color", 22, true) + `【Nginx 状态汇总】</h3><table><thead><tr><th>实例</th><th>状态页地址</th><th>状态</th><th>活跃连接</th><th>累计请求</th><th>QPS(次/秒)</th></tr></thead><tbody>`)
-	rows := collectNginxRows(a, stats)
-	if len(rows) == 0 {
-		sb.WriteString("<tr><td colspan='6' style='text-align:center;color:#999'>暂无 Nginx 监控实例</td></tr>")
-	}
-	for _, r := range rows {
-		if r["up"].(bool) {
-			sb.WriteString(fmt.Sprintf("<tr><td><b>%s</b></td><td>%s</td><td>%s</td><td>%.0f</td><td>%.0f</td><td>%.1f</td></tr>",
-				r["name"], r["status_url"], badge("正常", "#52c41a"), r["active_conns"], r["requests"], r["qps"]))
-		} else {
-			sb.WriteString(fmt.Sprintf("<tr><td><b>%s</b></td><td>%s</td><td>%s</td><td colspan='3' style='text-align:center;color:#999'>未采集</td></tr>",
-				r["name"], r["status_url"], badge("异常", "#f5222d")))
-		}
-	}
-	sb.WriteString("</tbody></table></div>")
-	return sb.String()
-}
-
-// collectNginxRows Nginx 状态数据收集（供 Python 渲染；本地 fallback 同源）
 func collectNginxRows(a *core.App, stats map[string]int) []map[string]any {
 	var insts []model.NginxInstance
 	a.DB.Order("id asc").Find(&insts)
@@ -471,29 +409,6 @@ func collectNginxRows(a *core.App, stats map[string]int) []map[string]any {
 	return rows
 }
 
-func renderContainerSection(a *core.App, stats map[string]int) string {
-	var sb strings.Builder
-	sb.WriteString(`<div class="section"><h3>` + iconSVG("box", "color", 22, true) + `【容器与 Kubernetes 汇总】</h3><table><thead><tr><th>节点</th><th>IP/地址</th><th>类型</th><th>状态</th><th>容器/Pod 数</th><th>异常数</th></tr></thead><tbody>`)
-	rows := collectContainerRows(a, stats)
-	if len(rows) == 0 {
-		sb.WriteString("<tr><td colspan='6' style='text-align:center;color:#999'>暂无 Docker/K8s 节点监控</td></tr>")
-	}
-	for _, r := range rows {
-		cnt, abnormal := "-", "-"
-		if r["count"] != nil {
-			cnt = fmt.Sprint(r["count"])
-		}
-		if r["abnormal"] != nil {
-			abnormal = fmt.Sprint(r["abnormal"])
-		}
-		sb.WriteString(fmt.Sprintf("<tr><td><b>%s</b></td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>",
-			r["name"], r["addr"], r["kind"], badge(fmt.Sprint(r["status"]), fmt.Sprint(r["color"])), cnt, abnormal))
-	}
-	sb.WriteString("</tbody></table></div>")
-	return sb.String()
-}
-
-// collectContainerRows 容器/K8s 状态数据收集（供 Python 渲染；本地 fallback 同源）
 func collectContainerRows(a *core.App, stats map[string]int) []map[string]any {
 	var hosts []model.DockerHost
 	a.DB.Order("id asc").Find(&hosts)
@@ -634,139 +549,18 @@ func callPythonRender(a *core.App, payload map[string]any) (string, error) {
 	return out.HTML, nil
 }
 
-// renderReport 渲染报告 HTML：优先 Python（Jinja 模板渲染），失败自动回退本地渲染。
-// 注意：Python 失败时本地渲染会再次更新 stats，故使用独立 stats 副本避免重复计数。
-func renderReport(a *core.App, title string, start, end time.Time, include map[string]bool, stats map[string]int) string {
-	pyStats := map[string]int{}
-	payload := collectReportData(a, start, end, include, pyStats)
+// renderReport 渲染报告 HTML：仅走 Python 智能外围（唯一实现，模板/图标均在 Python 侧）。
+// 失败返回 error（由调用方明确报错，不再本地兜底渲染）。
+func renderReport(a *core.App, title string, start, end time.Time, include map[string]bool, stats map[string]int) (string, error) {
+	payload := collectReportData(a, start, end, include, stats)
 	payload["title"] = title
-	if html, err := callPythonRender(a, payload); err == nil {
-		for k, v := range pyStats {
-			stats[k] = v
-		}
-		return html
+	html, err := callPythonRender(a, payload)
+	if err != nil {
+		return "", err
 	}
-	linkS := renderLinkSection(a, start, end, stats)
-	devS := renderDevSection(a, start, end, stats)
-	dbS := renderDBSection(a, stats)
-	containerS := renderContainerSection(a, stats)
-	nodeS := renderNodeSection(a, stats)
-	nginxS := renderNginxSection(a, stats)
-	return renderHTML(title, start, end, linkS, devS, dbS, containerS, nodeS, nginxS, stats)
+	return html, nil
 }
 
-// iconSVG 返回内联 SVG 图标（与 Python render.py 保持一致）。
-// mode="color" 纯色圆底+白色图标+高光（标题用）；mode="white" 白色线描（卡片圆底内用）。viewBox 24。
-func iconSVG(name, mode string, size int, margin bool) string {
-	paths := map[string]string{
-		"gauge": `<path d="M12 2a10 10 0 1 0 10 10" fill="none" stroke-width="2.1" stroke-linecap="round"/><path d="M12 12l5-5" fill="none" stroke-width="2.1" stroke-linecap="round"/><circle cx="12" cy="12" r="1.6"/>`,
-		"ok":    `<path d="M4.5 12.5l5 5L19.5 6.5" fill="none" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>`,
-		"down":  `<path d="M12 4v9" fill="none" stroke-width="2.3" stroke-linecap="round"/><circle cx="12" cy="18.5" r="1.7"/>`,
-		"warn":  `<path d="M12 2.5l10 18H2z" fill="none" stroke-width="2" stroke-linejoin="round"/><path d="M12 10v5" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="18" r="1.3"/>`,
-		"link":  `<path d="M3 12h4l3-7 4 14 3-7h4" fill="none" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>`,
-		"server": `<rect x="3.5" y="3.5" width="17" height="17" rx="2.5" fill="none" stroke-width="1.9"/><path d="M8 8.5h8M8 12h8M8 15.5h8" stroke-width="1.7" stroke-linecap="round"/>`,
-		"db":    `<ellipse cx="12" cy="5" rx="8" ry="3" fill="none" stroke-width="1.9"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5" fill="none" stroke-width="1.9"/>`,
-		"box":   `<path d="M12 2.5l9 4.5v10l-9 4.5-9-4.5V7z" fill="none" stroke-width="1.9" stroke-linejoin="round"/><path d="M3 7l9 4.5L21 7M12 11.5V21" fill="none" stroke-width="1.9"/>`,
-		"node":  `<circle cx="12" cy="4.5" r="2.1"/><circle cx="4.5" cy="19" r="2.1"/><circle cx="19.5" cy="19" r="2.1"/><path d="M12 6.6v3.8M6.4 17.6l4.6-6.6M17.6 17.6l-4.6-6.6" fill="none" stroke-width="1.7"/>`,
-		"nginx": `<path d="M4 12a8 8 0 0 1 14-5M20 12a8 8 0 0 1-14 5" fill="none" stroke-width="2.1" stroke-linecap="round"/><path d="M18 3v4h-4M6 21v-4h4" fill="none" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>`,
-	}
-	colors := map[string][2]string{
-		"gauge": {"#1e88e5", "#0d47a1"}, "ok": {"#43a047", "#1b5e20"}, "down": {"#e53935", "#b71c1c"},
-		"warn": {"#fb8c00", "#e65100"}, "link": {"#1e88e5", "#0d47a1"}, "server": {"#5c6bc0", "#283593"},
-		"db": {"#00acc1", "#006064"}, "box": {"#fb8c00", "#e65100"}, "node": {"#ab47bc", "#4a148c"},
-		"nginx": {"#26a69a", "#004d40"},
-	}
-	body := paths[name]
-	if body == "" {
-		body = paths["gauge"]
-	}
-	mr := ""
-	if margin {
-		mr = "margin-right:6px;"
-	}
-	// 白色高光圆（左上，模拟光照立体）
-	hi := `<circle cx="8.2" cy="8.2" r="6.2" fill="#ffffff" opacity="0.22"/>`
-	if mode == "white" {
-		return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="%d" height="%d" style="vertical-align:-3px;%s" fill="#ffffff" stroke="#ffffff">%s%s</svg>`,
-			size, size, mr, hi, body)
-	}
-	c := colors[name]
-	if c == ([2]string{}) {
-		c = colors["gauge"]
-	}
-	return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="%d" height="%d" style="vertical-align:-5px;%s"><circle cx="12" cy="12" r="11.2" fill="%s" stroke="%s" stroke-width="1.2"/>%s<g fill="#ffffff" stroke="#ffffff">%s</g></svg>`,
-		size, size, mr, c[0], c[1], hi, body)
-}
-
-var reportTpl = template.Must(template.New("report").Parse(`<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>{{.Title}}</title>
-<style>
-*{box-sizing:border-box}
-body{font-family:"Noto Sans CJK SC","WenQuanYi Micro Hei","Microsoft YaHei",sans-serif;margin:0;padding:0;background:#eef1f6;color:#2c3e50;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.wrap{max-width:960px;margin:0 auto;background:#fff;min-height:100vh;box-shadow:0 2px 16px rgba(15,76,129,.10)}
-.header{position:relative;padding:34px 44px 26px;background:#0d3b66;background:linear-gradient(135deg,#0d3b66 0%,#1a73e8 55%,#3f9bff 100%);color:#fff;overflow:hidden}
-.header:before{content:"";position:absolute;right:-70px;top:-70px;width:230px;height:230px;border-radius:50%;background:rgba(255,255,255,.09)}
-.header:after{content:"";position:absolute;right:70px;bottom:-90px;width:170px;height:170px;border-radius:50%;background:rgba(255,255,255,.06)}
-.header h1{margin:0;font-size:25px;font-weight:700;letter-spacing:2px;position:relative}
-.header .meta{margin-top:10px;font-size:12.5px;color:#d3e3ff;position:relative}
-.header .meta span{margin-right:22px}
-.header .tag{display:inline-block;margin-top:14px;padding:4px 14px;border-radius:20px;background:rgba(255,255,255,.16);font-size:12px;color:#fff;border:1px solid rgba(255,255,255,.35);position:relative}
-.summary{width:calc(100% - 80px);margin:22px 40px 6px;border-collapse:separate;border-spacing:12px 0}
-.summary td{width:25%;text-align:center;padding:14px 8px 12px;background:#f8fbff;border:1px solid #e3edfc;border-radius:10px}
-.summary .ic{width:32px;height:32px;border-radius:50%;margin:0 auto 4px;text-align:center;line-height:34px;box-shadow:0 4px 8px rgba(15,76,129,.28),inset 0 -2px 4px rgba(0,0,0,.16),inset 0 2px 3px rgba(255,255,255,.38)}
-.summary .num{font-size:30px;font-weight:800;line-height:1.15}
-.summary .lbl{font-size:12px;color:#7a8798;margin-top:5px}
-.section{padding:18px 40px 4px}
-h3{margin:0 0 14px;font-size:15px;color:#0d3b66;padding:8px 14px;border-left:4px solid #1a73e8;background:#eef4ff;background:linear-gradient(90deg,#eef4ff 0%,#f8fbff 100%);border-radius:0 6px 6px 0;letter-spacing:1px}
-table{width:100%;border-collapse:collapse;font-size:12.5px;box-shadow:0 1px 5px rgba(15,76,129,.07);border-radius:8px;overflow:hidden}
-thead th{background:#0d3b66;background:linear-gradient(180deg,#1a73e8 0%,#0d3b66 100%);padding:10px 12px;text-align:left;font-weight:600;color:#fff;border:none}
-tbody td{padding:9px 12px;border-bottom:1px solid #eef1f5}
-tbody tr:nth-child(even){background:#f7f9fc}
-tbody tr:hover{background:#eef4ff}
-.footer{padding:16px 40px;text-align:center;color:#9aa7b8;font-size:11px;letter-spacing:1px;border-top:1px solid #eef1f5;background:#fafbfd}
-@media print{body{background:#fff}.wrap{box-shadow:none}}
-</style></head><body><div class="wrap">
-<div class="header">
-<h1>{{.Title}}</h1>
-<div class="meta"><span>巡检周期：{{.Start}} 至 {{.End}}</span><span>生成时间：{{.Now}}</span></div>
-<div class="tag">NetOps 网络运维监控平台 · 自动生成</div>
-</div>
-<table class="summary"><tr>
-<td><div class="ic" style="background:#1a73e8;background:linear-gradient(135deg,#64b5f6,#1565c0)">{{.IconGauge}}</div><div class="num" style="color:#1a73e8">{{.Total}}</div><div class="lbl">监控对象总数</div></td>
-<td><div class="ic" style="background:#34a853;background:linear-gradient(135deg,#81c784,#1b5e20)">{{.IconOk}}</div><div class="num" style="color:#34a853">{{.Up}}</div><div class="lbl">正常</div></td>
-<td><div class="ic" style="background:#ea4335;background:linear-gradient(135deg,#ef5350,#b71c1c)">{{.IconDown}}</div><div class="num" style="color:#ea4335">{{.Down}}</div><div class="lbl">异常/离线</div></td>
-<td><div class="ic" style="background:#f9ab00;background:linear-gradient(135deg,#ffb74d,#e65100)">{{.IconWarn}}</div><div class="num" style="color:#f9ab00">{{.Warn}}</div><div class="lbl">告警</div></td>
-</tr></table>
-{{.LinkSection}}{{.DevSection}}{{.DBSection}}{{.ContainerSection}}{{.NodeSection}}{{.NginxSection}}
-<div class="footer">本报告由 NetOps 网络运维监控平台自动生成</div>
-</div></body></html>`))
-
-func renderHTML(title string, start, end time.Time, linkS, devS, dbS, containerS, nodeS, nginxS string, stats map[string]int) string {
-	var sb strings.Builder
-	reportTpl.Execute(&sb, map[string]any{
-		"Title": title, "Start": start.Format("2006-01-02 15:04"), "End": end.Format("2006-01-02 15:04"),
-		"Now":         time.Now().Format("2006-01-02 15:04:05"),
-		"LinkSection": template.HTML(linkS), "DevSection": template.HTML(devS), "DBSection": template.HTML(dbS), "ContainerSection": template.HTML(containerS), "NodeSection": template.HTML(nodeS), "NginxSection": template.HTML(nginxS),
-		"Total": stats["total"], "Up": stats["up"], "Down": stats["down"], "Warn": stats["warn"],
-		"IconGauge": template.HTML(iconSVG("gauge", "white", 18, false)),
-		"IconOk":    template.HTML(iconSVG("ok", "white", 18, false)),
-		"IconDown":  template.HTML(iconSVG("down", "white", 18, false)),
-		"IconWarn":  template.HTML(iconSVG("warn", "white", 18, false)),
-	})
-	return sb.String()
-}
-
-func renderNodeSection(a *core.App, stats map[string]int) string {
-	var sb strings.Builder
-	sb.WriteString(`<div class="section"><h3>` + iconSVG("node", "color", 22, true) + `节点健康性</h3><table><thead><tr><th>节点名称</th><th>UUID</th><th>层级</th><th>状态</th><th>设备数</th><th>容器数</th><th>最后上报</th></tr></thead><tbody>`)
-	for _, r := range collectNodeRows(a, stats) {
-		sb.WriteString(fmt.Sprintf("<tr><td><b>%s</b></td><td><code>%s</code></td><td>%s</td><td><span style='color:%s'>%s</span></td><td>%d</td><td>%d</td><td>%s</td></tr>",
-			r["name"], r["uuid"], r["level"], r["color"], r["status"], r["device_cnt"], r["container_cnt"], r["last_seen"]))
-	}
-	sb.WriteString("</tbody></table></div>")
-	return sb.String()
-}
-
-// collectNodeRows 节点健康数据收集（供 Python 渲染；本地 fallback 同源）
 func collectNodeRows(a *core.App, stats map[string]int) []map[string]any {
 	var nodes []model.Node
 	a.DB.Order("level asc, id asc").Find(&nodes)
@@ -975,7 +769,11 @@ func generateAutoReport(a *core.App, kind string, now time.Time) {
 		return
 	}
 	stats := map[string]int{}
-	content := renderReport(a, title, start, end, nil, stats)
+	content, err := renderReport(a, title, start, end, nil, stats)
+	if err != nil {
+		logger.Errorf("[report] 自动报告渲染失败 %s: %v", title, err)
+		return
+	}
 	rec := model.ReportRecord{Title: title, StartAt: start, EndAt: end, Content: content, Creator: "system", SendEmail: true}
 	if err := a.DB.Create(&rec).Error; err != nil {
 		logger.Errorf("[report] 自动报告生成失败 %s: %v", title, err)

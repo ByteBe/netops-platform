@@ -27,13 +27,13 @@
 
 ## 2. 功能归属表（哪些功能"使用者调用时走 Python"）
 
-| 前端功能 | Go API 入口 | Python 内部路由 | 失败降级 |
+| 前端功能 | Go API 入口 | Python 内部路由 | Python 不可用时 |
 | --- | --- | --- | --- |
-| AI 巡检 | `POST /api/aiinspect/run` | `POST /internal/aiinspect/run` | 回退内置 AI / 统计报告 |
-| 脚本生成器 | `POST /api/scriptgen/generate` | `POST /internal/scriptgen/generate` | 回退本地 Go 生成 |
-| 运维巡检报告 / 周报 | `POST /api/report/*` | `POST /internal/report/render` | 回退本地 Go 模板渲染 |
+| AI 巡检 | `POST /api/aiinspect/run` | `POST /internal/aiinspect/run` | 明确失败提示（502） |
+| 脚本生成器 | `POST /api/scriptgen/generate` | `POST /internal/scriptgen/generate` | 明确失败提示（502） |
+| 运维巡检报告 / 周报 | `POST /api/report/*` | `POST /internal/report/render` | 明确失败提示（502） |
 
-降级原则：**Python 不可用时主功能不中断**——Go 保留内置实现自动兜底（AI 巡检内置 AI、脚本生成 Go 内置生成器、报告 Go 模板），仅记录日志，使用者无感知。
+降级原则（v2.4.0 起）：**Python 是唯一实现，Go 不保留内置兜底**——AI 巡检 / 脚本生成 / 报告渲染均已删除 Go 本地实现（内置 AI 分支、厂商命令生成器与校验族、本地 HTML 模板与图标）。Python 不可用时接口直接返回 502「请检查 Python 智能外围（netops-python）服务状态」，避免双实现造成的代码臃肿与行为不一致。Go 侧保留的职责：数据采集（设备/链路/数据库/Nginx/容器）、报告数据收集（collect*Rows → payload 序列化）、周报调度与邮件/通知渠道发送、PDF 下载（wkhtmltopdf 转本地渲染 HTML）。
 
 ## 3. 融合转发层（Go 侧）
 
@@ -69,6 +69,6 @@ python deploy_all.py --no-build # 跳过编译，用现有 zip
 ## 7. 扩展约定（新增"Python 化功能"时的步骤）
 
 1. 在 `pyservice` 下建子包（如 `pyservice/xxx/`），提供 `router.py` 并挂载到 `aiinspect/app.py`
-2. Go 侧新增模块转发：使用 `a.PySvc.PostJSON("/internal/xxx/action", req, &out, timeout)`，并保证失败有内置兜底
+2. Go 侧新增模块转发：使用 `a.PySvc.PostJSON("/internal/xxx/action", req, &out, timeout)`，Python 失败时返回明确错误（如 `response.Fail(c, 502, 50200, "…服务不可用…")`），**不再实现本地兜底**
 3. 同步检查：MySQL 表结构 / TDengine 建表与 tags 一致性 / 前端 i18n 双语
 4. `deploy_python_only.py` 或 `deploy_all.py` 的 `PY_FILES` 增加新文件

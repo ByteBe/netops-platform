@@ -13,7 +13,6 @@ import (
 	"netops/internal/core"
 	"netops/internal/model"
 	"netops/internal/modreg"
-	"netops/internal/service/ai"
 )
 
 func RegisterProtected(a *core.App, g *gin.RouterGroup) {
@@ -25,47 +24,18 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		// 1. 收集系统快照（Go 采集）
 		snapshot := collectSnapshot(a)
 
-		// 2. 优先转发 Python 智能外围服务（AI 巡检增强：pandas 统计 + TDengine 趋势 + LLM）
-		if a.Cfg.Server.PythonSvcURL != "" {
-			if report, stats, err := callPythonSvc(a, snapshot); err == nil {
-				// 存历史
-				snapJSON, _ := json.Marshal(snapshot)
-				a.DB.Create(&model.AIInspectReport{Report: report, Snapshot: string(snapJSON), CreatedAt: time.Now()})
-				response.OK(c, gin.H{"report": report, "snapshot": snapshot, "stats": stats, "time": time.Now().Format("2006-01-02 15:04:05"), "source": "python"})
-				return
-			} else {
-				fmt.Printf("[aiinspect] python 服务调用失败，回退内置 AI: %v\n", err)
-			}
-		}
-
-		// 3. 找启用的 AI 配置
-		var cfg model.AIConfig
-		if a.DB.Where("enable = ?", true).Order("priority desc").First(&cfg).Error != nil {
-			response.Fail(c, 400, 40000, "未配置启用的 AI，请先在系统设置中配置")
-			return
-		}
-
-		// 3. 构造 prompt
-		prompt := buildPrompt(snapshot)
-
-		// 4. 调 AI
-		provider := ai.Provider{
-			Name: cfg.Name, BaseURL: cfg.BaseURL, APIKey: cfg.APIKey,
-			Model: cfg.Model, Temperature: cfg.Temperature,
-		}
-		result, err := ai.Chat(provider, []ai.Message{
-			{Role: "system", Content: "你是资深网络运维专家，根据提供的系统数据生成简洁专业的中文巡检报告，包含：总体评价、发现的问题、风险点、建议措施。用 Markdown 格式。"},
-			{Role: "user", Content: prompt},
-		})
+		// 2. 转发 Python 智能外围服务（唯一实现：pandas 统计 + TDengine 趋势 + LLM）
+		report, stats, err := callPythonSvc(a, snapshot)
 		if err != nil {
-			response.Fail(c, 500, 50000, "AI调用失败: "+err.Error())
+			// Python 智能外围不可用：明确失败（不再内置兜底）
+			fmt.Printf("[aiinspect] python 服务不可用: %v\n", err)
+			response.Fail(c, 502, 50200, "AI 智能服务不可用，请检查 Python 智能外围（netops-python）服务状态")
 			return
 		}
-		// 5. 保存历史
+		// 存历史
 		snapJSON, _ := json.Marshal(snapshot)
-		a.DB.Create(&model.AIInspectReport{Report: result, Snapshot: string(snapJSON), CreatedAt: time.Now()})
-
-		response.OK(c, gin.H{"report": result, "snapshot": snapshot, "time": time.Now().Format("2006-01-02 15:04:05")})
+		a.DB.Create(&model.AIInspectReport{Report: report, Snapshot: string(snapJSON), CreatedAt: time.Now()})
+		response.OK(c, gin.H{"report": report, "snapshot": snapshot, "stats": stats, "time": time.Now().Format("2006-01-02 15:04:05"), "source": "python"})
 	})
 
 	// 历史列表
@@ -234,47 +204,6 @@ func collectLocalHost() *DeviceStat {
 		ds.Uptime = up
 	}
 	return ds
-}
-
-func buildPrompt(s Snapshot) string {
-	var b strings.Builder
-	b.WriteString("## 系统巡检数据\n\n")
-	fmt.Fprintf(&b, "- 设备总数：%d，在线：%d，离线：%d，未知：%d\n", s.DeviceTotal, s.DeviceUp, s.DeviceDown, s.DeviceUnknown)
-	fmt.Fprintf(&b, "- 活跃告警：%d，今日告警：%d\n", s.AlertActive, s.AlertToday)
-	fmt.Fprintf(&b, "- 24h 严重日志：%d 条，警告日志：%d 条\n", s.LogError24h, s.LogWarn24h)
-
-	b.WriteString("\n### 设备资源明细：\n")
-	if len(s.Devices) == 0 {
-		b.WriteString("- 暂无设备数据\n")
-	}
-	for _, d := range s.Devices {
-		who := "远程设备"
-		if d.IsLocal {
-			who = "本服务器"
-		}
-		status := "未知"
-		switch d.Status {
-		case "up":
-			status = "在线"
-		case "down":
-			status = "离线"
-		}
-		fmt.Fprintf(&b, "- [%s] %s(%s)：%s，CPU %.1f%%，内存 %.1f%%，磁盘 %.1f%%，运行 %.0f 小时",
-			who, d.Name, d.IP, status, d.CPU, d.Mem, d.Disk, d.Uptime/3600)
-		if d.Message != "" {
-			b.WriteString("，" + d.Message)
-		}
-		b.WriteString("\n")
-	}
-
-	if len(s.TopDevices) > 0 {
-		b.WriteString("\n### 离线设备：\n")
-		for _, d := range s.TopDevices {
-			b.WriteString("- " + d + "\n")
-		}
-	}
-	b.WriteString("\n请根据以上数据生成巡检报告，重点关注各设备的资源使用情况和离线设备。")
-	return b.String()
 }
 
 func init() { modreg.RegisterProtected("aiinspect", RegisterProtected) }
