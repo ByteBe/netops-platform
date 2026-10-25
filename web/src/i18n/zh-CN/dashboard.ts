@@ -35,7 +35,8 @@ export default {
   opsSummary: '运维摘要', taskTotal: '自动化任务', taskRate: '成功率',
   devSwitch: '交换机', devRouter: '路由器', devServer: '服务器', devFirewall: '防火墙', devOther: '其他',
   // 设备地理图
-  geoMap: '设备地理图', geoManage: '管理', geoNoImage: '未导入底图，点击「管理」上传',
+  geoMap: '设备地理图', geoManage: '管理', geoNoImage: '未导入底图，点击「上传底图」或粘贴图片链接导入',
   geoUpload: '上传底图', geoSelectDevice: '选择设备', geoClickPlace: '点击图中空白处放置选中设备',
-  geoRemove: '删除', geoPlaced: '已放置'
+  geoRemove: '删除', geoPlaced: '已放置',
+  geoUrlPlaceholder: '粘贴图片链接导入底图', geoImportUrl: 'URL导入'
 }

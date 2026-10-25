@@ -11,7 +11,7 @@ import { ref, onMounted, onBeforeUnmount, nextTick, watch, computed } from 'vue'
 import * as echarts from '@/utils/echarts'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { getEnc, putEnc, delEnc, http } from '@/utils/request'
+import { getEnc, putEnc, delEnc, postEnc, http } from '@/utils/request'
 import { WSClient } from '@/utils/ws'
 import { useAppStore } from '@/stores/app'
 import { ElMessage } from 'element-plus'
@@ -74,6 +74,15 @@ async function uploadGeoImage(options: { file: File }) {
     headers: { 'Content-Type': 'multipart/form-data', 'X-No-Enc': '1' }
   })
   ElMessage.success(t('common.success'))
+  await loadGeoMap()
+}
+const geoUrl = ref('')
+async function importGeoUrl() {
+  const url = geoUrl.value.trim()
+  if (!url) return
+  await postEnc('/dashboard/geomap/import-url', { url })
+  ElMessage.success(t('common.success'))
+  geoUrl.value = ''
   await loadGeoMap()
 }
 function onGeoCanvasClick(e: MouseEvent) {
@@ -716,6 +725,8 @@ onBeforeUnmount(() => {
           <el-upload :show-file-list="false" accept="image/*" :http-request="uploadGeoImage">
             <el-button size="small" type="primary">{{ t('dashboard.geoUpload') }}</el-button>
           </el-upload>
+          <el-input v-model="geoUrl" size="small" :placeholder="t('dashboard.geoUrlPlaceholder')" clearable style="width: 260px" @keyup.enter="importGeoUrl" />
+          <el-button size="small" :disabled="!geoUrl.trim()" @click="importGeoUrl">{{ t('dashboard.geoImportUrl') }}</el-button>
           <el-select v-model="placingDevice" size="small" :placeholder="t('dashboard.geoSelectDevice')" clearable style="width: 200px">
             <el-option v-for="d in deviceOptions" :key="d.device_id" :label="d.name" :value="d.device_id" />
           </el-select>

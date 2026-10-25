@@ -3,8 +3,10 @@ package dashboard
 
 import (
 	"fmt"
+	"io"
 	"math"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -485,6 +487,72 @@ func registerGeoMap(a *core.App, g *gin.RouterGroup) {
 		name := fmt.Sprintf("geo_%d%s", time.Now().UnixNano(), ext)
 		dst := filepath.Join(geoMapDir, name)
 		if err := c.SaveUploadedFile(f, dst); err != nil {
+			response.Err(c, err)
+			return
+		}
+		if old != "" && old != dst {
+			_ = os.Remove(old)
+		}
+		cfg := model.GeoMapConfig{ID: 1, Image: name}
+		a.DB.Where("id = ?", 1).Assign(cfg).FirstOrCreate(&cfg)
+		response.OK(c, gin.H{"image": "/api/v1/dashboard/geomap/image"})
+	})
+
+	// 通过 URL 导入底图（http/https，≤5MB，png/jpg/jpeg/webp）
+	g.POST("/geomap/import-url", func(c *gin.Context) {
+		var req struct {
+			URL string `json:"url"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.URL) == "" {
+			response.Bad(c, "缺少图片 URL")
+			return
+		}
+		u := strings.TrimSpace(req.URL)
+		if !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
+			response.Bad(c, "仅支持 http/https 图片地址")
+			return
+		}
+		client := &http.Client{Timeout: 12 * time.Second}
+		resp, err := client.Get(u)
+		if err != nil {
+			response.Bad(c, "下载失败: "+err.Error())
+			return
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != 200 {
+			response.Bad(c, "下载失败: HTTP "+strconv.Itoa(resp.StatusCode))
+			return
+		}
+		ct := resp.Header.Get("Content-Type")
+		ext := ""
+		switch {
+		case strings.Contains(ct, "png"):
+			ext = ".png"
+		case strings.Contains(ct, "jpeg"), strings.Contains(ct, "jpg"):
+			ext = ".jpg"
+		case strings.Contains(ct, "webp"):
+			ext = ".webp"
+		default:
+			response.Bad(c, "仅支持 png/jpg/jpeg/webp 图片")
+			return
+		}
+		if err := os.MkdirAll(geoMapDir, 0o755); err != nil {
+			response.Err(c, err)
+			return
+		}
+		data, err := io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024+1))
+		if err != nil {
+			response.Bad(c, "读取失败: "+err.Error())
+			return
+		}
+		if len(data) > 5*1024*1024 {
+			response.Bad(c, "图片不能超过 5MB")
+			return
+		}
+		old := geoMapImagePath(a)
+		name := fmt.Sprintf("geo_%d%s", time.Now().UnixNano(), ext)
+		dst := filepath.Join(geoMapDir, name)
+		if err := os.WriteFile(dst, data, 0o644); err != nil {
 			response.Err(c, err)
 			return
 		}
