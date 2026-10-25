@@ -1,9 +1,12 @@
-// Package dashboard 数据大屏（聚合接口：KPI / 链路趋势 / 设备健康 / 流量 / 数据库）
+// Package dashboard 数据大屏（聚合接口：KPI / 链路趋势 / 设备健康 / 流量 / 数据库 / 大屏总览）
 package dashboard
 
 import (
+	"math"
+	"net"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -135,6 +138,262 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 	g.GET("/db-health", func(c *gin.Context) {
 		response.OK(c, a.DBProbe.SnapshotAll())
 	})
+
+	// 大屏总览（参考运维可视化大屏：KPI + 分布 + 主机资源 + 趋势/热力图 + 变更动态 + 摘要）
+	g.GET("/screen", func(c *gin.Context) {
+		now := time.Now()
+		dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+		weekStart := now.AddDate(0, 0, -6)
+		weekStart = time.Date(weekStart.Year(), weekStart.Month(), weekStart.Day(), 0, 0, 0, 0, weekStart.Location())
+
+		// ---- KPI ----
+		var devTotal int64
+		a.DB.Model(&model.MonitorDevice{}).Count(&devTotal)
+		devOnline := int64(0)
+		snaps := a.SnmpMgr.Snapshot()
+		for _, s := range snaps {
+			if s.Up {
+				devOnline++
+			}
+		}
+		typeCnt := map[string]int64{}
+		vendorCnt := map[string]int64{}
+		devName := map[uint]string{}
+		devType := map[uint]string{}
+		var devs []model.MonitorDevice
+		a.DB.Model(&model.MonitorDevice{}).Find(&devs)
+		for _, d := range devs {
+			if d.Type != "" {
+				typeCnt[d.Type]++
+			}
+			if d.Vendor != "" {
+				vendorCnt[d.Vendor]++
+			}
+			devName[d.ID] = d.Name
+			devType[d.ID] = d.Type
+		}
+
+		var alertTotal, alertCritical, alertToday, alertActive int64
+		a.DB.Model(&model.AlertEvent{}).Count(&alertTotal)
+		a.DB.Model(&model.AlertEvent{}).Where("level = ?", "critical").Count(&alertCritical)
+		a.DB.Model(&model.AlertEvent{}).Where("created_at >= ?", dayStart).Count(&alertToday)
+		a.DB.Model(&model.AlertEvent{}).Where("acked = ?", false).Count(&alertActive)
+
+		var ipUsed int64
+		a.DB.Model(&model.IPRecord{}).Count(&ipUsed)
+		ipTotal := int64(0)
+		var subs []model.Subnet
+		a.DB.Find(&subs)
+		for _, s := range subs {
+			ipTotal += subnetCapacity(s.CIDR)
+		}
+
+		ifUp, ifTotal := int64(0), int64(0)
+		for _, s := range snaps {
+			for _, ifs := range s.Interfaces {
+				ifTotal++
+				if strings.EqualFold(ifs.Oper, "up") {
+					ifUp++
+				}
+			}
+		}
+
+		var tplTotal int64
+		a.DB.Model(&model.ScriptTemplate{}).Count(&tplTotal)
+
+		// ---- 告警分级分布（近7天） ----
+		levelAgg := map[string]int64{}
+		var levelRows []struct {
+			Level string
+			N     int64
+		}
+		a.DB.Model(&model.AlertEvent{}).
+			Select("level, count(*) as n").
+			Where("created_at >= ?", weekStart).
+			Group("level").Scan(&levelRows)
+		for _, r := range levelRows {
+			levelAgg[r.Level] = r.N
+		}
+		alertLevel := make([]gin.H, 0, len(levelAgg))
+		for lv, n := range levelAgg {
+			alertLevel = append(alertLevel, gin.H{"name": lv, "value": n})
+		}
+		sort.Slice(alertLevel, func(i, j int) bool { return alertLevel[i]["value"].(int64) > alertLevel[j]["value"].(int64) })
+
+		// ---- 近7天告警趋势（按天） ----
+		trend := make([]gin.H, 0, 7)
+		for i := 0; i < 7; i++ {
+			ds := weekStart.AddDate(0, 0, i)
+			de := ds.AddDate(0, 0, 1)
+			var n int64
+			a.DB.Model(&model.AlertEvent{}).Where("created_at >= ? AND created_at < ?", ds, de).Count(&n)
+			trend = append(trend, gin.H{"date": ds.Format("01-02"), "count": n})
+		}
+
+		// ---- 告警热力图（设备 × 小时，近7天，Top 10 设备） ----
+		devAlerts := map[string]int64{}
+		var targetRows []struct {
+			Target string
+			N      int64
+		}
+		a.DB.Model(&model.AlertEvent{}).
+			Select("target, count(*) as n").
+			Where("created_at >= ?", weekStart).
+			Group("target").Scan(&targetRows)
+		for _, r := range targetRows {
+			devAlerts[r.Target] = r.N
+		}
+		topDevs := make([]string, 0, len(devAlerts))
+		for d := range devAlerts {
+			topDevs = append(topDevs, d)
+		}
+		sort.Slice(topDevs, func(i, j int) bool { return devAlerts[topDevs[i]] > devAlerts[topDevs[j]] })
+		if len(topDevs) > 10 {
+			topDevs = topDevs[:10]
+		}
+		heatIdx := map[string]int{}
+		heatData := make([][3]int64, 0, 64)
+		for _, tgt := range topDevs {
+			heatIdx[tgt] = len(heatIdx)
+			var hr []model.AlertEvent
+			a.DB.Where("target = ? AND created_at >= ?", tgt, weekStart).Find(&hr)
+			hourCnt := map[int]int64{}
+			for _, e := range hr {
+				hourCnt[e.CreatedAt.Hour()]++
+			}
+			for h, n := range hourCnt {
+				heatData = append(heatData, [3]int64{int64(heatIdx[tgt]), int64(h), n})
+			}
+		}
+
+		// ---- 近7天流量趋势（TSDB if_in/if_out 按天均值，跨设备求和） ----
+		trafficX := make([]string, 0, 7)
+		trafficIn := make([]float64, 7)
+		trafficOut := make([]float64, 7)
+		for i := 0; i < 7; i++ {
+			ds := weekStart.AddDate(0, 0, i)
+			de := ds.AddDate(0, 0, 1)
+			trafficX = append(trafficX, ds.Format("01-02"))
+			sumIn, sumOut := 0.0, 0.0
+			for _, metric := range []string{"if_in", "if_out"} {
+				rt, _ := a.TSDB.Query(tsdb.Query{Metric: metric, Start: ds, End: de, Agg: "avg"})
+				for _, s := range rt {
+					for _, p := range s.Points {
+						if metric == "if_in" {
+							sumIn += p[1]
+						} else {
+							sumOut += p[1]
+						}
+					}
+				}
+			}
+			trafficIn[i] = sumIn
+			trafficOut[i] = sumOut
+		}
+
+		// ---- 主机资源（在线设备 CPU/内存/磁盘均值） ----
+		cpuSum, memSum, diskSum, hostN := 0.0, 0.0, 0.0, 0.0
+		deviceRank := make([]gin.H, 0, len(snaps))
+		for _, s := range snaps {
+			disk := 0.0
+			if len(s.Disks) > 0 {
+				var sum float64
+				for _, d := range s.Disks {
+					sum += d.UsedPct
+				}
+				disk = sum / float64(len(s.Disks))
+			}
+			deviceRank = append(deviceRank, gin.H{
+				"name": s.Name, "ip": s.IP, "up": s.Up,
+				"cpu": math.Round(s.CPU*10) / 10, "mem": math.Round(s.MemUsed*10) / 10, "disk": math.Round(disk*10) / 10,
+			})
+			if s.Up {
+				cpuSum += s.CPU
+				memSum += s.MemUsed
+				diskSum += disk
+				hostN++
+			}
+		}
+		hostRes := gin.H{"cpu": 0, "mem": 0, "disk": 0}
+		if hostN > 0 {
+			hostRes = gin.H{
+				"cpu":  math.Round(cpuSum/hostN*10) / 10,
+				"mem":  math.Round(memSum/hostN*10) / 10,
+				"disk": math.Round(diskSum/hostN*10) / 10,
+			}
+		}
+
+		// ---- 设备变更动态（审计日志最近 6 条设备相关操作） ----
+		var logs []model.AuditLog
+		a.DB.Order("created_at desc").Limit(6).Find(&logs)
+		changeFeed := make([]gin.H, 0, len(logs))
+		for _, l := range logs {
+			changeFeed = append(changeFeed, gin.H{
+				"user": l.Username, "action": l.Action, "time": l.CreatedAt.Format("01-02 15:04"),
+			})
+		}
+
+		// ---- 运维摘要 ----
+		var taskTotal, taskOK int64
+		a.DB.Model(&model.TaskLog{}).Where("created_at >= ?", weekStart).Count(&taskTotal)
+		a.DB.Model(&model.TaskLog{}).Where("created_at >= ? AND success = ?", weekStart, true).Count(&taskOK)
+		summary := gin.H{
+			"alert_active":  alertActive,
+			"alert_today":   alertToday,
+			"task_total":    taskTotal,
+			"task_success":  taskOK,
+			"dev_online":    devOnline,
+			"dev_total":     devTotal,
+			"ip_used":       ipUsed,
+			"if_up":         ifUp,
+			"if_total":      ifTotal,
+		}
+
+		response.OK(c, gin.H{
+			"kpi": gin.H{
+				"device_total": devTotal, "device_online": devOnline, "device_offline": devTotal - devOnline,
+				"dev_type":  typeCnt,
+				"alert_today": alertToday, "alert_total": alertTotal, "alert_critical": alertCritical,
+				"ip_used": ipUsed, "ip_total": ipTotal,
+				"if_up": ifUp, "if_total": ifTotal,
+				"template_total": tplTotal,
+			},
+			"vendor_dist":  vendorPie(vendorCnt),
+			"type_dist":    vendorPie(typeCnt),
+			"alert_level":  alertLevel,
+			"host_res":     hostRes,
+			"alert_trend":  trend,
+			"alert_heat":   gin.H{"devices": topDevs, "data": heatData},
+			"traffic_trend": gin.H{"x": trafficX, "in": trafficIn, "out": trafficOut},
+			"device_rank":  deviceRank,
+			"change_feed":  changeFeed,
+			"summary":      summary,
+		})
+	})
+}
+
+// subnetCapacity 子网可用 IP 数（去网络号与广播地址）
+func subnetCapacity(cidr string) int64 {
+	_, ipNet, err := net.ParseCIDR(cidr)
+	if err != nil {
+		return 0
+	}
+	ones, bits := ipNet.Mask.Size()
+	total := int64(1) << (bits - ones)
+	if total > 2 {
+		return total - 2
+	}
+	return total
+}
+
+// vendorPie map[string]int64 -> 饼图数据（按值降序）
+func vendorPie(m map[string]int64) []gin.H {
+	out := make([]gin.H, 0, len(m))
+	for k, v := range m {
+		out = append(out, gin.H{"name": k, "value": v})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i]["value"].(int64) > out[j]["value"].(int64) })
+	return out
 }
 
 func bpsPct(bps, limitMbps float64) float64 {

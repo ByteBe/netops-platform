@@ -16,5 +16,22 @@ export default {
   activeAlerts: 'Active Alerts', liveRate: 'Live Rate', latency: 'Latency', loss: 'Loss',
   cpuUsage: 'CPU Usage', memUsage: 'Memory Usage', lineBandwidth: 'Line Bandwidth',
   noAlerts: 'No Alerts', serverTotal: 'Servers', serverOnline: 'Servers Online',
-  linkOnlineRate: 'Link Online Rate'
+  linkOnlineRate: 'Link Online Rate',
+  // Dashboard v3: Ops Visualization Screen
+  refresh: 'Refresh',
+  deviceUnit: 'dev', alertUnit: 'alerts', templateUnit: 'tpl',
+  devSwitchRouter: 'Switch/Router',
+  onlineRate: 'Device Online Rate', onlineCount: 'Online',
+  todayAlerts: 'Today Alerts', totalAlerts: 'Total', criticalAlerts: 'Critical Alerts', emergencyCount: 'Critical',
+  ipUsage: 'IP Usage', ipUsedCount: 'Used',
+  interfaceRate: 'Interface Online Rate',
+  templates: 'Config Templates', templateCount: 'Templates',
+  vendorDist: 'Vendor Distribution', typeDist: 'Device Type Distribution', alertLevelDist: 'Alert Level Distribution',
+  trafficTrend: '7-Day Traffic Trend', deviceRank: 'Device Ranking',
+  status: 'Status',
+  hostRes: 'Host Resources', diskUsage: 'Disk Usage',
+  alertTrend: 'Alert Trend', alertHeatmap: 'Alert Heatmap Device×Hour', alertCount: 'Alerts',
+  changeFeed: 'Device Change Feed',
+  opsSummary: 'Ops Summary', taskTotal: 'Automation Tasks', taskRate: 'Success Rate',
+  devSwitch: 'Switch', devRouter: 'Router', devServer: 'Server', devFirewall: 'Firewall', devOther: 'Other'
 }

@@ -16,5 +16,22 @@ export default {
   activeAlerts: '活跃告警', liveRate: '实时速率', latency: '延迟', loss: '丢包',
   cpuUsage: 'CPU 使用率', memUsage: '内存使用率', lineBandwidth: '专线带宽',
   noAlerts: '暂无告警', serverTotal: '服务器总数', serverOnline: '在线服务器',
-  linkOnlineRate: '链路在线率'
+  linkOnlineRate: '链路在线率',
+  // 大屏 v3：智能运维可视化大屏
+  refresh: '刷新',
+  deviceUnit: '台', alertUnit: '条', templateUnit: '个',
+  devSwitchRouter: '交换/路由',
+  onlineRate: '设备在线率', onlineCount: '在线',
+  todayAlerts: '今日告警', totalAlerts: '累计', criticalAlerts: '严重告警', emergencyCount: '紧急',
+  ipUsage: 'IP 使用率', ipUsedCount: '已用',
+  interfaceRate: '接口在线率',
+  templates: '配置模板', templateCount: '模板',
+  vendorDist: '设备厂商分布', typeDist: '设备类型分布', alertLevelDist: '告警分级分布',
+  trafficTrend: '近 7 天流量趋势', deviceRank: '设备在线排行',
+  status: '状态',
+  hostRes: '主机资源', diskUsage: '磁盘使用率',
+  alertTrend: '告警趋势', alertHeatmap: '告警热力图 设备×小时', alertCount: '告警数',
+  changeFeed: '设备变更动态',
+  opsSummary: '运维摘要', taskTotal: '自动化任务', taskRate: '成功率',
+  devSwitch: '交换机', devRouter: '路由器', devServer: '服务器', devFirewall: '防火墙', devOther: '其他'
 }
