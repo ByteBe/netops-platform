@@ -25,6 +25,7 @@ from config import MYSQL, TDENGINE
 from ipam.tools import normalize_mac
 
 DUP_WINDOW_MIN = 10      # 告警去重窗口（分钟）
+DUP_SCAN_HOURS = 1       # 去重扫描窗口（小时）：覆盖 10 分钟窗口的冗余倍数，避免全表扫描
 LOG_MAX_LEN = 4096       # 日志内容合理上限（超出视为异常标记）
 ANOMALY_DELETE_LIMIT = 200  # 单指标单次最多删除异常点数（dry_run=false 时）
 
@@ -68,7 +69,8 @@ def clean_alert_duplicates(dry_run: bool):
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT id, target, level, LEFT(message,100), created_at FROM alert_events "
-                "WHERE acked=0 ORDER BY created_at ASC")
+                "WHERE acked=0 AND created_at >= NOW() - INTERVAL %s HOUR ORDER BY created_at ASC",
+                (DUP_SCAN_HOURS,))
             rows = cur.fetchall()
         groups = {}
         for rid, target, level, content, created_at in rows:
