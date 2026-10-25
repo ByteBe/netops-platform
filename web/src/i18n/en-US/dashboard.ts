@@ -38,5 +38,6 @@ export default {
   geoMap: 'Device Geo Map', geoManage: 'Manage', geoNoImage: 'No base map uploaded, click "Upload" or paste an image URL',
   geoUpload: 'Upload Base Map', geoSelectDevice: 'Select Device', geoClickPlace: 'Click blank area on the map to place the selected device',
   geoRemove: 'Remove', geoPlaced: 'Placed',
-  geoUrlPlaceholder: 'Paste image URL to import', geoImportUrl: 'Import URL'
+  geoUrlPlaceholder: 'Paste image URL to import', geoImportUrl: 'Import URL',
+  alertCenter: 'Alert Center'
 }

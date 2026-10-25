@@ -104,14 +104,12 @@ function removeGeoPoint(deviceId: number) {
 // ---------- 图表引用 ----------
 const vendorRef = ref<HTMLDivElement>()
 const typeRef = ref<HTMLDivElement>()
-const levelRef = ref<HTMLDivElement>()
 const trafficRef = ref<HTMLDivElement>()
 const hostRef = ref<HTMLDivElement>()
 const alertTrendRef = ref<HTMLDivElement>()
 const heatRef = ref<HTMLDivElement>()
 let vendorChart: echarts.ECharts | null = null
 let typeChart: echarts.ECharts | null = null
-let levelChart: echarts.ECharts | null = null
 let trafficChart: echarts.ECharts | null = null
 let hostChart: echarts.ECharts | null = null
 let alertTrendChart: echarts.ECharts | null = null
@@ -230,39 +228,6 @@ function renderType() {
       barWidth: 20,
       label: { show: true, position: 'top', color: ca.axis, fontSize: 11 },
       itemStyle: { color: cssVar('--np-primary', '#d95f1f'), borderRadius: [4, 4, 0, 0] },
-      data: list.map((x) => x.value)
-    })]
-  })
-}
-
-// ---------- 告警分级分布（柱状） ----------
-let lastLevelSig = ''
-function renderLevel() {
-  if (!levelRef.value || !data.value) return
-  if (hoverPaused) return
-  levelChart ??= echarts.init(levelRef.value)
-  const list = data.value.alert_level
-  const sig = JSON.stringify(list)
-  if (sig === lastLevelSig) return
-  lastLevelSig = sig
-  const ca = chartAxisColors()
-  const colors: Record<string, string> = {
-    critical: cssVar('--np-danger', '#d64545'),
-    warning: cssVar('--np-warning', '#b5893a'),
-    info: cssVar('--np-info', '#3a6fb0')
-  }
-  levelChart.setOption({
-    backgroundColor: 'transparent',
-    tooltip: tooltipCfg((v) => `${v} 条`),
-    legend: { show: false },
-    grid: { left: 44, right: 12, top: 12, bottom: 26, containLabel: true },
-    xAxis: { type: 'category', data: list.map((x) => levelText(x.name)), axisLabel: { color: ca.axis, interval: 0 }, axisLine: { lineStyle: { color: ca.axisLine } } },
-    yAxis: { type: 'value', minInterval: 1, axisLabel: { color: ca.axis }, splitLine: { lineStyle: { color: ca.split } } },
-    series: [seriesOpt({
-      type: 'bar',
-      barWidth: 20,
-      label: { show: true, position: 'top', color: ca.axis, fontSize: 11 },
-      itemStyle: { color: (p: { dataIndex: number }) => colors[list[p.dataIndex]?.name] || cssVar('--np-info', '#3a6fb0'), borderRadius: [4, 4, 0, 0] },
       data: list.map((x) => x.value)
     })]
   })
@@ -452,7 +417,7 @@ function taskRate(): string {
   return `${Math.round((s.task_success / s.task_total) * 100)}%`
 }
 function renderAll() {
-  renderVendor(); renderType(); renderLevel(); renderTraffic(); renderHost(); renderAlertTrend(); renderHeat()
+  renderVendor(); renderType(); renderTraffic(); renderHost(); renderAlertTrend(); renderHeat()
 }
 
 // ---------- WS / 定时刷新 ----------
@@ -467,28 +432,27 @@ function wsReload() {
 
 watch(() => appStore.theme, () => {
   nextTick(() => {
-    for (const ch of [vendorChart, typeChart, levelChart, trafficChart, hostChart, alertTrendChart, heatChart]) ch?.dispose()
-    vendorChart = typeChart = levelChart = trafficChart = hostChart = alertTrendChart = heatChart = null
-    lastVendorSig = lastTypeSig = lastLevelSig = lastTrafficSig = lastHostSig = lastAlertTrendSig = lastHeatSig = ''
+    for (const ch of [vendorChart, typeChart, trafficChart, hostChart, alertTrendChart, heatChart]) ch?.dispose()
+    vendorChart = typeChart = trafficChart = hostChart = alertTrendChart = heatChart = null
+    lastVendorSig = lastTypeSig = lastTrafficSig = lastHostSig = lastAlertTrendSig = lastHeatSig = ''
     renderAll()
   })
 })
 
 onMounted(async () => {
   await nextTick()
-  for (const el of [vendorRef.value, typeRef.value, levelRef.value, trafficRef.value, hostRef.value, alertTrendRef.value, heatRef.value]) {
+  for (const el of [vendorRef.value, typeRef.value, trafficRef.value, hostRef.value, alertTrendRef.value, heatRef.value]) {
     bindHoverPause(el)
   }
   try { await loadScreen() } catch (e) { console.error('screen', e) }
   try { await loadAlerts() } catch (e) { console.error('alerts', e) }
   // 图表容器稳定后初始化
-  for (const refMap of [[vendorRef, vendorChart], [typeRef, typeChart], [levelRef, levelChart], [trafficRef, trafficChart], [hostRef, hostChart], [alertTrendRef, alertTrendChart], [heatRef, heatChart]] as Array<[typeof vendorRef, echarts.ECharts | null]>) {
+  for (const refMap of [[vendorRef, vendorChart], [typeRef, typeChart], [trafficRef, trafficChart], [hostRef, hostChart], [alertTrendRef, alertTrendChart], [heatRef, heatChart]] as Array<[typeof vendorRef, echarts.ECharts | null]>) {
     if (refMap[0].value) {
       refMap[1]?.dispose()
       const ch = echarts.init(refMap[0].value)
       if (refMap[1] === vendorChart) vendorChart = ch
       else if (refMap[1] === typeChart) typeChart = ch
-      else if (refMap[1] === levelChart) levelChart = ch
       else if (refMap[1] === trafficChart) trafficChart = ch
       else if (refMap[1] === hostChart) hostChart = ch
       else if (refMap[1] === alertTrendChart) alertTrendChart = ch
@@ -497,15 +461,15 @@ onMounted(async () => {
   }
   renderAll()
   setTimeout(() => {
-    vendorChart?.resize(); typeChart?.resize(); levelChart?.resize(); trafficChart?.resize()
+    vendorChart?.resize(); typeChart?.resize(); trafficChart?.resize()
     hostChart?.resize(); alertTrendChart?.resize(); heatChart?.resize()
   }, 100)
   window.addEventListener('resize', onResize)
   ro = new ResizeObserver(() => {
-    vendorChart?.resize(); typeChart?.resize(); levelChart?.resize(); trafficChart?.resize()
+    vendorChart?.resize(); typeChart?.resize(); trafficChart?.resize()
     hostChart?.resize(); alertTrendChart?.resize(); heatChart?.resize()
   })
-  for (const el of [vendorRef.value, typeRef.value, levelRef.value, trafficRef.value, hostRef.value, alertTrendRef.value, heatRef.value]) {
+  for (const el of [vendorRef.value, typeRef.value, trafficRef.value, hostRef.value, alertTrendRef.value, heatRef.value]) {
     if (el) ro.observe(el)
   }
   try {
@@ -523,7 +487,7 @@ onMounted(async () => {
 })
 
 function onResize() {
-  vendorChart?.resize(); typeChart?.resize(); levelChart?.resize(); trafficChart?.resize()
+  vendorChart?.resize(); typeChart?.resize(); trafficChart?.resize()
   hostChart?.resize(); alertTrendChart?.resize(); heatChart?.resize()
 }
 
@@ -533,7 +497,7 @@ onBeforeUnmount(() => {
   if (wsTimer) window.clearTimeout(wsTimer)
   window.removeEventListener('resize', onResize)
   ro?.disconnect()
-  vendorChart?.dispose(); typeChart?.dispose(); levelChart?.dispose(); trafficChart?.dispose()
+  vendorChart?.dispose(); typeChart?.dispose(); trafficChart?.dispose()
   hostChart?.dispose(); alertTrendChart?.dispose(); heatChart?.dispose()
 })
 </script>
@@ -609,8 +573,8 @@ onBeforeUnmount(() => {
         </div>
         <div class="np-panel np-panel-alerts">
           <div class="np-panel-head">
-            <span class="np-panel-tick"></span>{{ t('dashboard.recentAlerts') }}
-            <span class="np-panel-hint" :class="{ 'np-hint-bad': data.summary.alert_active > 0 }">{{ t('dashboard.activeAlerts') }} {{ data.summary.alert_active }}</span>
+            <span class="np-panel-tick"></span>{{ t('dashboard.alertCenter') }}
+            <span class="np-panel-hint" :class="{ 'np-hint-bad': data.summary.alert_active > 0 }">{{ t('dashboard.activeAlerts') }} {{ data.summary.alert_active }} · {{ t('dashboard.todayAlerts') }} {{ data.summary.alert_today }}</span>
           </div>
           <div class="np-alert-stats">
             <span class="np-alert-stat critical"><i></i>{{ t('alert.critical') }} {{ levelCount('critical') }}</span>
@@ -662,10 +626,6 @@ onBeforeUnmount(() => {
         <div class="np-panel">
           <div class="np-panel-head"><span class="np-panel-tick"></span>{{ t('dashboard.alertTrend') }}</div>
           <div ref="alertTrendRef" class="np-chart np-chart-min"></div>
-        </div>
-        <div class="np-panel">
-          <div class="np-panel-head"><span class="np-panel-tick"></span>{{ t('dashboard.alertLevelDist') }}</div>
-          <div ref="levelRef" class="np-chart np-chart-min"></div>
         </div>
         <div class="np-panel">
           <div class="np-panel-head"><span class="np-panel-tick"></span>{{ t('dashboard.alertHeatmap') }}</div>
