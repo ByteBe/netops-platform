@@ -70,20 +70,28 @@ function openManage() {
 async function uploadGeoImage(options: { file: File }) {
   const fd = new FormData()
   fd.append('file', options.file)
-  await http.post('/dashboard/geomap/upload', fd, {
-    headers: { 'Content-Type': 'multipart/form-data', 'X-No-Enc': '1' }
-  })
-  ElMessage.success(t('common.success'))
-  await loadGeoMap()
+  try {
+    await http.post('/dashboard/geomap/upload', fd, {
+      headers: { 'Content-Type': 'multipart/form-data', 'X-No-Enc': '1' }
+    })
+    ElMessage.success(t('common.success'))
+    await loadGeoMap()
+  } catch {
+    ElMessage.error(t('common.failed'))
+  }
 }
 const geoUrl = ref('')
 async function importGeoUrl() {
   const url = geoUrl.value.trim()
   if (!url) return
-  await postEnc('/dashboard/geomap/import-url', { url })
-  ElMessage.success(t('common.success'))
-  geoUrl.value = ''
-  await loadGeoMap()
+  try {
+    await postEnc('/dashboard/geomap/import-url', { url })
+    ElMessage.success(t('common.success'))
+    geoUrl.value = ''
+    await loadGeoMap()
+  } catch {
+    ElMessage.error(t('common.failed'))
+  }
 }
 function onGeoCanvasClick(e: MouseEvent) {
   if (!placingDevice.value) return
