@@ -9,6 +9,10 @@
 
 用法：python deploy_all.py            # 编译 + 全量部署
       python deploy_all.py --no-build # 跳过编译（使用 E:\\IDEA\\dist\\netops-server-only.zip）
+
+Nginx 前端代理（生产入口 40000 静态 + /api /ws /mcp 反代）：
+  模板 deploy/nginx/netops.conf；一键部署到双云：python deploy_nginx.py [53|158]
+  （Nginx 配置变更或首次部署时运行；与代码部署相互独立）
 """
 import os
 import shutil
