@@ -413,6 +413,9 @@ function levelText(level: string): string {
   if (level === 'warning') return t('alert.warning')
   return t('alert.info')
 }
+function levelCount(level: string): number {
+  return data.value?.alert_level.find((x) => x.name === level)?.value ?? 0
+}
 function alertLevelClass(level: string): string {
   return level === 'critical' ? 'critical' : level === 'warning' ? 'warning' : 'info'
 }
@@ -604,9 +607,26 @@ onBeforeUnmount(() => {
           <div class="np-panel-head"><span class="np-panel-tick"></span>{{ t('dashboard.typeDist') }}</div>
           <div ref="typeRef" class="np-chart np-chart-bar"></div>
         </div>
-        <div class="np-panel">
-          <div class="np-panel-head"><span class="np-panel-tick"></span>{{ t('dashboard.alertLevelDist') }}</div>
-          <div ref="levelRef" class="np-chart np-chart-bar"></div>
+        <div class="np-panel np-panel-alerts">
+          <div class="np-panel-head">
+            <span class="np-panel-tick"></span>{{ t('dashboard.recentAlerts') }}
+            <span class="np-panel-hint" :class="{ 'np-hint-bad': data.summary.alert_active > 0 }">{{ t('dashboard.activeAlerts') }} {{ data.summary.alert_active }}</span>
+          </div>
+          <div class="np-alert-stats">
+            <span class="np-alert-stat critical"><i></i>{{ t('alert.critical') }} {{ levelCount('critical') }}</span>
+            <span class="np-alert-stat warning"><i></i>{{ t('alert.warning') }} {{ levelCount('warning') }}</span>
+            <span class="np-alert-stat info"><i></i>{{ t('alert.info') }} {{ levelCount('info') }}</span>
+          </div>
+          <div v-if="alerts.length" class="np-alert-list np-alert-list-col">
+            <div v-for="a in alerts" :key="a.id" class="np-alert-row">
+              <span class="np-alert-level" :class="alertLevelClass(a.level)">{{ levelText(a.level) }}</span>
+              <span class="np-alert-target">{{ a.target }}</span>
+              <span class="np-alert-msg">{{ a.message }}</span>
+              <span v-if="a.count > 1" class="np-alert-count">×{{ a.count }}</span>
+              <span class="np-alert-time">{{ alertTime(a.created_at) }}</span>
+            </div>
+          </div>
+          <div v-else class="np-empty np-empty-flex">{{ t('dashboard.noAlerts') }}</div>
         </div>
       </div>
 
@@ -644,31 +664,18 @@ onBeforeUnmount(() => {
           <div ref="alertTrendRef" class="np-chart np-chart-min"></div>
         </div>
         <div class="np-panel">
+          <div class="np-panel-head"><span class="np-panel-tick"></span>{{ t('dashboard.alertLevelDist') }}</div>
+          <div ref="levelRef" class="np-chart np-chart-min"></div>
+        </div>
+        <div class="np-panel">
           <div class="np-panel-head"><span class="np-panel-tick"></span>{{ t('dashboard.alertHeatmap') }}</div>
           <div ref="heatRef" class="np-chart np-chart-heat"></div>
         </div>
       </div>
     </div>
 
-    <!-- 底部三栏 -->
+    <!-- 底部两栏 -->
     <div class="np-bottom" v-if="data">
-      <div class="np-panel">
-        <div class="np-panel-head">
-          <span class="np-panel-tick"></span>{{ t('dashboard.recentAlerts') }}
-          <span class="np-panel-hint" :class="{ 'np-hint-bad': data.summary.alert_active > 0 }">{{ t('dashboard.activeAlerts') }} {{ data.summary.alert_active }}</span>
-        </div>
-        <div v-if="alerts.length" class="np-alert-list">
-          <div v-for="a in alerts" :key="a.id" class="np-alert-row">
-            <span class="np-alert-level" :class="alertLevelClass(a.level)">{{ levelText(a.level) }}</span>
-            <span class="np-alert-target">{{ a.target }}</span>
-            <span class="np-alert-msg">{{ a.message }}</span>
-            <span v-if="a.count > 1" class="np-alert-count">×{{ a.count }}</span>
-            <span class="np-alert-time">{{ alertTime(a.created_at) }}</span>
-          </div>
-        </div>
-        <div v-else class="np-empty">{{ t('dashboard.noAlerts') }}</div>
-      </div>
-
       <div class="np-panel">
         <div class="np-panel-head"><span class="np-panel-tick"></span>{{ t('dashboard.changeFeed') }}</div>
         <div v-if="data.change_feed.length" class="np-change-list">
@@ -799,7 +806,7 @@ onBeforeUnmount(() => {
   // 主体三列
   .np-body {
     display: grid;
-    grid-template-columns: 1fr 1.4fr 1.1fr;
+    grid-template-columns: 1fr 1.9fr 1.15fr;
     gap: 12px;
     align-items: stretch;
   }
@@ -818,15 +825,15 @@ onBeforeUnmount(() => {
     .np-panel-hint { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--np-text-3); &.np-hint-bad { color: var(--np-danger); } }
   }
   .np-chart { width: 100%; flex: 1; min-height: 0; }
-  .np-chart-pie { height: 170px; flex: none; }
-  .np-chart-bar { height: 150px; flex: none; }
-  .np-chart-trend { height: 240px; flex: none; }
+  .np-chart-pie { height: 180px; flex: none; }
+  .np-chart-bar { height: 170px; flex: none; }
+  .np-chart-trend { height: 200px; flex: none; }
   .np-chart-host { height: 150px; flex: none; }
-  .np-chart-min { height: 150px; flex: none; }
+  .np-chart-min { height: 140px; flex: none; }
   .np-chart-heat { height: 170px; flex: none; }
 
   // 设备地理图
-  .np-panel-geo { flex: 1.35; }
+  .np-panel-geo { flex: 2.2; }
   .np-geo-manage { margin-left: 8px; }
   .np-geo {
     position: relative; flex: 1; min-height: 0; overflow: hidden;
@@ -876,9 +883,24 @@ onBeforeUnmount(() => {
     .np-geo-row-status { font-size: 11px; &.up { color: var(--np-success); } &.down { color: var(--np-danger); } }
   }
 
-  // 底部三栏
-  .np-bottom { display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 12px; }
+  // 最新告警（左列，带分级统计条）
+  .np-panel-alerts { flex: 1; }
+  .np-alert-stats { display: flex; gap: 6px; margin-bottom: 8px; }
+  .np-alert-stat {
+    display: flex; align-items: center; gap: 5px; flex: 1;
+    font-size: 12px; color: var(--np-text-2); font-variant-numeric: tabular-nums;
+    padding: 6px 8px; border-radius: $radius-sm; background: var(--np-surface-1); border: 1px solid var(--np-border);
+    i { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+    &.critical i { background: var(--np-danger); }
+    &.warning i { background: var(--np-warning); }
+    &.info i { background: var(--np-info); }
+  }
   .np-alert-list { display: flex; flex-direction: column; gap: 5px; max-height: 168px; overflow-y: auto; }
+  .np-alert-list-col { flex: 1; max-height: none; }
+  .np-empty-flex { flex: 1; display: flex; align-items: center; justify-content: center; }
+
+  // 底部两栏
+  .np-bottom { display: grid; grid-template-columns: 1fr 1.2fr; gap: 12px; }
   .np-alert-row {
     display: flex; align-items: center; gap: 10px; padding: 7px 10px;
     border-radius: $radius-sm; background: var(--np-surface-1); border: 1px solid var(--np-border);
