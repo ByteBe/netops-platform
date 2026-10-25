@@ -7,13 +7,14 @@
 //  3. animation:false —— 数据更新不播放动画
 //  4. hoverPaused —— 鼠标在图表内时暂停 setOption 重绘（数据照常拉取）
 //  5. 签名守卫 —— 数据无变化不 setOption
-import { ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick, watch, computed } from 'vue'
 import * as echarts from '@/utils/echarts'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { getEnc } from '@/utils/request'
+import { getEnc, putEnc, delEnc, http } from '@/utils/request'
 import { WSClient } from '@/utils/ws'
 import { useAppStore } from '@/stores/app'
+import { ElMessage } from 'element-plus'
 import { fmtTime, cssVar, chartAxisColors } from '@/utils'
 
 const { t } = useI18n()
@@ -37,7 +38,7 @@ interface ScreenData {
   alert_trend: Array<{ date: string; count: number }>
   alert_heat: { devices: string[]; data: number[][] }
   traffic_trend: { x: string[]; in: number[]; out: number[] }
-  device_rank: Array<{ name: string; ip: string; up: boolean; cpu: number; mem: number; disk: number }>
+  device_rank: Array<{ device_id: number; name: string; ip: string; up: boolean; cpu: number; mem: number; disk: number }>
   change_feed: Array<{ user: string; action: string; time: string }>
   summary: {
     alert_active: number; alert_today: number; task_total: number; task_success: number
@@ -45,10 +46,51 @@ interface ScreenData {
   }
 }
 interface AlertItem { id: number; level: string; target: string; message: string; count: number; created_at: string }
+interface GeoPoint { device_id: number; name: string; x: number; y: number; up: boolean }
 
 const data = ref<ScreenData | null>(null)
 const alerts = ref<AlertItem[]>([])
 const now = ref(Date.now())
+
+// ---------- 设备地理图 ----------
+const geo = ref<{ image: string; points: GeoPoint[] }>({ image: '', points: [] })
+const manageOpen = ref(false)
+const placingDevice = ref<number | undefined>()
+const deviceOptions = computed(() =>
+  (data.value?.device_rank ?? []).map((d) => ({ device_id: d.device_id, name: d.name || d.ip || 'device-' + d.device_id }))
+)
+async function loadGeoMap() {
+  const r = await getEnc<{ image: string; points: GeoPoint[] }>('/dashboard/geomap')
+  geo.value = r
+}
+function openManage() {
+  manageOpen.value = true
+  void loadGeoMap().catch(() => {})
+}
+async function uploadGeoImage(options: { file: File }) {
+  const fd = new FormData()
+  fd.append('file', options.file)
+  await http.post('/dashboard/geomap/upload', fd, {
+    headers: { 'Content-Type': 'multipart/form-data', 'X-No-Enc': '1' }
+  })
+  ElMessage.success(t('common.success'))
+  await loadGeoMap()
+}
+function onGeoCanvasClick(e: MouseEvent) {
+  if (!placingDevice.value) return
+  const el = e.currentTarget as HTMLElement
+  const rect = el.getBoundingClientRect()
+  const x = Math.min(100, Math.max(0, Math.round(((e.clientX - rect.left) / rect.width) * 10000) / 100))
+  const y = Math.min(100, Math.max(0, Math.round(((e.clientY - rect.top) / rect.height) * 10000) / 100))
+  void putEnc('/dashboard/geomap/points', [{ device_id: placingDevice.value, x, y }])
+    .then(() => loadGeoMap())
+    .catch(() => ElMessage.error(t('common.failed')))
+}
+function removeGeoPoint(deviceId: number) {
+  void delEnc(`/dashboard/geomap/points/${deviceId}`)
+    .then(() => loadGeoMap())
+    .catch(() => ElMessage.error(t('common.failed')))
+}
 
 // ---------- 图表引用 ----------
 const vendorRef = ref<HTMLDivElement>()
@@ -464,6 +506,7 @@ onMounted(async () => {
   timer = window.setInterval(() => {
     void loadScreen().catch(() => {})
     void loadAlerts().catch(() => {})
+    void loadGeoMap().catch(() => {})
   }, 30000)
 })
 
@@ -560,25 +603,24 @@ onBeforeUnmount(() => {
 
       <!-- 中列 -->
       <div class="np-col np-col-mid">
+        <div class="np-panel np-panel-geo">
+          <div class="np-panel-head">
+            <span class="np-panel-tick"></span>{{ t('dashboard.geoMap') }}
+            <span class="np-panel-hint">{{ t('dashboard.geoPlaced') }} {{ geo.points.length }}</span>
+            <el-button class="np-geo-manage" size="small" @click="openManage">{{ t('dashboard.geoManage') }}</el-button>
+          </div>
+          <div class="np-geo">
+            <img v-if="geo.image" :src="geo.image" class="np-geo-bg" alt="" />
+            <div v-else class="np-geo-empty" @click="openManage">{{ t('dashboard.geoNoImage') }}</div>
+            <div v-for="p in geo.points" :key="p.device_id" class="np-geo-point" :class="p.up ? 'up' : 'down'" :style="{ left: p.x + '%', top: p.y + '%' }">
+              <span class="np-geo-dot"></span>
+              <span class="np-geo-name">{{ p.name }}</span>
+            </div>
+          </div>
+        </div>
         <div class="np-panel">
           <div class="np-panel-head"><span class="np-panel-tick"></span>{{ t('dashboard.trafficTrend') }}</div>
           <div ref="trafficRef" class="np-chart np-chart-trend"></div>
-        </div>
-        <div class="np-panel">
-          <div class="np-panel-head"><span class="np-panel-tick"></span>{{ t('dashboard.deviceRank') }}</div>
-          <div class="np-rank-table">
-            <div class="np-rank-row np-rank-head">
-              <span>{{ t('dashboard.device') }}</span><span>IP</span><span>{{ t('dashboard.cpuUsage') }}</span><span>{{ t('dashboard.memUsage') }}</span><span>{{ t('dashboard.status') }}</span>
-            </div>
-            <div v-for="d in data.device_rank" :key="d.name" class="np-rank-row">
-              <span class="np-rank-name">{{ d.name }}</span>
-              <span class="np-rank-ip">{{ d.ip }}</span>
-              <span class="np-rank-num">{{ d.cpu }}%</span>
-              <span class="np-rank-num">{{ d.mem }}%</span>
-              <span class="np-rank-status" :class="d.up ? 'up' : 'down'">{{ d.up ? t('dashboard.online') : t('dashboard.offline') }}</span>
-            </div>
-            <div v-if="!data.device_rank.length" class="np-empty">{{ t('common.noData') }}</div>
-          </div>
         </div>
       </div>
 
@@ -666,6 +708,38 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </div>
+
+    <!-- 设备地理图管理弹窗 -->
+    <el-dialog v-model="manageOpen" :title="t('dashboard.geoManage')" width="780px" append-to-body>
+      <div class="np-geo-editor">
+        <div class="np-geo-toolbar">
+          <el-upload :show-file-list="false" accept="image/*" :http-request="uploadGeoImage">
+            <el-button size="small" type="primary">{{ t('dashboard.geoUpload') }}</el-button>
+          </el-upload>
+          <el-select v-model="placingDevice" size="small" :placeholder="t('dashboard.geoSelectDevice')" clearable style="width: 200px">
+            <el-option v-for="d in deviceOptions" :key="d.device_id" :label="d.name" :value="d.device_id" />
+          </el-select>
+          <span class="np-geo-tip">{{ t('dashboard.geoClickPlace') }}</span>
+        </div>
+        <div class="np-geo-canvas" :class="{ 'np-geo-canvas-empty': !geo.image }" @click="onGeoCanvasClick">
+          <img v-if="geo.image" :src="geo.image" class="np-geo-canvas-bg" alt="" />
+          <div v-else class="np-geo-empty">{{ t('dashboard.geoNoImage') }}</div>
+          <div v-for="p in geo.points" :key="p.device_id" class="np-geo-point" :class="p.up ? 'up' : 'down'" :style="{ left: p.x + '%', top: p.y + '%' }">
+            <span class="np-geo-dot"></span>
+            <span class="np-geo-name">{{ p.name }}</span>
+          </div>
+        </div>
+        <div class="np-geo-list">
+          <div v-for="p in geo.points" :key="p.device_id" class="np-geo-row">
+            <span class="np-geo-row-name">{{ p.name }}</span>
+            <span class="np-geo-row-pos">{{ p.x }}%, {{ p.y }}%</span>
+            <span class="np-geo-row-status" :class="p.up ? 'up' : 'down'">{{ p.up ? t('dashboard.online') : t('dashboard.offline') }}</span>
+            <el-button size="small" type="danger" link @click="removeGeoPoint(p.device_id)">{{ t('dashboard.geoRemove') }}</el-button>
+          </div>
+          <div v-if="!geo.points.length" class="np-empty">{{ t('common.noData') }}</div>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -740,19 +814,56 @@ onBeforeUnmount(() => {
   .np-chart-min { height: 150px; flex: none; }
   .np-chart-heat { height: 170px; flex: none; }
 
-  // 设备排行
-  .np-rank-table { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
-  .np-rank-row {
-    display: flex; align-items: center; gap: 8px; padding: 6px 8px;
-    border-radius: $radius-sm; color: var(--np-text-1);
-    span:first-child { width: 26%; } span:nth-child(2) { width: 30%; } span:nth-child(3) { width: 12%; } span:nth-child(4) { width: 12%; } span:last-child { flex: 1; text-align: right; }
+  // 设备地理图
+  .np-panel-geo { flex: 1.35; }
+  .np-geo-manage { margin-left: 8px; }
+  .np-geo {
+    position: relative; flex: 1; min-height: 0; overflow: hidden;
+    border-radius: $radius-sm; background: var(--np-surface-1); border: 1px solid var(--np-border);
+    img.np-geo-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
   }
-  .np-rank-head { background: var(--np-surface-1); border: 1px solid var(--np-border); color: var(--np-text-3); font-size: 11px; }
-  .np-rank-row:not(.np-rank-head):hover { background: var(--np-hover); }
-  .np-rank-name { font-weight: 600; @include ellipsis; }
-  .np-rank-ip { color: var(--np-text-2); font-variant-numeric: tabular-nums; @include ellipsis; }
-  .np-rank-num { color: var(--np-text-2); font-variant-numeric: tabular-nums; text-align: right; }
-  .np-rank-status { font-size: 11px; &.up { color: var(--np-success); } &.down { color: var(--np-danger); } }
+  .np-geo-empty {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: var(--np-text-3); font-size: 13px; cursor: pointer;
+    &:hover { color: var(--np-primary); }
+  }
+  .np-geo-point {
+    position: absolute; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 4px;
+    z-index: 2; cursor: default; user-select: none;
+    .np-geo-dot {
+      width: 12px; height: 12px; border-radius: 50%; flex: none;
+      box-shadow: 0 0 0 3px color-mix(in oklch, var(--np-success) 22%, transparent), 0 0 8px color-mix(in oklch, var(--np-success) 55%, transparent);
+    }
+    &.down .np-geo-dot {
+      background: var(--np-danger);
+      box-shadow: 0 0 0 3px color-mix(in oklch, var(--np-danger) 22%, transparent), 0 0 8px color-mix(in oklch, var(--np-danger) 55%, transparent);
+    }
+    &.up .np-geo-dot { background: var(--np-success); }
+    .np-geo-name {
+      font-size: 11px; color: var(--np-text-1); max-width: 110px; @include ellipsis;
+      padding: 1px 6px; border-radius: 999px; background: color-mix(in oklch, var(--np-card-bg) 88%, transparent);
+    }
+  }
+
+  // 地理图管理弹窗
+  .np-geo-editor { display: flex; flex-direction: column; gap: 10px; }
+  .np-geo-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .np-geo-tip { font-size: 12px; color: var(--np-text-3); }
+  .np-geo-canvas {
+    position: relative; width: 100%; height: 380px; overflow: hidden; cursor: crosshair;
+    border-radius: $radius-sm; background: var(--np-surface-1); border: 1px solid var(--np-border);
+    img.np-geo-canvas-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+    &.np-geo-canvas-empty { cursor: default; }
+  }
+  .np-geo-list { display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow-y: auto; }
+  .np-geo-row {
+    display: flex; align-items: center; gap: 12px; padding: 5px 10px;
+    border-radius: $radius-sm; background: var(--np-surface-1); border: 1px solid var(--np-border);
+    font-size: 12px; color: var(--np-text-1);
+    .np-geo-row-name { font-weight: 600; flex: 1; @include ellipsis; }
+    .np-geo-row-pos { color: var(--np-text-2); font-variant-numeric: tabular-nums; }
+    .np-geo-row-status { font-size: 11px; &.up { color: var(--np-success); } &.down { color: var(--np-danger); } }
+  }
 
   // 底部三栏
   .np-bottom { display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 12px; }

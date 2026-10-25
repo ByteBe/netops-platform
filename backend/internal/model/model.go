@@ -87,6 +87,22 @@ type MonitorDevice struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
+// GeoMapConfig 设备地理图配置（单行：底图路径，id=1）
+type GeoMapConfig struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	Image     string    `gorm:"size:256" json:"image"` // 相对 data/geomap/ 的文件名
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// GeoMapPoint 设备地理图点位（x/y 百分比 0-100）
+type GeoMapPoint struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	DeviceID  uint      `gorm:"uniqueIndex" json:"device_id"`
+	X         float64   `gorm:"type:decimal(5,2)" json:"x"`
+	Y         float64   `gorm:"type:decimal(5,2)" json:"y"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 // NodeContainer 下级节点上报的容器明细（上级展示用）
 type NodeContainer struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`

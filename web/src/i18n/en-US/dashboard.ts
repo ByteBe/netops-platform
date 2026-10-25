@@ -33,5 +33,9 @@ export default {
   alertTrend: 'Alert Trend', alertHeatmap: 'Alert Heatmap Device×Hour', alertCount: 'Alerts',
   changeFeed: 'Device Change Feed',
   opsSummary: 'Ops Summary', taskTotal: 'Automation Tasks', taskRate: 'Success Rate',
-  devSwitch: 'Switch', devRouter: 'Router', devServer: 'Server', devFirewall: 'Firewall', devOther: 'Other'
+  devSwitch: 'Switch', devRouter: 'Router', devServer: 'Server', devFirewall: 'Firewall', devOther: 'Other',
+  // Device Geo Map
+  geoMap: 'Device Geo Map', geoManage: 'Manage', geoNoImage: 'No base map uploaded, click "Manage" to upload',
+  geoUpload: 'Upload Base Map', geoSelectDevice: 'Select Device', geoClickPlace: 'Click blank area on the map to place the selected device',
+  geoRemove: 'Remove', geoPlaced: 'Placed'
 }

@@ -107,7 +107,9 @@ http.interceptors.request.use((config) => {
   config.headers['X-Timestamp'] = String(Math.floor(Date.now() / 1000))
   config.headers['X-Nonce'] = Math.random().toString(36).substring(2, 15) + Date.now().toString(36)
   const hasBody = !!config.data && typeof config.data !== 'string'
-  if (auth.sessionKey && hasBody) {
+  // X-No-Enc=1 时跳过请求体加密（如 multipart 文件上传，后端按原始体处理）
+  const skipEnc = config.headers?.['X-No-Enc'] === '1'
+  if (auth.sessionKey && hasBody && !skipEnc) {
     const plain = typeof config.data === 'string' ? config.data : JSON.stringify(config.data)
     config.data = sm4Encrypt(auth.sessionKey, plain)
     config.headers['X-Enc'] = 'sm4'

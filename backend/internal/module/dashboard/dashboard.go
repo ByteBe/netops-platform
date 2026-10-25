@@ -2,8 +2,11 @@
 package dashboard
 
 import (
+	"fmt"
 	"math"
 	"net"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -310,7 +313,7 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 				disk = sum / float64(len(s.Disks))
 			}
 			deviceRank = append(deviceRank, gin.H{
-				"name": s.Name, "ip": s.IP, "up": s.Up,
+				"name": s.Name, "ip": s.IP, "up": s.Up, "device_id": s.DeviceID,
 				"cpu": math.Round(s.CPU*10) / 10, "mem": math.Round(s.MemUsed*10) / 10, "disk": math.Round(disk*10) / 10,
 			})
 			if s.Up {
@@ -382,6 +385,8 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			"summary":      summary,
 		})
 	})
+
+	registerGeoMap(a, g)
 }
 
 // subnetCapacity 子网可用 IP 数（去网络号与广播地址）
@@ -406,6 +411,135 @@ func vendorPie(m map[string]int64) []gin.H {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i]["value"].(int64) > out[j]["value"].(int64) })
 	return out
+}
+
+// ---------- 设备地理图（底图导入 + 点位配置） ----------
+
+// ---------- 设备地理图（底图导入 + 点位配置） ----------
+
+const geoMapDir = "data/geomap"
+
+func geoMapImagePath(a *core.App) string {
+	var cfg model.GeoMapConfig
+	if err := a.DB.First(&cfg).Error; err != nil || cfg.Image == "" {
+		return ""
+	}
+	return filepath.Join(geoMapDir, cfg.Image)
+}
+
+// registerGeoMap 设备地理图路由：底图上传/访问 + 点位查询/保存/删除
+func registerGeoMap(a *core.App, g *gin.RouterGroup) {
+	// 查询：底图 + 点位（带设备名/在线状态）
+	g.GET("/geomap", func(c *gin.Context) {
+		image := ""
+		if p := geoMapImagePath(a); p != "" {
+			if _, err := os.Stat(p); err == nil {
+				image = "/api/v1/dashboard/geomap/image"
+			}
+		}
+		upMap := map[uint]bool{}
+		for _, s := range a.SnmpMgr.Snapshot() {
+			upMap[s.DeviceID] = s.Up
+		}
+		var pts []model.GeoMapPoint
+		a.DB.Find(&pts)
+		nameMap := map[uint]string{}
+		for _, d := range devsAll(a) {
+			nameMap[d.ID] = d.Name
+		}
+		out := make([]gin.H, 0, len(pts))
+		for _, p := range pts {
+			out = append(out, gin.H{
+				"device_id": p.DeviceID,
+				"name":      nameMap[p.DeviceID],
+				"x":         p.X, "y": p.Y,
+				"up": upMap[p.DeviceID],
+			})
+		}
+		response.OK(c, gin.H{"image": image, "points": out})
+	})
+
+	// 上传底图（png/jpg/jpeg/webp，≤5MB）
+	g.POST("/geomap/upload", func(c *gin.Context) {
+		f, err := c.FormFile("file")
+		if err != nil {
+			response.Bad(c, "缺少文件字段 file")
+			return
+		}
+		if f.Size > 5*1024*1024 {
+			response.Bad(c, "图片不能超过 5MB")
+			return
+		}
+		ext := strings.ToLower(filepath.Ext(f.Filename))
+		switch ext {
+		case ".png", ".jpg", ".jpeg", ".webp":
+		default:
+			response.Bad(c, "仅支持 png/jpg/jpeg/webp 图片")
+			return
+		}
+		if err := os.MkdirAll(geoMapDir, 0o755); err != nil {
+			response.Err(c, err)
+			return
+		}
+		old := geoMapImagePath(a)
+		name := fmt.Sprintf("geo_%d%s", time.Now().UnixNano(), ext)
+		dst := filepath.Join(geoMapDir, name)
+		if err := c.SaveUploadedFile(f, dst); err != nil {
+			response.Err(c, err)
+			return
+		}
+		if old != "" && old != dst {
+			_ = os.Remove(old)
+		}
+		cfg := model.GeoMapConfig{ID: 1, Image: name}
+		a.DB.Where("id = ?", 1).Assign(cfg).FirstOrCreate(&cfg)
+		response.OK(c, gin.H{"image": "/api/v1/dashboard/geomap/image"})
+	})
+
+	// 底图访问
+	g.GET("/geomap/image", func(c *gin.Context) {
+		p := geoMapImagePath(a)
+		if p == "" {
+			c.Status(404)
+			return
+		}
+		c.File(p)
+	})
+
+	// 批量保存点位（upsert，按 device_id）
+	g.PUT("/geomap/points", func(c *gin.Context) {
+		var req []struct {
+			DeviceID uint    `json:"device_id"`
+			X        float64 `json:"x"`
+			Y        float64 `json:"y"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			response.Bad(c, "参数错误")
+			return
+		}
+		for _, r := range req {
+			if r.X < 0 || r.X > 100 || r.Y < 0 || r.Y > 100 {
+				continue
+			}
+			pt := model.GeoMapPoint{DeviceID: r.DeviceID, X: r.X, Y: r.Y}
+			a.DB.Where("device_id = ?", r.DeviceID).Assign(model.GeoMapPoint{X: r.X, Y: r.Y}).FirstOrCreate(&pt)
+		}
+		response.OK(c, gin.H{"ok": true})
+	})
+
+	// 删除点位
+	g.DELETE("/geomap/points/:deviceId", func(c *gin.Context) {
+		id, _ := strconv.ParseUint(c.Param("deviceId"), 10, 64)
+		a.DB.Where("device_id = ?", id).Delete(&model.GeoMapPoint{})
+		response.OK(c, gin.H{"ok": true})
+	})
+}
+
+// devsAll 全部监控设备（ID->Name 映射）
+func devsAll(a *core.App) []model.MonitorDevice {
+	var devs []model.MonitorDevice
+	a.DB.Model(&model.MonitorDevice{}).Find(&devs)
+	return devs
 }
 
 func bpsPct(bps, limitMbps float64) float64 {

@@ -155,7 +155,8 @@ func EncryptResponse(app *core.App) gin.HandlerFunc {
 			strings.HasSuffix(c.Request.URL.Path, "/html") ||
 			strings.HasSuffix(c.Request.URL.Path, "/upload") ||
 			strings.HasSuffix(c.Request.URL.Path, "/template") ||
-			strings.HasSuffix(c.Request.URL.Path, "/pdf") {
+			strings.HasSuffix(c.Request.URL.Path, "/pdf") ||
+			strings.HasSuffix(c.Request.URL.Path, "/geomap/image") {
 			c.Next()
 			return
 		}

@@ -51,6 +51,7 @@ func AllModels() []any {
 		&model.NodeContainer{}, &model.NodeLink{},
 		&model.Certificate{},
 		&model.TopoNode{}, &model.TopoLink{}, &model.TopoPos{},
+		&model.GeoMapConfig{}, &model.GeoMapPoint{},
 	}
 }
 
