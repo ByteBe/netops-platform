@@ -40,6 +40,11 @@ from report.router import report_router
 
 app.include_router(report_router)
 
+# 挂载配置审计子路由（Go SSH 读取配置后转发差异对比）
+from configaudit.router import configaudit_router
+
+app.include_router(configaudit_router)
+
 
 class RunRequest(BaseModel):
     snapshot: Dict[str, Any] = {}

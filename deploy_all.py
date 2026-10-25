@@ -40,6 +40,8 @@ PY_FILES = [
     "report/__init__.py",
     "report/render.py",
     "report/router.py",
+    "configaudit/__init__.py",
+    "configaudit/router.py",
     "aiinspect/app.py",
 ]
 

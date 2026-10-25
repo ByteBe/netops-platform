@@ -32,6 +32,7 @@
 | AI 巡检 | `POST /api/aiinspect/run` | `POST /internal/aiinspect/run` | 明确失败提示（502） |
 | 脚本生成器 | `POST /api/scriptgen/generate` | `POST /internal/scriptgen/generate` | 明确失败提示（502） |
 | 运维巡检报告 / 周报 | `POST /api/report/*` | `POST /internal/report/render` | 明确失败提示（502） |
+| 配置审计差异 | `POST /api/conf-audit/devices/:id/run` | `POST /internal/configaudit/diff` | 明确失败提示（502） |
 
 降级原则（v2.4.0 起）：**Python 是唯一实现，Go 不保留内置兜底**——AI 巡检 / 脚本生成 / 报告渲染均已删除 Go 本地实现（内置 AI 分支、厂商命令生成器与校验族、本地 HTML 模板与图标）。Python 不可用时接口直接返回 502「请检查 Python 智能外围（netops-python）服务状态」，避免双实现造成的代码臃肿与行为不一致。Go 侧保留的职责：数据采集（设备/链路/数据库/Nginx/容器）、报告数据收集（collect*Rows → payload 序列化）、周报调度与邮件/通知渠道发送、PDF 下载（wkhtmltopdf 转本地渲染 HTML）。
 
