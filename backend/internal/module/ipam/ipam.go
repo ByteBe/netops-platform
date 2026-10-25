@@ -8,9 +8,9 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
-	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -20,9 +20,6 @@ import (
 	"netops/internal/modreg"
 	"netops/internal/service/sshsvc"
 )
-
-var arpIPRe = regexp.MustCompile(`\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b`)
-var arpMACRe = regexp.MustCompile(`\b([0-9a-fA-F]{4}[-.][0-9a-fA-F]{4}[-.][0-9a-fA-F]{4})\b`)
 
 // RegisterProtected 路由
 func RegisterProtected(a *core.App, g *gin.RouterGroup) {
@@ -246,16 +243,21 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 					a.DB.First(&s, rec.SubnetID)
 					vlan = s.VLAN
 				}
-				undoCmd := fmt.Sprintf("undo arp %s", rec.IP)
-				if dev.Vendor == "huawei" {
-					undoCmd = fmt.Sprintf("undo arp static %s", rec.IP)
-					if vlan > 0 {
-						undoCmd += fmt.Sprintf(" vid %d", vlan)
-					}
+				undoCmdReq := map[string]any{"ip": rec.IP, "vlan": vlan, "vendor": dev.Vendor}
+				var undoRes struct {
+					OK       bool     `json:"ok"`
+					Error    string   `json:"error"`
+					Commands []string `json:"commands"`
 				}
-				cmds := []string{"system-view", undoCmd, "quit", "save force"}
-				sshsvc.Exec(sshsvc.Target{Host: dev.IP, Port: dev.SSHPort, User: dev.SSHUser,
-					AuthType: dev.AuthType, Credential: dev.Credential}, cmds)
+				// 释放命令由 Python 智能外围生成（IP/MAC 校验 + 厂商 undo 命令）；不可用时仅记日志，释放记录照常进行
+				if err := a.PySvc.PostJSON("/internal/ipam/undo-cmd", undoCmdReq, &undoRes, 10*time.Second); err != nil {
+					fmt.Printf("[ipam] undo-cmd Python 不可用: %v\n", err)
+				} else if undoRes.OK {
+					sshsvc.Exec(sshsvc.Target{Host: dev.IP, Port: dev.SSHPort, User: dev.SSHUser,
+						AuthType: dev.AuthType, Credential: dev.Credential}, undoRes.Commands)
+				} else {
+					fmt.Printf("[ipam] undo-cmd 生成失败: %s\n", undoRes.Error)
+				}
 			}
 		}
 		res := a.DB.Unscoped().Where("id = ?", id).Delete(&model.IPRecord{})
@@ -377,7 +379,30 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			response.Fail(c, 400, response.CodeBadRequest, "读取ARP失败: "+err.Error())
 			return
 		}
-		arpMap := parseARP(out)
+		// ARP 输出解析由 Python 智能外围执行（正则提取 IP/MAC/VLAN，跳过全零 MAC）
+		var arpRes struct {
+			OK    bool `json:"ok"`
+			Count int  `json:"count"`
+			Items []struct {
+				IP   string `json:"ip"`
+				MAC  string `json:"mac"`
+				VLAN int    `json:"vlan"`
+			} `json:"items"`
+		}
+		if err := a.PySvc.PostJSON("/internal/ipam/parse-arp", map[string]any{"out": out}, &arpRes, 15*time.Second); err != nil {
+			response.Fail(c, 502, 50200, "IP 地址管理服务不可用，请检查 Python 智能外围（netops-python）服务状态")
+			return
+		}
+		arpMap := map[string]struct {
+			MAC  string
+			VLAN int
+		}{}
+		for _, it := range arpRes.Items {
+			arpMap[it.IP] = struct {
+				MAC  string
+				VLAN int
+			}{MAC: it.MAC, VLAN: it.VLAN}
+		}
 		// 网段可用IP
 		allIPs := usableIPs(s.CIDR)
 		ipSet := map[string]bool{}
@@ -430,7 +455,8 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 	})
 }
 
-// doBind 下发地址绑定命令（华为/华三：arp static + 静态MAC绑定）
+// doBind 下发地址绑定命令（华为/华三：arp static + 静态MAC绑定）。
+// MAC 规范化、命令生成与输出校验由 Python 智能外围实现，Go 仅负责 SSH 执行与结果入库。
 func doBind(a *core.App, rec *model.IPRecord, s *model.Subnet) {
 	fmt.Printf("[ipam] bind start record=%d ip=%s mac=%s subnet=%d vlan=%d device=%d\n", rec.ID, rec.IP, rec.MAC, rec.SubnetID, s.VLAN, rec.BindDeviceID)
 	var dev model.BindDevice
@@ -446,100 +472,56 @@ func doBind(a *core.App, rec *model.IPRecord, s *model.Subnet) {
 		a.DB.Model(rec).Updates(map[string]any{"bind_status": rec.BindStatus, "bind_log": rec.BindLog})
 		return
 	}
-	mac := normalizeMAC(rec.MAC)
-	if mac == "" {
-		rec.BindStatus = "fail"
-		rec.BindLog = "MAC地址无效"
-		a.DB.Model(rec).Updates(map[string]any{"bind_status": rec.BindStatus, "bind_log": rec.BindLog})
-		return
-	}
-	// 按厂商生成绑定命令；华三/华为静态 ARP 带 VLAN 时可明确绑定到对应广播域
 	vlan := rec.VLAN
 	if vlan == 0 {
 		vlan = s.VLAN
 	}
-	arpCmd := fmt.Sprintf("arp static %s %s", rec.IP, mac)
-	if vlan > 0 {
-		arpCmd += fmt.Sprintf(" vid %d", vlan)
+	// 输入校验 + 按厂商生成绑定命令（Python 智能外围）
+	var cmdRes struct {
+		OK       bool     `json:"ok"`
+		Error    string   `json:"error"`
+		Commands []string `json:"commands"`
 	}
-	commands := []string{"system-view", arpCmd, "quit"}
-	if dev.Vendor == "h3c" {
-		commands = append(commands, "save force")
-	} else if dev.Vendor == "huawei" {
-		commands = append(commands, "save force")
+	if err := a.PySvc.PostJSON("/internal/ipam/bind-cmd",
+		map[string]any{"ip": rec.IP, "mac": rec.MAC, "vlan": vlan, "vendor": dev.Vendor}, &cmdRes, 10*time.Second); err != nil {
+		rec.BindStatus = "fail"
+		rec.BindLog = "绑定服务不可用（Python 智能外围异常）"
+		a.DB.Model(rec).Updates(map[string]any{"bind_status": rec.BindStatus, "bind_log": rec.BindLog})
+		return
+	}
+	if !cmdRes.OK {
+		rec.BindStatus = "fail"
+		rec.BindLog = cmdRes.Error
+		a.DB.Model(rec).Updates(map[string]any{"bind_status": rec.BindStatus, "bind_log": rec.BindLog})
+		return
 	}
 	out, err := sshsvc.Exec(sshsvc.Target{Host: dev.IP, Port: dev.SSHPort, User: dev.SSHUser,
-		AuthType: dev.AuthType, Credential: dev.Credential}, commands)
+		AuthType: dev.AuthType, Credential: dev.Credential}, cmdRes.Commands)
 	if err != nil {
 		rec.BindStatus = "fail"
 		rec.BindLog = err.Error()
-	} else if hasBindError(out) {
-		rec.BindStatus = "fail"
-		rec.BindLog = out
 	} else {
-		rec.BindStatus = "ok"
-		rec.BindLog = out
+		// 命令输出校验（Python 智能外围：错误关键词识别）
+		var chkRes struct {
+			OK       bool `json:"ok"`
+			HasError bool `json:"has_error"`
+		}
+		if perr := a.PySvc.PostJSON("/internal/ipam/check-output", map[string]any{"out": out}, &chkRes, 10*time.Second); perr != nil {
+			rec.BindStatus = "fail"
+			rec.BindLog = "绑定输出校验服务不可用（Python 智能外围异常）"
+		} else if chkRes.HasError {
+			rec.BindStatus = "fail"
+			rec.BindLog = out
+		} else {
+			rec.BindStatus = "ok"
+			rec.BindLog = out
+		}
 	}
 	a.DB.Model(rec).Updates(map[string]any{"bind_status": rec.BindStatus, "bind_log": rec.BindLog, "bind_device_id": rec.BindDeviceID})
 	fmt.Printf("[ipam] bind end record=%d status=%s log=%s\n", rec.ID, rec.BindStatus, strings.ReplaceAll(rec.BindLog, "\n", " "))
 }
 
-func hasBindError(out string) bool {
-	text := strings.ToLower(out)
-	for _, kw := range []string{"unrecognized", "wrong parameter", "incomplete", "ambiguous", "error:", "failed", "invalid", "wrong number"} {
-		if strings.Contains(text, kw) {
-			return true
-		}
-	}
-	return false
-}
-
-func normalizeMAC(mac string) string {
-	mac = strings.ToUpper(strings.ReplaceAll(mac, "-", ""))
-	mac = strings.ReplaceAll(mac, ":", "")
-	mac = strings.ReplaceAll(mac, ".", "")
-	if len(mac) != 12 {
-		return ""
-	}
-	// 华为/华三格式：XXXX-XXXX-XXXX
-	return mac[0:4] + "-" + mac[4:8] + "-" + mac[8:12]
-}
-
-// parseARP 解析华为/华三 display arp 输出，返回 IP -> MAC/VLAN
-func parseARP(out string) map[string]struct {
-	MAC  string
-	VLAN int
-} {
-	result := map[string]struct {
-		MAC  string
-		VLAN int
-	}{}
-	lines := strings.Split(out, "\n")
-	for _, line := range lines {
-		ip := arpIPRe.FindString(line)
-		mac := arpMACRe.FindString(line)
-		if ip == "" || mac == "" {
-			continue
-		}
-		if strings.Contains(line, "0000-0000-0000") {
-			continue
-		}
-		tokens := strings.Fields(line)
-		vlan := 0
-		for i, t := range tokens {
-			if strings.EqualFold(t, mac) && i+1 < len(tokens) {
-				fmt.Sscanf(tokens[i+1], "%d", &vlan)
-				break
-			}
-		}
-		result[ip] = struct {
-			MAC  string
-			VLAN int
-		}{MAC: normalizeMAC(mac), VLAN: vlan}
-	}
-	return result
-}
-
+// usableIPs 计算网段可用 IP（保留网络/广播地址；/31、/32 特殊处理）
 func usableIPs(cidr string) []string {
 	ip, ipnet, err := net.ParseCIDR(cidr)
 	if err != nil {

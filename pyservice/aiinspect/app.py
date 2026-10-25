@@ -50,6 +50,11 @@ from tsarchive.router import tsarchive_router
 
 app.include_router(tsarchive_router)
 
+# 挂载 IP 地址管理工具子路由（Go SSH 执行后调用：命令生成/输出校验/ARP 解析）
+from ipam.router import ipam_router
+
+app.include_router(ipam_router)
+
 
 class RunRequest(BaseModel):
     snapshot: Dict[str, Any] = {}

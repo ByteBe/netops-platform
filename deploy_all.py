@@ -45,6 +45,9 @@ PY_FILES = [
     "tsarchive/__init__.py",
     "tsarchive/archive.py",
     "tsarchive/router.py",
+    "ipam/__init__.py",
+    "ipam/tools.py",
+    "ipam/router.py",
     "aiinspect/app.py",
 ]
 
