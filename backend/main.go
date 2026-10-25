@@ -89,9 +89,9 @@ func main() {
 
 	// 5. 启动 API 服务（默认 30821）
 	apiHost := cfg.Server.Host
-	if cfg.Initialized && cfg.Server.WebPort > 0 {
-		// 已完成初始化且启用独立前端端口：API 仅绑定本机（供前端反代与内部调用），
-		// 外部只能经前端端口访问，防止绕过前端直连 API
+	if cfg.Initialized {
+		// 初始化完成后 API 仅绑定本机：外部统一经 Nginx 或前端独立端口反代访问，
+		// 防止绕过前端直连 API（未初始化时开放，供向导页面 /setup 完成初始化）
 		apiHost = "127.0.0.1"
 	}
 	addr := fmt.Sprintf("%s:%d", apiHost, cfg.Server.Port)
