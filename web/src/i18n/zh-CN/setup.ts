@@ -1,7 +1,10 @@
 export default {
   subtitle: '系统初始化向导 - 选择存储数据库与时序数据库，创建管理员账号',
-  stepDeploy: '部署模式', stepDb: '存储数据库', stepTsdb: '时序数据库', stepAdmin: '管理员账号',
+  stepDeploy: '部署模式', stepWeb: '访问端口', stepDb: '存储数据库', stepTsdb: '时序数据库', stepAdmin: '管理员账号',
   deployMode: '部署模式',
+  webPort: '前端访问端口', webPortTip: '前端页面独立访问端口，与 API 端口分离；默认 40000，可修改。填 0 表示前端由 API 端口提供。修改后重启服务生效。',
+  apiPortInfo: 'API 端口：{apiPort}',
+  webPortConflict: '前端端口不能与 API 端口或内部端口相同，请修改（填 0 表示由 API 端口提供）',
   standalone: '单机部署', distributed: '分布式级联部署',
   standaloneTip: '单机部署：所有数据在本机采集与存储，不与其他节点级联。',
   distributedTip: '分布式部署：本节点可作为总部或下级，通过 HTTP/MQTT 与上下级节点同步设备/容器数据。后续可在系统中切换。',

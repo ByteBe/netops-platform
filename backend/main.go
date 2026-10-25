@@ -5,14 +5,19 @@
 package main
 
 import (
+	"compress/gzip"
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"os/signal"
 	"path"
+	"strings"
 	"syscall"
 	"time"
 
@@ -55,10 +60,17 @@ func main() {
 	engine := gin.New()
 	engine.Use(gin.Recovery())
 
-	// 3.2 前端资源：由 API 端口提供静态资源（生产环境由 Nginx 托管前端静态与反代，API 收归本机）
+	// 3.2 前端资源：默认由 API 端口提供；配置了独立前端端口(web_port>0)时改由独立端口提供
 	webDir := "./web"
+	var webSrv *http.Server
 	useTLS := cfg.Server.TLSCert != "" && cfg.Server.TLSKey != ""
-	mountFrontend(engine, webDir)
+	if err := validateWebPort(cfg); err != nil {
+		log.Fatalf("[bootstrap] %v", err)
+	}
+	webEnabled := cfg.Server.WebPort > 0
+	if !webEnabled {
+		mountFrontend(engine, webDir)
+	}
 
 	// 3.3 注册 API 路由
 	router.Register(engine, app)
@@ -101,6 +113,19 @@ func main() {
 		}
 	}()
 
+	// 5.1 独立前端服务（web_port>0 时启用：前端静态资源 + /api /ws /mcp 反向代理）
+	if webEnabled {
+		webAddr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.WebPort)
+		webSrv = &http.Server{Addr: webAddr, Handler: buildWebHandler(webDir, cfg.Server.Port, useTLS)}
+		go func() {
+			log.Printf("[web] 前端独立服务启动: http://%s（API 端口 %d）", webAddr, cfg.Server.Port)
+			if err := webSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				// 端口被占用等场景：降级警告而非退出整个进程（API 服务仍可用）
+				log.Printf("[web] 警告: 前端服务异常（%v），请检查端口占用；API 端口 %d 仍可访问（未初始化时请访问 http://IP:%d/setup 完成初始化）", err, cfg.Server.Port, cfg.Server.Port)
+			}
+		}()
+	}
+
 	// 6. 审计日志自动清理（保留180天）
 	go func() {
 		ticker := time.NewTicker(24 * time.Hour)
@@ -126,6 +151,9 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(ctx)
+	if webSrv != nil {
+		_ = webSrv.Shutdown(ctx)
+	}
 	_ = internalSrv.Shutdown(ctx)
 	app.Shutdown()
 	log.Println("[web] 服务已安全退出")
@@ -157,4 +185,110 @@ func mountFrontend(engine *gin.Engine, webDir string) {
 	} else {
 		log.Printf("[web] 警告: 未找到前端目录 %s（请将前端构建产物放在该目录）", webDir)
 	}
+}
+
+// validateWebPort 校验前端独立端口配置：范围 0-65535，且不能与 API/内部端口冲突
+func validateWebPort(cfg *config.Config) error {
+	wp := cfg.Server.WebPort
+	if wp < 0 || wp > 65535 {
+		return fmt.Errorf("配置错误: web_port=%d 超出有效范围 0-65535", wp)
+	}
+	if wp == 0 {
+		return nil
+	}
+	if wp == cfg.Server.Port {
+		return fmt.Errorf("配置错误: web_port=%d 不能与 API 端口(port=%d)相同（填 0 表示前端由 API 端口提供）", wp, cfg.Server.Port)
+	}
+	if wp == cfg.Server.InternalPort {
+		return fmt.Errorf("配置错误: web_port=%d 不能与内部端口(internal_port=%d)相同", wp, cfg.Server.InternalPort)
+	}
+	return nil
+}
+
+// gzipResponseWriter 包装 ResponseWriter：写入时经 gzip 压缩，写头时更新编码头
+type gzipResponseWriter struct {
+	http.ResponseWriter
+	zw *gzip.Writer
+}
+
+func (g *gzipResponseWriter) Write(b []byte) (int, error) { return g.zw.Write(b) }
+
+func (g *gzipResponseWriter) WriteHeader(code int) {
+	g.Header().Del("Content-Length")
+	g.Header().Set("Content-Encoding", "gzip")
+	g.Header().Set("Vary", "Accept-Encoding")
+	g.ResponseWriter.WriteHeader(code)
+}
+
+// gzipStatic 仅对可压缩静态资源（js/css/json/svg/woff2）启用 gzip 压缩，减少公网传输体积
+func gzipStatic(next http.Handler) http.Handler {
+	compressible := func(p string) bool {
+		lp := strings.ToLower(p)
+		for _, suffix := range []string{".js", ".css", ".json", ".svg", ".woff2", ".map"} {
+			if strings.HasSuffix(lp, suffix) {
+				return true
+			}
+		}
+		return false
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") || !compressible(r.URL.Path) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		gz := gzip.NewWriter(w)
+		defer gz.Close()
+		next.ServeHTTP(&gzipResponseWriter{ResponseWriter: w, zw: gz}, r)
+	})
+}
+
+// buildWebHandler 构建独立前端服务 handler：
+//   - 前端 SPA 静态资源（./web，回退 index.html）
+//   - /api /ws /mcp 反向代理到 API 端口（TLS 模式下走 https 并信任本机证书）
+func buildWebHandler(webDir string, apiPort int, useTLS bool) http.Handler {
+	mux := http.NewServeMux()
+
+	// API / WebSocket / MCP 反向代理到 API 端口
+	if apiPort > 0 {
+		scheme := "http"
+		if useTLS {
+			scheme = "https"
+		}
+		target := &url.URL{Scheme: scheme, Host: fmt.Sprintf("127.0.0.1:%d", apiPort)}
+		rp := httputil.NewSingleHostReverseProxy(target)
+		if useTLS {
+			// 本机回环反代：信任本机 API 服务证书（含自签名），仅限回环地址，风险可控
+			rp.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+		}
+		for _, p := range []string{"/api", "/api/", "/ws", "/mcp", "/mcp/"} {
+			mux.Handle(p, rp)
+		}
+	}
+
+	// 前端 SPA 静态资源（回退 index.html）
+	if st, err := os.Stat(webDir); err == nil && st.IsDir() {
+		sub := os.DirFS(webDir)
+		if entries, err := fs.ReadDir(sub, "assets"); err == nil {
+			log.Printf("[web] 前端静态资源目录: %s, assets 文件数: %d", webDir, len(entries))
+		}
+		mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet {
+				http.Error(w, "not found", http.StatusNotFound)
+				return
+			}
+			reqPath := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
+			if reqPath != "" && reqPath != "." {
+				if _, err := fs.Stat(sub, reqPath); err == nil {
+					gzipStatic(http.FileServer(http.FS(sub))).ServeHTTP(w, r)
+					return
+				}
+			}
+			// SPA 入口：no-store 强制浏览器每次重新下载 index.html（no-cache 仍允许 304 条件请求复用旧缓存，导致升级后看不到新版）
+			w.Header().Set("Cache-Control", "no-store")
+			http.ServeFileFS(w, r, sub, "index.html")
+		}))
+	} else {
+		log.Printf("[web] 警告: 未找到前端目录 %s（请将前端构建产物放在该目录）", webDir)
+	}
+	return mux
 }

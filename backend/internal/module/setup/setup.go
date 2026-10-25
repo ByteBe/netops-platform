@@ -73,6 +73,7 @@ func Register(a *core.App, g *gin.RouterGroup) {
 			"db_types":      storage.SupportedTypes(),
 			"tsdb_types":    []string{"tdengine", "influxdb", "builtin"},
 			"api_port":      a.Cfg.Server.Port,
+			"web_port":      a.Cfg.Server.WebPort,
 			"internal_port": a.Cfg.Server.InternalPort,
 		})
 	})
@@ -127,6 +128,7 @@ func Register(a *core.App, g *gin.RouterGroup) {
 				Database   config.Database `json:"database"`
 				TSDB       config.TSDB     `json:"tsdb"`
 				DeployMode string          `json:"deploy_mode"`
+				WebPort    int             `json:"web_port"` // 前端独立端口（0=前端由 API 端口提供）
 				Admin      struct {
 					Username string `json:"username"`
 					Password string `json:"password"`
@@ -143,6 +145,18 @@ func Register(a *core.App, g *gin.RouterGroup) {
 			}
 			if req.Admin.Username == "" || req.Admin.Password == "" {
 				return nil, fmt.Errorf("请填写管理员账号与初始密码")
+			}
+			// web_port 校验：0=前端由 API 端口提供；1-65535 为独立前端端口，不能与 API/内部端口冲突
+			if req.WebPort < 0 || req.WebPort > 65535 {
+				return nil, fmt.Errorf("前端端口无效: %d（范围 0-65535）", req.WebPort)
+			}
+			if req.WebPort != 0 {
+				if req.WebPort == a.Cfg.Server.Port {
+					return nil, fmt.Errorf("前端端口 %d 与 API 端口相同，请修改或填 0", req.WebPort)
+				}
+				if req.WebPort == a.Cfg.Server.InternalPort {
+					return nil, fmt.Errorf("前端端口 %d 与内部端口相同，请修改或填 0", req.WebPort)
+				}
 			}
 			if err := password.Validate(req.Admin.Password); err != nil {
 				return nil, bizFail(http.StatusUnprocessableEntity, response.CodeWeakPassword, err.Error())
@@ -165,6 +179,9 @@ func Register(a *core.App, g *gin.RouterGroup) {
 			}
 			a.Cfg.Database = req.Database
 			a.Cfg.TSDB = req.TSDB
+			if req.WebPort > 0 {
+				a.Cfg.Server.WebPort = req.WebPort
+			}
 			a.Cfg.Initialized = true
 			if err := a.Cfg.Save(); err != nil {
 				return nil, fmt.Errorf("保存配置失败: %w", err)

@@ -20,6 +20,9 @@ api.interceptors.request.use((config) => {
 
 const step = ref(0)
 const deployMode = ref<'standalone' | 'distributed'>('standalone')
+const webPort = ref(40000) // 前端独立端口，0=不启用（前端由 API 端口提供）
+const apiPort = ref(0)
+const internalPort = ref(0)
 const testing = ref(false)
 const submitting = ref(false)
 let sessionKey: SessionKey | null = null
@@ -89,6 +92,11 @@ async function testTsdb() {
 }
 
 async function submit() {
+  // 端口冲突校验：不能与 API 端口/内部端口相同（后端同样会拦截）
+  if (webPort.value !== 0 && (webPort.value === apiPort.value || webPort.value === internalPort.value)) {
+    ElMessage.warning(t('setup.webPortConflict'))
+    return
+  }
   const err = validatePasswordStrength(adminForm.password)
   if (err) { ElMessage.warning(err); return }
   submitting.value = true
@@ -100,7 +108,7 @@ async function submit() {
       sessionKey = generateSessionKey()
     }
     const key = sm2EncryptSessionKey(sm2PubKey, sessionKey)
-    const data = sm4Encrypt(sessionKey, JSON.stringify({ deploy_mode: deployMode.value, database: dbForm, tsdb: tsdbForm, admin: adminForm }))
+    const data = sm4Encrypt(sessionKey, JSON.stringify({ deploy_mode: deployMode.value, web_port: webPort.value, database: dbForm, tsdb: tsdbForm, admin: adminForm }))
     const resp = await api.post('/setup/init', { key, data })
     // 初始化阶段无会话密钥，响应为明文 {code,message}；仅 code=0 视为成功
     if (!resp.data || resp.data.code !== 0) {
@@ -127,6 +135,8 @@ onMounted(async () => {
     const r = await api.get('/setup/status')
     dbTypesList.value = r.data.data.db_types
     tsdbTypesList.value = r.data.data.tsdb_types
+    apiPort.value = r.data.data.api_port
+    internalPort.value = r.data.data.internal_port
     if (r.data.data.initialized) { ElMessage.warning(t('setup.alreadyInit')); window.location.href = '/login' }
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.message || e?.message || t('setup.failed'))
@@ -148,6 +158,7 @@ onMounted(async () => {
       </div>
       <el-steps :active="step" align-center>
         <el-step :title="t('setup.stepDeploy')" />
+        <el-step :title="t('setup.stepWeb')" />
         <el-step :title="t('setup.stepDb')" />
         <el-step :title="t('setup.stepTsdb')" />
         <el-step :title="t('setup.stepAdmin')" />
@@ -169,6 +180,19 @@ onMounted(async () => {
       </div>
       <div v-show="step === 1" class="np-step-panel">
         <el-form label-width="120px" label-position="left">
+          <el-form-item :label="t('setup.webPort')">
+            <el-input-number v-model="webPort" :min="0" :max="65535" style="width:200px" />
+            <div class="np-field-tip">{{ t('setup.webPortTip') }}</div>
+            <div class="np-field-tip">{{ t('setup.apiPortInfo', { apiPort: apiPort || '?' }) }}</div>
+          </el-form-item>
+        </el-form>
+        <div class="np-step-actions">
+          <el-button @click="step = 0">{{ t('setup.prev') }}</el-button>
+          <el-button type="primary" plain @click="step = 2">{{ t('setup.next') }}</el-button>
+        </div>
+      </div>
+      <div v-show="step === 2" class="np-step-panel">
+        <el-form label-width="120px" label-position="left">
           <el-form-item :label="t('setup.storageDb')" required>
             <el-select v-model="dbForm.type" style="width:100%">
               <el-option v-for="k in dbTypesList" :key="k" :label="dbLabel(k)" :value="k" />
@@ -184,12 +208,12 @@ onMounted(async () => {
           </template>
         </el-form>
         <div class="np-step-actions">
-          <el-button @click="step = 0">{{ t('setup.prev') }}</el-button>
+          <el-button @click="step = 1">{{ t('setup.prev') }}</el-button>
           <el-button type="primary" :loading="testing" @click="testDb">{{ t('setup.testConn') }}</el-button>
-          <el-button type="primary" plain @click="step = 2">{{ t('setup.next') }}</el-button>
+          <el-button type="primary" plain @click="step = 3">{{ t('setup.next') }}</el-button>
         </div>
       </div>
-      <div v-show="step === 2" class="np-step-panel">
+      <div v-show="step === 3" class="np-step-panel">
         <el-form label-width="120px" label-position="left">
           <el-form-item :label="t('setup.tsdb')" required>
             <el-select v-model="tsdbForm.type" style="width:100%">
@@ -206,18 +230,18 @@ onMounted(async () => {
           </template>
         </el-form>
         <div class="np-step-actions">
-          <el-button @click="step = 1">{{ t('setup.prev') }}</el-button>
+          <el-button @click="step = 2">{{ t('setup.prev') }}</el-button>
           <el-button type="primary" :loading="testing" @click="testTsdb">{{ t('setup.testConn') }}</el-button>
-          <el-button type="primary" plain @click="step = 3">{{ t('setup.next') }}</el-button>
+          <el-button type="primary" plain @click="step = 4">{{ t('setup.next') }}</el-button>
         </div>
       </div>
-      <div v-show="step === 3" class="np-step-panel">
+      <div v-show="step === 4" class="np-step-panel">
         <el-form label-width="120px" label-position="left">
           <el-form-item :label="t('setup.adminUser')" required><el-input v-model="adminForm.username" /></el-form-item>
           <el-form-item :label="t('setup.initialPwd')" required><el-input v-model="adminForm.password" type="password" show-password /></el-form-item>
         </el-form>
         <div class="np-step-actions">
-          <el-button @click="step = 2">{{ t('setup.prev') }}</el-button>
+          <el-button @click="step = 3">{{ t('setup.prev') }}</el-button>
           <el-button type="primary" :loading="submitting" @click="submit">{{ t('setup.finish') }}</el-button>
         </div>
       </div>

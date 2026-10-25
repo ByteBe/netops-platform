@@ -15,6 +15,7 @@ import (
 type Server struct {
 	Host         string `yaml:"host"`          // 外部 Web 监听地址
 	Port         int    `yaml:"port"`          // API 端口（默认 30821）
+	WebPort      int    `yaml:"web_port"`      // 前端独立端口（>0 且 != Port 时启用独立前端服务；0=前端由 API 端口提供）
 	InternalHost string `yaml:"internal_host"` // 内部服务监听地址（默认 127.0.0.1）
 	InternalPort int    `yaml:"internal_port"` // 内部服务端口（默认 30001，数据库通讯）
 	TLSCert      string   `yaml:"tls_cert"`      // TLS证书路径（留空=HTTP）
@@ -92,6 +93,8 @@ func Load() (*Config, error) {
 	cfg := defaultConfig()
 	if path == "" {
 		// 无配置文件：首次运行，等待初始化向导（setup API 会写入配置）
+		// 默认前端独立端口 40000（初始化向导中可修改）
+		cfg.Server.WebPort = 40000
 		return cfg, nil
 	}
 	data, err := os.ReadFile(path)
@@ -100,6 +103,10 @@ func Load() (*Config, error) {
 	}
 	if err := yaml.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("解析配置文件 %s 失败: %w", path, err)
+	}
+	// 未初始化且未显式配置 web_port 时：默认前端独立端口 40000（初始化向导中可修改）
+	if !cfg.Initialized && cfg.Server.WebPort == 0 {
+		cfg.Server.WebPort = 40000
 	}
 	return cfg, nil
 }
