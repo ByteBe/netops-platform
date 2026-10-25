@@ -112,16 +112,16 @@ function removeGeoPoint(deviceId: number) {
 // ---------- 图表引用 ----------
 const vendorRef = ref<HTMLDivElement>()
 const typeRef = ref<HTMLDivElement>()
+const linkTrendRef = ref<HTMLDivElement>()
 const trafficRef = ref<HTMLDivElement>()
 const hostRef = ref<HTMLDivElement>()
 const alertTrendRef = ref<HTMLDivElement>()
-const heatRef = ref<HTMLDivElement>()
 let vendorChart: echarts.ECharts | null = null
 let typeChart: echarts.ECharts | null = null
+let linkTrendChart: echarts.ECharts | null = null
 let trafficChart: echarts.ECharts | null = null
 let hostChart: echarts.ECharts | null = null
 let alertTrendChart: echarts.ECharts | null = null
-let heatChart: echarts.ECharts | null = null
 let ws: WSClient | null = null
 let timer: number | null = null
 let wsTimer: number | null = null
@@ -241,6 +241,50 @@ function renderType() {
   })
 }
 
+// ---------- 链路检测（最近 10 分钟延迟折线） ----------
+interface LinkTrendItem { name: string; color: string; points: Array<[number, number]> }
+const linkTrends = ref<LinkTrendItem[]>([])
+let lastLinkTrendSig = ''
+const fmtHHmm = (ts: number): string => {
+  const d = new Date(ts)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+async function loadLinkTrends() {
+  const r = await getEnc<{ series: LinkTrendItem[] }>('/dashboard/link-trends')
+  linkTrends.value = r.series ?? []
+  renderLinkTrend()
+}
+function renderLinkTrend() {
+  if (!linkTrendRef.value) return
+  if (hoverPaused) return
+  linkTrendChart ??= echarts.init(linkTrendRef.value)
+  const sig = JSON.stringify(linkTrends.value)
+  if (sig === lastLinkTrendSig) return
+  lastLinkTrendSig = sig
+  const ca = chartAxisColors()
+  const series = linkTrends.value.map((s) => seriesOpt({
+    name: s.name,
+    type: 'line',
+    smooth: false,
+    showSymbol: false,
+    connectNulls: false,
+    lineStyle: { width: 1.5, color: s.color || cssVar('--np-info', '#3a6fb0') },
+    itemStyle: { color: s.color || cssVar('--np-info', '#3a6fb0') },
+    data: s.points.map((p) => [p[0], p[1] <= 0 ? null : p[1]])
+  }))
+  linkTrendChart.setOption({
+    backgroundColor: 'transparent',
+    tooltip: tooltipCfg((v) => `${v.toFixed(1)} ms`),
+    legend: linkTrends.value.length > 1
+      ? { top: 0, type: 'scroll' as const, textStyle: { color: ca.axis, fontSize: 11 }, itemWidth: 12, itemHeight: 8 }
+      : { show: false },
+    grid: { left: 50, right: 14, top: 28, bottom: 24 },
+    xAxis: { type: 'time', axisLabel: { color: ca.axis, formatter: (v: number) => fmtHHmm(v) }, axisLine: { lineStyle: { color: ca.axisLine } } },
+    yAxis: { type: 'value', name: 'ms', axisLabel: { color: ca.axis }, splitLine: { lineStyle: { color: ca.split } } },
+    series: series.length ? series : [seriesOpt({ name: t('common.noData'), type: 'line', data: [], lineStyle: { width: 1.5 }, itemStyle: { color: ca.axis } })]
+  })
+}
+
 // ---------- 近 7 天流量趋势（折线） ----------
 let lastTrafficSig = ''
 function renderTraffic() {
@@ -335,51 +379,6 @@ function renderAlertTrend() {
   })
 }
 
-// ---------- 告警热力图（设备 × 小时） ----------
-let lastHeatSig = ''
-function renderHeat() {
-  if (!heatRef.value || !data.value) return
-  if (hoverPaused) return
-  heatChart ??= echarts.init(heatRef.value)
-  const ht = data.value.alert_heat
-  const sig = JSON.stringify(ht)
-  if (sig === lastHeatSig) return
-  lastHeatSig = sig
-  const ca = chartAxisColors()
-  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'))
-  heatChart.setOption({
-    backgroundColor: 'transparent',
-    tooltip: {
-      trigger: 'item' as const,
-      triggerOn: 'mousemove|click' as const,
-      confine: true,
-      backgroundColor: cssVar('--np-card-bg', '#ffffff'),
-      borderColor: cssVar('--np-border', '#e3e5e8'),
-      textStyle: { color: cssVar('--np-text-1', '#39424f'), fontSize: 12 },
-      formatter: (p: { value: number[] }) => {
-        const d = ht.devices[p.value[0]]
-        return `${d || ''} ${p.value[1]}:00<br/>${t('dashboard.alertCount')}: ${p.value[2]}`
-      }
-    },
-    grid: { left: 86, right: 14, top: 10, bottom: 24 },
-    xAxis: { type: 'category', data: hours, axisLabel: { color: ca.axis, interval: 3 }, axisLine: { lineStyle: { color: ca.axisLine } } },
-    yAxis: { type: 'category', data: ht.devices, axisLabel: { color: ca.axis, fontSize: 10 }, splitLine: { show: false } },
-    visualMap: {
-      min: 0, max: Math.max(1, ...ht.data.map((d) => d[2])),
-      calculable: false, orient: 'horizontal', left: 'center', bottom: 0,
-      itemWidth: 10, itemHeight: 8, textStyle: { color: ca.axis, fontSize: 10 },
-      inRange: { color: ['rgba(58,111,176,0.15)', cssVar('--np-primary', '#d95f1f'), cssVar('--np-danger', '#d64545')] }
-    },
-    series: [seriesOpt({
-      type: 'heatmap',
-      data: ht.data,
-      label: { show: false },
-      emphasis: { disabled: true },
-      itemStyle: { borderWidth: 1, borderColor: 'transparent' }
-    })]
-  })
-}
-
 // ---------- 派生展示值 ----------
 function levelText(level: string): string {
   if (level === 'critical') return t('alert.critical')
@@ -425,7 +424,7 @@ function taskRate(): string {
   return `${Math.round((s.task_success / s.task_total) * 100)}%`
 }
 function renderAll() {
-  renderVendor(); renderType(); renderTraffic(); renderHost(); renderAlertTrend(); renderHeat()
+  renderVendor(); renderType(); renderLinkTrend(); renderTraffic(); renderHost(); renderAlertTrend()
 }
 
 // ---------- WS / 定时刷新 ----------
@@ -435,49 +434,51 @@ function wsReload() {
     wsTimer = null
     void loadScreen().catch(() => {})
     void loadAlerts().catch(() => {})
+    void loadLinkTrends().catch(() => {})
   }, 2000)
 }
 
 watch(() => appStore.theme, () => {
   nextTick(() => {
-    for (const ch of [vendorChart, typeChart, trafficChart, hostChart, alertTrendChart, heatChart]) ch?.dispose()
-    vendorChart = typeChart = trafficChart = hostChart = alertTrendChart = heatChart = null
-    lastVendorSig = lastTypeSig = lastTrafficSig = lastHostSig = lastAlertTrendSig = lastHeatSig = ''
+    for (const ch of [vendorChart, typeChart, linkTrendChart, trafficChart, hostChart, alertTrendChart]) ch?.dispose()
+    vendorChart = typeChart = linkTrendChart = trafficChart = hostChart = alertTrendChart = null
+    lastVendorSig = lastTypeSig = lastLinkTrendSig = lastTrafficSig = lastHostSig = lastAlertTrendSig = ''
     renderAll()
   })
 })
 
 onMounted(async () => {
   await nextTick()
-  for (const el of [vendorRef.value, typeRef.value, trafficRef.value, hostRef.value, alertTrendRef.value, heatRef.value]) {
+  for (const el of [vendorRef.value, typeRef.value, linkTrendRef.value, trafficRef.value, hostRef.value, alertTrendRef.value]) {
     bindHoverPause(el)
   }
   try { await loadScreen() } catch (e) { console.error('screen', e) }
   try { await loadAlerts() } catch (e) { console.error('alerts', e) }
+  try { await loadLinkTrends() } catch (e) { console.error('link-trends', e) }
   // 图表容器稳定后初始化
-  for (const refMap of [[vendorRef, vendorChart], [typeRef, typeChart], [trafficRef, trafficChart], [hostRef, hostChart], [alertTrendRef, alertTrendChart], [heatRef, heatChart]] as Array<[typeof vendorRef, echarts.ECharts | null]>) {
+  for (const refMap of [[vendorRef, vendorChart], [typeRef, typeChart], [linkTrendRef, linkTrendChart], [trafficRef, trafficChart], [hostRef, hostChart], [alertTrendRef, alertTrendChart]] as Array<[typeof vendorRef, echarts.ECharts | null]>) {
     if (refMap[0].value) {
       refMap[1]?.dispose()
       const ch = echarts.init(refMap[0].value)
       if (refMap[1] === vendorChart) vendorChart = ch
       else if (refMap[1] === typeChart) typeChart = ch
+      else if (refMap[1] === linkTrendChart) linkTrendChart = ch
       else if (refMap[1] === trafficChart) trafficChart = ch
       else if (refMap[1] === hostChart) hostChart = ch
-      else if (refMap[1] === alertTrendChart) alertTrendChart = ch
-      else heatChart = ch
+      else alertTrendChart = ch
     }
   }
   renderAll()
   setTimeout(() => {
-    vendorChart?.resize(); typeChart?.resize(); trafficChart?.resize()
-    hostChart?.resize(); alertTrendChart?.resize(); heatChart?.resize()
+    vendorChart?.resize(); typeChart?.resize(); linkTrendChart?.resize(); trafficChart?.resize()
+    hostChart?.resize(); alertTrendChart?.resize()
   }, 100)
   window.addEventListener('resize', onResize)
   ro = new ResizeObserver(() => {
-    vendorChart?.resize(); typeChart?.resize(); trafficChart?.resize()
-    hostChart?.resize(); alertTrendChart?.resize(); heatChart?.resize()
+    vendorChart?.resize(); typeChart?.resize(); linkTrendChart?.resize(); trafficChart?.resize()
+    hostChart?.resize(); alertTrendChart?.resize()
   })
-  for (const el of [vendorRef.value, typeRef.value, trafficRef.value, hostRef.value, alertTrendRef.value, heatRef.value]) {
+  for (const el of [vendorRef.value, typeRef.value, linkTrendRef.value, trafficRef.value, hostRef.value, alertTrendRef.value]) {
     if (el) ro.observe(el)
   }
   try {
@@ -491,12 +492,13 @@ onMounted(async () => {
     void loadScreen().catch(() => {})
     void loadAlerts().catch(() => {})
     void loadGeoMap().catch(() => {})
+    void loadLinkTrends().catch(() => {})
   }, 30000)
 })
 
 function onResize() {
-  vendorChart?.resize(); typeChart?.resize(); trafficChart?.resize()
-  hostChart?.resize(); alertTrendChart?.resize(); heatChart?.resize()
+  vendorChart?.resize(); typeChart?.resize(); linkTrendChart?.resize(); trafficChart?.resize()
+  hostChart?.resize(); alertTrendChart?.resize()
 }
 
 onBeforeUnmount(() => {
@@ -505,8 +507,8 @@ onBeforeUnmount(() => {
   if (wsTimer) window.clearTimeout(wsTimer)
   window.removeEventListener('resize', onResize)
   ro?.disconnect()
-  vendorChart?.dispose(); typeChart?.dispose(); trafficChart?.dispose()
-  hostChart?.dispose(); alertTrendChart?.dispose(); heatChart?.dispose()
+  vendorChart?.dispose(); typeChart?.dispose(); linkTrendChart?.dispose(); trafficChart?.dispose()
+  hostChart?.dispose(); alertTrendChart?.dispose()
 })
 </script>
 
@@ -620,8 +622,8 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <div class="np-panel">
-          <div class="np-panel-head"><span class="np-panel-tick"></span>{{ t('dashboard.trafficTrend') }}</div>
-          <div ref="trafficRef" class="np-chart np-chart-trend"></div>
+          <div class="np-panel-head"><span class="np-panel-tick"></span>{{ t('dashboard.linkDetect') }}</div>
+          <div ref="linkTrendRef" class="np-chart np-chart-trend"></div>
         </div>
       </div>
 
@@ -636,8 +638,8 @@ onBeforeUnmount(() => {
           <div ref="alertTrendRef" class="np-chart np-chart-min"></div>
         </div>
         <div class="np-panel">
-          <div class="np-panel-head"><span class="np-panel-tick"></span>{{ t('dashboard.alertHeatmap') }}</div>
-          <div ref="heatRef" class="np-chart np-chart-heat"></div>
+          <div class="np-panel-head"><span class="np-panel-tick"></span>{{ t('dashboard.trafficTrend') }}</div>
+          <div ref="trafficRef" class="np-chart np-chart-min"></div>
         </div>
       </div>
     </div>
