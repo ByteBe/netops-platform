@@ -49,6 +49,10 @@ RETRY_MAX = 5          # 单条记录最大自动重试次数
 RETRY_WINDOW_DAY = 7   # 只补传最近 N 天内失败的归档
 TABLES_PREFIX = "t_"   # TDengine 表前缀
 
+# 物理范围校验分类（转化链路清洗规则，见 _clean_points）
+CPU_PCT_METRICS = {"dev_cpu", "docker_cpu", "k8s_cpu", "db_cpu"}  # 百分比，0~100
+TRAFFIC_METRICS = {"if_in", "if_out"}                            # 流量，不可为负
+
 
 def _mysql_conn():
     return pymysql.connect(
@@ -162,15 +166,41 @@ def _query_series(metric: str, tbl: str, start_ms: int, end_ms: int):
     return groups, order
 
 
-def _validate(metric: str, field: str, tags: dict, points, start_ms: int, end_ms: int):
-    """校验序列完整性/正确性/非乱码性，返回错误信息（None=通过）。"""
-    if not points:
-        return "序列无采样点"
+def _clean_points(metric: str, points, start_ms: int, end_ms: int):
+    """转化链路清洗（逐点）：
+    1. 剔除时间戳越界的点（落在归档窗口之外）；
+    2. 剔除 NaN / Inf；
+    3. 按 metric 物理范围剔除不可能值（CPU 百分比 <0 或 >100、流量 <0）；
+    4. 同时间戳重复采样去重，保留最后一次采样（采集边界重复兜底）。
+    返回 (清洗后按时间升序的点列表, 剔除点数)。
+    """
+    if metric in CPU_PCT_METRICS:
+        def _out_of_range(v):
+            return v < 0 or v > 100
+    elif metric in TRAFFIC_METRICS:
+        def _out_of_range(v):
+            return v < 0
+    else:
+        def _out_of_range(v):
+            return False
+    dedup = {}
+    removed = 0
     for ts_ms, v in points:
-        if math.isnan(v) or math.isinf(v):
-            return "数值非法(NaN/Inf)"
         if ts_ms < start_ms or ts_ms > end_ms + 1:
-            return "采样时间超出归档范围"
+            removed += 1
+            continue
+        if math.isnan(v) or math.isinf(v):
+            removed += 1
+            continue
+        if _out_of_range(v):
+            removed += 1
+            continue
+        dedup[ts_ms] = v  # 同时间戳保留最后采样
+    return sorted(dedup.items()), removed
+
+
+def _validate(metric: str, field: str, tags: dict):
+    """结构性校验（清洗无法修复的问题）：名称/标签非乱码。返回错误信息（None=通过）。"""
     for s in (metric, field):
         if not _is_clean_text(s):
             return "名称含乱码: %r" % s
@@ -230,13 +260,15 @@ def _clear_retry(conn, metric: str, day: str):
 
 
 def _archive_metric(metric: str, day: str, start_ms: int, end_ms: int, cleanup: bool):
-    """归档单个指标：查 -> 校验 -> 聚合写 MySQL -> 清理 TDengine。返回写入条数。"""
+    """归档单个指标：查 -> 清洗（去重/剔除异常值）-> 校验（结构性）-> 聚合写 MySQL -> 清理 TDengine。
+    返回 (写入条数, 清洗剔除点数)。"""
     tables = _list_tables(metric)
     if not tables:
-        return 0
+        return 0, 0
     conn = _mysql_conn()
     try:
         written = 0
+        cleaned = 0
         bad = 0
         failed = False
         for tbl in tables:
@@ -244,10 +276,16 @@ def _archive_metric(metric: str, day: str, start_ms: int, end_ms: int, cleanup: 
             for field in order:
                 points = groups[field]
                 tags = {"__table": tbl}
-                err = _validate(metric, field, tags, points, start_ms, end_ms)
+                err = _validate(metric, field, tags)
                 if err:
                     bad += 1
                     _upsert_retry(conn, metric, day, "校验未通过: %s" % err)
+                    continue
+                points, removed = _clean_points(metric, points, start_ms, end_ms)
+                cleaned += removed
+                if not points:
+                    bad += 1
+                    _upsert_retry(conn, metric, day, "清洗后无有效采样点")
                     continue
                 avg, mx, mn, last, cnt = _agg(points)
                 tags_json = json.dumps(tags, ensure_ascii=False)
@@ -269,7 +307,7 @@ def _archive_metric(metric: str, day: str, start_ms: int, end_ms: int, cleanup: 
                         _upsert_retry(conn, metric, day, "清除时序库失败: %s" % e)
         if bad == 0 and not failed:
             _clear_retry(conn, metric, day)
-        return written
+        return written, cleaned
     finally:
         conn.close()
 
@@ -327,13 +365,16 @@ def run_archive(mode: str, now: datetime.datetime):
     start_ms = int(start.timestamp() * 1000)
     end_ms = int(end.timestamp() * 1000)
     total = 0
+    cleaned = 0
     errors = []
     for m in METRICS:
         try:
-            total += _archive_metric(m, day_str, start_ms, end_ms, cleanup)
+            w, c = _archive_metric(m, day_str, start_ms, end_ms, cleanup)
+            total += w
+            cleaned += c
         except Exception as e:
             errors.append("%s: %s" % (m, e))
-    return {"ok": True, "total": total, "retried": retried, "day": day_str, "errors": errors}
+    return {"ok": True, "total": total, "cleaned": cleaned, "retried": retried, "day": day_str, "errors": errors}
 
 
 def main():

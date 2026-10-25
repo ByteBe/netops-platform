@@ -33,11 +33,12 @@
 | 脚本生成器 | `POST /api/scriptgen/generate` | `POST /internal/scriptgen/generate` | 明确失败提示（502） |
 | 运维巡检报告 / 周报 | `POST /api/report/*` | `POST /internal/report/render` | 明确失败提示（502） |
 | 配置审计差异 | `POST /api/conf-audit/devices/:id/run` | `POST /internal/configaudit/diff` | 明确失败提示（502） |
-| 时序数据归档 | `tsarchive.Start` 调度器触发 | `POST /internal/tsarchive/run`（daily/retry） | 后台任务：Python 失败记日志，下轮调度再试 |
+| 时序数据归档 | `tsarchive.Start` 调度器触发 | `POST /internal/tsarchive/run`（daily/retry） | 后台任务：Python 失败记日志，下轮调度再试；daily 响应带 cleaned 剔除点数 |
 | IP 地址管理校验 | ipam doBind / 释放 / ARP 导入 | `POST /internal/ipam/bind-cmd` `undo-cmd` `check-output` `parse-arp` | 绑定/导入接口 502 明确报错；释放失败仅记日志不阻塞记录删除 |
 | 存量数据清洗 | `POST /api/clean/run`（Go 转发） | `POST /internal/clean/run`（默认 dry_run 只统计） | MySQL 告警去重/日志规范化/MAC 规范化 + TDengine 异常值统计；dry_run=false 才执行 |
+| 时序→存储转化清洗 | 归档链路内置（`_clean_points`） | 随 `tsarchive` 执行 | 聚合前逐点清洗：越界时间/NaN·Inf/物理范围（CPU 0~100、流量非负）剔除 + 同时间戳去重，清洗后聚合 avg/max/min/last/count |
 
-降级原则（v2.4.0 起）：**Python 是唯一实现，Go 不保留内置兜底**——AI 巡检 / 脚本生成 / 报告渲染 / 配置审计差异 / 时序归档 / IP 地址管理校验 / 存量数据清洗均已删除 Go 本地实现（内置 AI 分支、厂商命令生成器与校验族、本地 HTML 模板与图标、diffLines、归档聚合/校验/补传、MAC 规范化/绑定命令生成/输出关键词校验/ARP 解析、告警去重/日志规范化/时序异常值统计）。用户可见接口（AI 巡检/脚本/报告/审计/IP 绑定导入/数据清洗）Python 不可用时直接返回 502「请检查 Python 智能外围（netops-python）服务状态」；后台调度任务（时序归档）Python 失败仅记日志、下轮调度重试；释放 IP 时命令生成失败仅记日志、记录删除照常执行。Go 侧保留的职责：数据采集（设备/链路/数据库/Nginx/容器/日志）、报告数据收集、周报调度与邮件/通知渠道发送、PDF 下载（wkhtmltopdf）、归档调度触发、SSH 执行与设备连接（sshsvc）。
+降级原则（v2.4.0 起）：**Python 是唯一实现，Go 不保留内置兜底**——AI 巡检 / 脚本生成 / 报告渲染 / 配置审计差异 / 时序归档（含转化链路清洗）/ IP 地址管理校验 / 存量数据清洗均已删除 Go 本地实现（内置 AI 分支、厂商命令生成器与校验族、本地 HTML 模板与图标、diffLines、归档聚合/校验/补传、MAC 规范化/绑定命令生成/输出关键词校验/ARP 解析、告警去重/日志规范化/时序异常值统计）。用户可见接口（AI 巡检/脚本/报告/审计/IP 绑定导入/数据清洗）Python 不可用时直接返回 502「请检查 Python 智能外围（netops-python）服务状态」；后台调度任务（时序归档）Python 失败仅记日志、下轮调度重试；释放 IP 时命令生成失败仅记日志、记录删除照常执行。Go 侧保留的职责：数据采集（设备/链路/数据库/Nginx/容器/日志）、报告数据收集、周报调度与邮件/通知渠道发送、PDF 下载（wkhtmltopdf）、归档调度触发、SSH 执行与设备连接（sshsvc）。
 
 ## 3. 融合转发层（Go 侧）
 
