@@ -16,6 +16,7 @@ TDengine
 """
 import datetime
 import json
+import re
 
 import pymysql
 import requests
@@ -27,10 +28,15 @@ DUP_WINDOW_MIN = 10      # 告警去重窗口（分钟）
 LOG_MAX_LEN = 4096       # 日志内容合理上限（超出视为异常标记）
 ANOMALY_DELETE_LIMIT = 200  # 单指标单次最多删除异常点数（dry_run=false 时）
 
-# 需要超范围校验的 CPU 类 metric
-CPU_METRICS = {"dev_cpu", "docker_cpu", "k8s_cpu", "db_cpu", "nginx_reading", "nginx_writing", "nginx_waiting", "nginx_conn"}
+# 需要超范围校验的 CPU 百分比类 metric（仅百分比指标，连接数/请求数不设 0~100 校验）
+CPU_METRICS = {"dev_cpu", "docker_cpu", "k8s_cpu", "db_cpu"}
 # 流量类 metric（不可为负）
 TRAFFIC_METRICS = {"if_in", "if_out"}
+
+
+def _sanitize_metric(metric: str) -> str:
+    """标识符消毒：仅保留字母数字下划线，防止注入时序库 SQL。"""
+    return re.sub(r"[^a-zA-Z0-9_]", "_", metric)
 
 
 def _mysql_conn():
@@ -151,7 +157,7 @@ def clean_ipam_mac(dry_run: bool):
 
 def _list_tables(metric: str):
     db = TDENGINE["database"]
-    prefix = "t_" + metric.replace(" ", "_").replace(".", "_").replace("-", "_")
+    prefix = "t_" + _sanitize_metric(metric)
     rows = _td_query("SELECT table_name FROM information_schema.ins_tables WHERE db_name='%s' AND table_name LIKE '%s%%'" % (db, prefix))
     return sorted(r.get("table_name") or r.get("tbname") or "" for r in rows if r.get("table_name") or r.get("tbname"))
 
@@ -182,13 +188,18 @@ def clean_ts_anomalies(metric: str, days: int, dry_run: bool):
             report["detail"].append({"table": tbl, "anomaly_count": c})
             if not dry_run and c > 0:
                 limit = min(c, ANOMALY_DELETE_LIMIT)
-                _td_query("DELETE FROM %s.%s WHERE %s AND ts >= NOW() - %dd LIMIT %d" % (db, tbl, where, days, limit))
+                try:
+                    _td_query("DELETE FROM %s.%s WHERE %s AND ts >= NOW() - %dd LIMIT %d" % (db, tbl, where, days, limit))
+                except Exception as e:
+                    report["detail"].append({"table": tbl, "delete_error": str(e)})
     report["found"] = total
     return report
 
 
 def run_clean(mode: str, dry_run: bool, metric: str, days: int):
     """清洗入口：mode=mysql|tdengine|all。dry_run 默认 true（只统计）。"""
+    if mode not in ("mysql", "tdengine", "all"):
+        return {"ok": False, "dry_run": dry_run, "error": "mode 仅支持 mysql/tdengine/all", "reports": []}
     out = {"ok": True, "dry_run": dry_run, "reports": []}
     if mode in ("mysql", "all"):
         out["reports"].append(clean_alert_duplicates(dry_run))

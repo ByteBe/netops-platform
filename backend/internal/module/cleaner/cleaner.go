@@ -17,7 +17,7 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 	g.POST("/clean/run", func(c *gin.Context) {
 		var req struct {
 			Mode   string `json:"mode"`    // mysql | tdengine | all
-			DryRun bool   `json:"dry_run"` // 默认 true 只统计
+			DryRun *bool  `json:"dry_run"` // 未传默认 true（只统计不修改），显式 false 才执行
 			Metric string `json:"metric"`  // tdengine 模式指定指标
 			Days   int    `json:"days"`    // tdengine 时间窗口
 		}
@@ -34,12 +34,17 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		if req.Days <= 0 {
 			req.Days = 7
 		}
+		// 安全默认：dry_run 未显式传入时按只统计处理，杜绝误执行写操作
+		dryRun := true
+		if req.DryRun != nil {
+			dryRun = *req.DryRun
+		}
 		var res struct {
 			OK      bool  `json:"ok"`
 			DryRun  bool  `json:"dry_run"`
 			Reports []any `json:"reports"`
 		}
-		payload := map[string]any{"mode": req.Mode, "dry_run": req.DryRun, "metric": req.Metric, "days": req.Days}
+		payload := map[string]any{"mode": req.Mode, "dry_run": dryRun, "metric": req.Metric, "days": req.Days}
 		if err := a.PySvc.PostJSON("/internal/clean/run", payload, &res, 120*time.Second); err != nil {
 			response.Fail(c, 502, 50200, "数据清洗服务不可用，请检查 Python 智能外围（netops-python）服务状态")
 			return
