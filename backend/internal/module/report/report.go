@@ -1,11 +1,8 @@
 package report
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"html/template"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -622,29 +619,13 @@ func collectReportData(a *core.App, start, end time.Time, include map[string]boo
 	return payload
 }
 
-// callPythonRender 转发 Python 渲染报告 HTML；失败返回 error（调用方回退本地渲染）
+// callPythonRender 转发 Python 渲染报告 HTML（统一转发层 pysvc）；失败返回 error（调用方回退本地渲染）
 func callPythonRender(a *core.App, payload map[string]any) (string, error) {
-	base := strings.TrimRight(a.Cfg.Server.PythonSvcURL, "/")
-	if base == "" {
-		return "", fmt.Errorf("python svc url empty")
-	}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return "", err
-	}
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Post(base+"/internal/report/render", "application/json", bytes.NewReader(body))
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("python svc status %d", resp.StatusCode)
-	}
 	var out struct {
 		HTML string `json:"html"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	err := a.PySvc.PostJSON("/internal/report/render", payload, &out, 30*time.Second)
+	if err != nil {
 		return "", err
 	}
 	if len(out.HTML) < 200 {

@@ -2,10 +2,8 @@
 package aiinspect
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"strings"
 	"time"
 
@@ -94,26 +92,9 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 	})
 }
 
-// callPythonSvc 调用 Python 智能外围服务（FastAPI /internal/aiinspect/run）
+// callPythonSvc 调用 Python 智能外围服务（统一转发层 pysvc，FastAPI /internal/aiinspect/run）
 // 成功返回（报告, 统计增强数据, nil）；失败返回 error（由调用方回退内置 AI）
 func callPythonSvc(a *core.App, snapshot Snapshot) (string, any, error) {
-	url := strings.TrimRight(a.Cfg.Server.PythonSvcURL, "/") + "/internal/aiinspect/run"
-	body, err := json.Marshal(map[string]any{
-		"snapshot": snapshot,
-		"time":     time.Now().Format("2006-01-02 15:04:05"),
-	})
-	if err != nil {
-		return "", nil, err
-	}
-	client := &http.Client{Timeout: 120 * time.Second}
-	resp, err := client.Post(url, "application/json", bytes.NewReader(body))
-	if err != nil {
-		return "", nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", nil, fmt.Errorf("python svc status %d", resp.StatusCode)
-	}
 	var out struct {
 		Report   string `json:"report"`
 		Stats    any    `json:"stats"`
@@ -121,7 +102,11 @@ func callPythonSvc(a *core.App, snapshot Snapshot) (string, any, error) {
 		Source   string `json:"source"`
 		Snapshot any    `json:"snapshot"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	err := a.PySvc.PostJSON("/internal/aiinspect/run", map[string]any{
+		"snapshot": snapshot,
+		"time":     time.Now().Format("2006-01-02 15:04:05"),
+	}, &out, 120*time.Second)
+	if err != nil {
 		return "", nil, err
 	}
 	if strings.TrimSpace(out.Report) == "" {

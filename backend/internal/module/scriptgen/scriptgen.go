@@ -3,8 +3,6 @@
 package scriptgen
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"math/bits"
 	"net"
@@ -54,35 +52,18 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 	})
 }
 
-// callPythonGenerate 调用 Python 智能外围服务（FastAPI /internal/scriptgen/generate）
+// callPythonGenerate 调用 Python 智能外围服务（统一转发层 pysvc，FastAPI /internal/scriptgen/generate）
 // 成功返回脚本行；失败返回 error（由调用方回退本地 Go 实现）
 func callPythonGenerate(a *core.App, code, vendor string, params map[string]string) ([]string, error) {
-	base := strings.TrimRight(a.Cfg.Server.PythonSvcURL, "/")
-	if base == "" {
-		return nil, fmt.Errorf("python svc url empty")
-	}
-	url := base + "/internal/scriptgen/generate"
-	body, err := json.Marshal(map[string]any{
-		"code":   code,
-		"vendor": vendor,
-		"params": params,
-	})
-	if err != nil {
-		return nil, err
-	}
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Post(url, "application/json", bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("python svc status %d", resp.StatusCode)
-	}
 	var out struct {
 		Script string `json:"script"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	err := a.PySvc.PostJSON("/internal/scriptgen/generate", map[string]any{
+		"code":   code,
+		"vendor": vendor,
+		"params": params,
+	}, &out, 30*time.Second)
+	if err != nil {
 		return nil, err
 	}
 	if strings.TrimSpace(out.Script) == "" {

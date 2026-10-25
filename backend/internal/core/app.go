@@ -20,6 +20,7 @@ import (
 	"netops/internal/config"
 	"netops/internal/model"
 	"netops/internal/notify"
+	"netops/internal/pysvc"
 	"netops/internal/service/mcp"
 	"netops/internal/tsdb"
 )
@@ -45,6 +46,9 @@ type App struct {
 	// MCP 能力服务（外部 Agent 接入本系统）
 	MCPServer *mcp.Server
 
+	// PySvc Python 智能外围客户端（AI 巡检/脚本生成/报告渲染等智能功能统一转发）
+	PySvc *pysvc.Client
+
 	// 已注册模块（由 bootstrap 填充）
 	Modules []string
 }
@@ -58,6 +62,7 @@ func New(cfg *config.Config) *App {
 		Sessions: session.NewManager(12 * time.Hour),
 		Ready:    false,
 		Started:  time.Now(),
+		PySvc:    pysvc.New(cfg.Server.PythonSvcURL),
 	}
 }
 
@@ -140,7 +145,19 @@ func (a *App) Stats() map[string]any {
 		"sessions":     a.Sessions.Count(),
 		"link_tasks":   linkTotal,
 		"tsdb":         tsdbName(a.TSDB),
+		"python_svc":   a.PythonSvcState(),
 	}
+}
+
+// PythonSvcState Python 智能外围运行状态：online / offline / disabled
+func (a *App) PythonSvcState() string {
+	if a.PySvc == nil || !a.PySvc.Enabled() {
+		return "disabled"
+	}
+	if err := a.PySvc.Ping(); err != nil {
+		return "offline"
+	}
+	return "online"
 }
 
 func tsdbName(e tsdb.Engine) string {
