@@ -1,10 +1,7 @@
 export default {
   subtitle: 'Setup Wizard - choose storage DB and time-series DB, create admin account',
-  stepDeploy: 'Deploy Mode', stepWeb: 'Web Port', stepDb: 'Storage DB', stepTsdb: 'Time-Series DB', stepAdmin: 'Admin Account',
+  stepDeploy: 'Deploy Mode', stepDb: 'Storage DB', stepTsdb: 'Time-Series DB', stepAdmin: 'Admin Account',
   deployMode: 'Deploy Mode',
-  webPort: 'Web Port', webPortTip: 'Independent port for the web UI, separated from the API port; default 40000, editable. Set 0 to serve the web UI on the API port. Takes effect after service restart.',
-  apiPortInfo: 'API Port: {apiPort}',
-  webPortConflict: 'Web port cannot equal the API port or internal port. Change it, or set 0 to use the API port.',
   standalone: 'Standalone', distributed: 'Distributed Cascade',
   standaloneTip: 'Standalone: all data collected and stored locally, no cascade with other nodes.',
   distributedTip: 'Distributed: this node can be HQ or sub-node, sync device/container data with upstream/downstream via HTTP/MQTT. Can be changed later in System.',

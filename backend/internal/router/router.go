@@ -36,7 +36,7 @@ func Register(engine *gin.Engine, app *core.App) {
 			response.OK(c, gin.H{
 				"name": app.Cfg.App.Name, "ready": app.Ready,
 				"version": "1.4.5", "time": app.Started.UnixMilli(),
-				"web_port": app.Cfg.Server.Port, "internal_port": app.Cfg.Server.InternalPort,
+				"internal_port": app.Cfg.Server.InternalPort,
 			})
 		})
 		// 国密公钥（初始化前也需可用）
