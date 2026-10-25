@@ -27,6 +27,9 @@ FILES = [
     "report/router.py",
     "configaudit/__init__.py",
     "configaudit/router.py",
+    "tsarchive/__init__.py",
+    "tsarchive/archive.py",
+    "tsarchive/router.py",
     "aiinspect/app.py",
 ]
 

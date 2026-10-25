@@ -45,6 +45,11 @@ from configaudit.router import configaudit_router
 
 app.include_router(configaudit_router)
 
+# 挂载时序归档子路由（Go 调度器触发每日归档与补传）
+from tsarchive.router import tsarchive_router
+
+app.include_router(tsarchive_router)
+
 
 class RunRequest(BaseModel):
     snapshot: Dict[str, Any] = {}
