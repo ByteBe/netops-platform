@@ -241,17 +241,25 @@ function renderType() {
   })
 }
 
-// ---------- 链路检测（最近 10 分钟延迟折线） ----------
+// ---------- 链路检测（最近 10 分钟延迟折线 + 状态统计） ----------
 interface LinkTrendItem { name: string; color: string; points: Array<[number, number]> }
 const linkTrends = ref<LinkTrendItem[]>([])
+const linkStats = ref<{ up: number; total: number; avgRt: number }>({ up: 0, total: 0, avgRt: 0 })
 let lastLinkTrendSig = ''
 const fmtHHmm = (ts: number): string => {
   const d = new Date(ts)
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 async function loadLinkTrends() {
-  const r = await getEnc<{ series: LinkTrendItem[] }>('/dashboard/link-trends')
-  linkTrends.value = r.series ?? []
+  const [t, o] = await Promise.all([
+    getEnc<{ series: LinkTrendItem[] }>('/dashboard/link-trends'),
+    getEnc<{ links: Array<{ up: boolean; rt: number }> }>('/dashboard/overview')
+  ])
+  linkTrends.value = t.series ?? []
+  const links = o.links ?? []
+  const up = links.filter((l) => l.up).length
+  const rts = links.filter((l) => l.rt > 0).map((l) => l.rt)
+  linkStats.value = { up, total: links.length, avgRt: rts.length ? rts.reduce((a, b) => a + b, 0) / rts.length : 0 }
   renderLinkTrend()
 }
 function renderLinkTrend() {
@@ -283,6 +291,9 @@ function renderLinkTrend() {
     yAxis: { type: 'value', name: 'ms', axisLabel: { color: ca.axis }, splitLine: { lineStyle: { color: ca.split } } },
     series: series.length ? series : [seriesOpt({ name: t('common.noData'), type: 'line', data: [], lineStyle: { width: 1.5 }, itemStyle: { color: ca.axis } })]
   })
+}
+function goLinkDetect() {
+  router.push('/linkdetect')
 }
 
 // ---------- 近 7 天流量趋势（折线） ----------
@@ -622,8 +633,17 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <div class="np-panel">
-          <div class="np-panel-head"><span class="np-panel-tick"></span>{{ t('dashboard.linkDetect') }}</div>
-          <div ref="linkTrendRef" class="np-chart np-chart-trend"></div>
+          <div class="np-panel-head">
+            <span class="np-panel-tick"></span>{{ t('dashboard.linkDetect') }}
+            <span class="np-panel-hint">{{ t('dashboard.linkUp') }} {{ linkStats.up }}/{{ linkStats.total }}<template v-if="linkStats.avgRt > 0"> · {{ t('dashboard.latency') }} {{ linkStats.avgRt.toFixed(0) }}ms</template></span>
+          </div>
+          <div class="np-chart np-chart-trend np-chart-wrap">
+            <div ref="linkTrendRef" class="np-chart np-chart-trend"></div>
+            <div v-if="!linkTrends.length" class="np-chart-empty" @click="goLinkDetect">
+              {{ linkStats.total > 0 ? t('dashboard.linkNoData') : t('dashboard.linkNoTask') }}
+              <span class="np-chart-empty-act">{{ t('dashboard.goConfig') }}</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -803,7 +823,21 @@ onBeforeUnmount(() => {
   .np-chart-trend { height: 200px; flex: none; }
   .np-chart-host { height: 150px; flex: none; }
   .np-chart-min { height: 140px; flex: none; }
-  .np-chart-heat { height: 170px; flex: none; }
+
+  // 链路检测：空态覆盖层
+  .np-chart-wrap { position: relative; }
+  .np-chart-empty {
+    position: absolute; inset: 0; z-index: 5;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+    color: var(--np-text-3); font-size: 13px; cursor: pointer;
+    background: color-mix(in srgb, var(--np-card-bg, #fff) 72%, transparent);
+    border-radius: $radius-sm;
+    .np-chart-empty-act {
+      font-size: 12px; color: var(--np-primary); border: 1px solid var(--np-primary); border-radius: $radius-sm;
+      padding: 2px 12px;
+    }
+    &:hover { color: var(--np-primary); }
+  }
 
   // 设备地理图
   .np-panel-geo { flex: 2.2; }

@@ -17,6 +17,7 @@ export default {
   cpuUsage: 'CPU 使用率', memUsage: '内存使用率', lineBandwidth: '专线带宽',
   noAlerts: '暂无告警', serverTotal: '服务器总数', serverOnline: '在线服务器',
   linkOnlineRate: '链路在线率',
+  linkNoTask: '未配置链路检测任务', linkNoData: '暂无链路探测数据', goConfig: '去配置',
   // 大屏 v3：智能运维可视化大屏
   refresh: '刷新',
   deviceUnit: '台', alertUnit: '条', templateUnit: '个',

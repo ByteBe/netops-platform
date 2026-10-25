@@ -17,6 +17,7 @@ export default {
   cpuUsage: 'CPU Usage', memUsage: 'Memory Usage', lineBandwidth: 'Line Bandwidth',
   noAlerts: 'No Alerts', serverTotal: 'Servers', serverOnline: 'Servers Online',
   linkOnlineRate: 'Link Online Rate',
+  linkNoTask: 'No link detection tasks configured', linkNoData: 'No link probe data yet', goConfig: 'Go Configure',
   // Dashboard v3: Ops Visualization Screen
   refresh: 'Refresh',
   deviceUnit: 'dev', alertUnit: 'alerts', templateUnit: 'tpl',
