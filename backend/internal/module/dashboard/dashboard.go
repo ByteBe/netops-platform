@@ -266,33 +266,39 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			}
 		}
 
-		// ---- 近7天流量趋势（TSDB if_in/if_out 按天均值，跨设备求和） ----
+		// ---- 近7天流量趋势（TSDB if_in/if_out 按天聚合，跨接口/设备求和） ----
+		// 注意：必须传 Bucket 让 TSDB 按天 INTERVAL 聚合，否则拿到原始采样点直接相加会虚高数十倍
 		trafficX := make([]string, 0, 7)
 		trafficIn := make([]float64, 7)
 		trafficOut := make([]float64, 7)
 		for i := 0; i < 7; i++ {
-			ds := weekStart.AddDate(0, 0, i)
-			de := ds.AddDate(0, 0, 1)
-			trafficX = append(trafficX, ds.Format("01-02"))
-			sumIn, sumOut := 0.0, 0.0
-			for _, metric := range []string{"if_in", "if_out"} {
-				rt, _ := a.TSDB.Query(tsdb.Query{Metric: metric, Start: ds, End: de, Agg: "avg"})
-				for _, s := range rt {
-					for _, p := range s.Points {
+			trafficX = append(trafficX, weekStart.AddDate(0, 0, i).Format("01-02"))
+		}
+		dayIdx := map[string]int{}
+		for i, x := range trafficX {
+			dayIdx[x] = i
+		}
+		for _, metric := range []string{"if_in", "if_out"} {
+			rt, err := a.TSDB.Query(tsdb.Query{Metric: metric, Start: weekStart, End: now, Bucket: time.Hour * 24, Agg: "avg"})
+			if err != nil {
+				continue
+			}
+			for _, s := range rt {
+				for _, p := range s.Points {
+					day := time.UnixMilli(int64(p[0])).Format("01-02")
+					if idx, ok := dayIdx[day]; ok {
 						if metric == "if_in" {
-							sumIn += p[1]
+							trafficIn[idx] += p[1]
 						} else {
-							sumOut += p[1]
+							trafficOut[idx] += p[1]
 						}
 					}
 				}
 			}
-			trafficIn[i] = sumIn
-			trafficOut[i] = sumOut
 		}
 
-		// ---- 主机资源（在线设备 CPU/内存/磁盘均值） ----
-		cpuSum, memSum, diskSum, hostN := 0.0, 0.0, 0.0, 0.0
+		// ---- 主机资源（在线设备 CPU/内存/磁盘均值；磁盘只统计有磁盘数据的设备） ----
+		cpuSum, memSum, diskSum, hostN, diskN := 0.0, 0.0, 0.0, 0.0, 0.0
 		deviceRank := make([]gin.H, 0, len(snaps))
 		for _, s := range snaps {
 			disk := 0.0
@@ -310,8 +316,11 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			if s.Up {
 				cpuSum += s.CPU
 				memSum += s.MemUsed
-				diskSum += disk
 				hostN++
+				if len(s.Disks) > 0 {
+					diskSum += disk
+					diskN++
+				}
 			}
 		}
 		hostRes := gin.H{"cpu": 0, "mem": 0, "disk": 0}
@@ -319,7 +328,10 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 			hostRes = gin.H{
 				"cpu":  math.Round(cpuSum/hostN*10) / 10,
 				"mem":  math.Round(memSum/hostN*10) / 10,
-				"disk": math.Round(diskSum/hostN*10) / 10,
+				"disk": math.Round(diskSum/diskN*10) / 10,
+			}
+			if diskN == 0 {
+				hostRes["disk"] = 0
 			}
 		}
 
