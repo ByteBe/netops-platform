@@ -61,7 +61,7 @@ def clean_alert_duplicates(dry_run: bool):
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, target, level, LEFT(content,100), created_at FROM alert_events "
+                "SELECT id, target, level, LEFT(message,100), created_at FROM alert_events "
                 "WHERE acked=0 ORDER BY created_at ASC")
             rows = cur.fetchall()
         groups = {}
@@ -100,10 +100,10 @@ def clean_device_logs(dry_run: bool):
     conn = _mysql_conn()
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT id, content, LENGTH(content) FROM device_logs WHERE content IS NOT NULL "
-                        "AND (LENGTH(content) = 0 OR LENGTH(content) > %s OR content LIKE '%%\ufffd%%') LIMIT 500", (LOG_MAX_LEN,))
+            cur.execute("SELECT id, message, LENGTH(message) FROM device_logs WHERE message IS NOT NULL "
+                        "AND (LENGTH(message) = 0 OR LENGTH(message) > %s OR message LIKE '%%\ufffd%%') LIMIT 500", (LOG_MAX_LEN,))
             rows = cur.fetchall()
-        for rid, content, ln in rows:
+        for rid, message, ln in rows:
             flags = []
             if ln == 0:
                 report["empty"] += 1
@@ -111,13 +111,13 @@ def clean_device_logs(dry_run: bool):
             if ln > LOG_MAX_LEN:
                 report["too_long"] += 1
                 flags.append("too_long(%d)" % ln)
-            if "\ufffd" in (content or ""):
+            if "\ufffd" in (message or ""):
                 report["garbled"] += 1
                 flags.append("garbled")
             report["detail"].append({"id": rid, "flags": flags})
             if not dry_run and "too_long" in flags:
                 with conn.cursor() as cur:
-                    cur.execute("UPDATE device_logs SET content=LEFT(content,%s) WHERE id=%s", (LOG_MAX_LEN, rid))
+                    cur.execute("UPDATE device_logs SET message=LEFT(message,%s) WHERE id=%s", (LOG_MAX_LEN, rid))
                 conn.commit()
     finally:
         conn.close()
