@@ -48,6 +48,9 @@ PY_FILES = [
     "ipam/__init__.py",
     "ipam/tools.py",
     "ipam/router.py",
+    "cleaner/__init__.py",
+    "cleaner/cleaner.py",
+    "cleaner/router.py",
     "aiinspect/app.py",
 ]
 

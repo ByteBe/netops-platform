@@ -55,6 +55,11 @@ from ipam.router import ipam_router
 
 app.include_router(ipam_router)
 
+# 挂载数据清洗子路由（Go 转发触发：MySQL/TDengine 存量数据低频批量清洗，默认 dry_run）
+from cleaner.router import cleaner_router
+
+app.include_router(cleaner_router)
+
 
 class RunRequest(BaseModel):
     snapshot: Dict[str, Any] = {}
