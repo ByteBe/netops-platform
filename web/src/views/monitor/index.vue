@@ -70,6 +70,8 @@ const displayIfArr = computed<string[]>({
   get: () => form.display_ifs ? form.display_ifs.split(',').filter(Boolean) : [],
   set: (v) => { form.display_ifs = (v || []).join(',') }
 })
+// SSH 采集 / BGP 监控仅网络设备（交换机/路由器/防火墙）提供；服务器不支持
+const isNetworkDevice = computed(() => ['switch', 'router', 'firewall'].includes(form.type))
 
 // 历史曲线
 const histVisible = ref(false)
@@ -370,7 +372,7 @@ onBeforeUnmount(() => {
       </el-table>
     </div>
 
-    <el-dialog v-model="dialogVisible" :title="editingId ? t('common.edit') : t('monitor.addDevice')" width="560px">
+    <el-dialog v-model="dialogVisible" :title="editingId ? t('common.edit') : t('monitor.addDevice')" width="560px" class="dev-dialog">
       <el-form :model="form" label-width="130px">
         <el-form-item :label="t('monitor.deviceName')" required>
           <el-input v-model="form.name" />
@@ -445,6 +447,7 @@ onBeforeUnmount(() => {
           <el-button :loading="testing" @click="testConn">{{ t('monitor.testConn') }}</el-button>
           <span v-if="testResult" class="dev-test-result" :class="testResult.indexOf(t('monitor.testSuccess')) >= 0 ? 'is-ok' : 'is-fail'">{{ testResult }}</span>
         </el-form-item>
+        <template v-if="isNetworkDevice">
         <el-divider content-position="left">SSH 采集（Linux 系统运行时间 / BGP）</el-divider>
         <el-form-item :label="t('bgp.sshUser')">
           <el-input v-model="form.ssh_user" placeholder="root/admin" />
@@ -460,6 +463,10 @@ onBeforeUnmount(() => {
         <el-form-item :label="t('bgp.bgpEnable')">
           <el-switch v-model="form.bgp_enable" />
         </el-form-item>
+        <el-form-item v-if="form.bgp_enable" label=" ">
+          <span class="bgp-enable-hint">{{ t('bgp.enableHint') }}</span>
+        </el-form-item>
+        </template>
         <el-form-item :label="t('monitor.displayIfs')">
           <el-select v-model="displayIfArr" multiple filterable :placeholder="t('monitor.displayIfsPlaceholder')" style="width:100%">
             <el-option v-for="i in (snaps[form.id]?.interfaces || [])" :key="i.index" :label="i.name" :value="i.name" />
@@ -621,6 +628,21 @@ onBeforeUnmount(() => {
   font-size: 13px;
   &.is-ok { color: var(--np-success); }
   &.is-fail { color: var(--np-danger); }
+}
+
+.bgp-enable-hint {
+  font-size: 13px;
+  color: var(--np-text-3);
+  line-height: 1.6;
+}
+
+// 设备配置弹窗：内容超高时内部滚动，底部按钮始终可见
+.dev-dialog {
+  margin-top: 3vh !important;
+  .el-dialog__body {
+    max-height: calc(94vh - 130px);
+    overflow-y: auto;
+  }
 }
 
 .np-dev-empty {

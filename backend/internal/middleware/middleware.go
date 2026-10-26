@@ -37,7 +37,7 @@ func CORS(allowOrigins []string) gin.HandlerFunc {
 			c.Header("Access-Control-Allow-Origin", origin)
 			c.Header("Access-Control-Allow-Credentials", "true")
 			c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-			c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Enc, X-Request-Id, X-Timestamp, X-Nonce")
+			c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Enc, X-No-Enc, X-Request-Id, X-Timestamp, X-Nonce")
 		}
 		if c.Request.Method == http.MethodOptions {
 			c.AbortWithStatus(http.StatusNoContent)
@@ -67,6 +67,11 @@ func corsAllowed(origin, host string, allowOrigins []string) bool {
 // Auth JWT 认证 + 强制改密拦截
 func Auth(app *core.App) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// 公开资源：地理图底图（浏览器 <img> 原生请求无 Authorization 头，需放行）
+		if strings.HasSuffix(c.Request.URL.Path, "/geomap/image") {
+			c.Next()
+			return
+		}
 		token := c.GetHeader("Authorization")
 		token = strings.TrimPrefix(token, "Bearer ")
 		if token == "" {

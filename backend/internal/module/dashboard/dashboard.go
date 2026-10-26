@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -73,34 +74,52 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		start := end.Add(-10 * time.Minute)
 		var tasks []model.LinkTask
 		a.DB.Find(&tasks)
-		series := make([]gin.H, 0, len(tasks))
-		for _, t := range tasks {
-			tags := map[string]string{"task_id": strconv.FormatUint(uint64(t.ID), 10)}
-			rt, err := a.TSDB.Query(tsdb.Query{Metric: "link_rt", Tags: tags, Start: start, End: end, Agg: "avg"})
-			if err != nil || len(rt) == 0 {
-				continue
-			}
-			merged := map[int64]float64{}
-			for _, s := range rt {
-				for _, p := range s.Points {
-					merged[int64(p[0])] = p[1]
+		// 并发查询各任务时序，缩短接口延迟
+		type trendResult struct {
+			name   string
+			color  string
+			points [][2]float64
+		}
+		results := make([]*trendResult, len(tasks))
+		var wg sync.WaitGroup
+		for i := range tasks {
+			wg.Add(1)
+			go func(i int, t model.LinkTask) {
+				defer wg.Done()
+				tags := map[string]string{"task_id": strconv.FormatUint(uint64(t.ID), 10)}
+				rt, err := a.TSDB.Query(tsdb.Query{Metric: "link_rt", Tags: tags, Start: start, End: end, Agg: "avg"})
+				if err != nil || len(rt) == 0 {
+					return
 				}
-			}
-			filtered := [][2]float64{}
-			keys := make([]int64, 0, len(merged))
-			for k := range merged {
-				keys = append(keys, k)
-			}
-			sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
-			for _, k := range keys {
-				v := merged[k]
-				if v > 0 {
-					filtered = append(filtered, [2]float64{float64(k), v})
-				} else {
-					filtered = append(filtered, [2]float64{float64(k), -1})
+				merged := map[int64]float64{}
+				for _, s := range rt {
+					for _, p := range s.Points {
+						merged[int64(p[0])] = p[1]
+					}
 				}
+				filtered := [][2]float64{}
+				keys := make([]int64, 0, len(merged))
+				for k := range merged {
+					keys = append(keys, k)
+				}
+				sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+				for _, k := range keys {
+					v := merged[k]
+					if v > 0 {
+						filtered = append(filtered, [2]float64{float64(k), v})
+					} else {
+						filtered = append(filtered, [2]float64{float64(k), -1})
+					}
+				}
+				results[i] = &trendResult{name: t.Name, color: t.Color, points: filtered}
+			}(i, tasks[i])
+		}
+		wg.Wait()
+		series := make([]gin.H, 0, len(results))
+		for _, r := range results {
+			if r != nil {
+				series = append(series, gin.H{"name": r.name, "color": r.color, "points": r.points})
 			}
-			series = append(series, gin.H{"name": t.Name, "color": t.Color, "points": filtered})
 		}
 		response.OK(c, gin.H{"start": start.UnixMilli(), "end": end.UnixMilli(), "series": series})
 	})
@@ -225,14 +244,24 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		}
 		sort.Slice(alertLevel, func(i, j int) bool { return alertLevel[i]["value"].(int64) > alertLevel[j]["value"].(int64) })
 
-		// ---- 近7天告警趋势（按天） ----
+		// ---- 近7天告警趋势（按天，单次 Group 聚合） ----
 		trend := make([]gin.H, 0, 7)
+		dayAgg := map[string]int64{}
+		var dayRows []struct {
+			Day string
+			N   int64
+		}
+		a.DB.Model(&model.AlertEvent{}).
+			Select("DATE_FORMAT(created_at, '%m-%d') as day, count(*) as n").
+			Where("created_at >= ?", weekStart).
+			Group("DATE_FORMAT(created_at, '%m-%d')").
+			Scan(&dayRows)
+		for _, r := range dayRows {
+			dayAgg[r.Day] = r.N
+		}
 		for i := 0; i < 7; i++ {
 			ds := weekStart.AddDate(0, 0, i)
-			de := ds.AddDate(0, 0, 1)
-			var n int64
-			a.DB.Model(&model.AlertEvent{}).Where("created_at >= ? AND created_at < ?", ds, de).Count(&n)
-			trend = append(trend, gin.H{"date": ds.Format("01-02"), "count": n})
+			trend = append(trend, gin.H{"date": ds.Format("01-02"), "count": dayAgg[ds.Format("01-02")]})
 		}
 
 		// ---- 告警热力图（设备 × 小时，近7天，Top 10 设备） ----
@@ -468,8 +497,8 @@ func registerGeoMap(a *core.App, g *gin.RouterGroup) {
 			response.Bad(c, "缺少文件字段 file")
 			return
 		}
-		if f.Size > 5*1024*1024 {
-			response.Bad(c, "图片不能超过 5MB")
+		if f.Size > 20*1024*1024 {
+			response.Bad(c, "图片不能超过 20MB")
 			return
 		}
 		ext := strings.ToLower(filepath.Ext(f.Filename))
@@ -540,13 +569,13 @@ func registerGeoMap(a *core.App, g *gin.RouterGroup) {
 			response.Err(c, err)
 			return
 		}
-		data, err := io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024+1))
+		data, err := io.ReadAll(io.LimitReader(resp.Body, 20*1024*1024+1))
 		if err != nil {
 			response.Bad(c, "读取失败: "+err.Error())
 			return
 		}
-		if len(data) > 5*1024*1024 {
-			response.Bad(c, "图片不能超过 5MB")
+		if len(data) > 20*1024*1024 {
+			response.Bad(c, "图片不能超过 20MB")
 			return
 		}
 		old := geoMapImagePath(a)

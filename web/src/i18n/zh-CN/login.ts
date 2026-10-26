@@ -7,5 +7,8 @@ export default {
   newPassword: '新密码', confirmPassword: '确认新密码',
   pwdRule: '密码须大于12位，且同时包含大写字母、小写字母、数字与符号',
   pwdNotMatch: '两次输入的新密码不一致',
-  forceChangeTip: '出于安全考虑，首次登录或密码到期后必须修改密码后才能继续使用系统。'
+  forceChangeTip: '出于安全考虑，首次登录或密码到期后必须修改密码后才能继续使用系统。',
+  introTitle: 'NetOps 智能网络运维监控平台',
+  introDesc: '一站式网络运维监控解决方案，覆盖链路实时检测、设备与流量监控、智能告警与 AI 巡检，助力企业网络高效稳定运行。',
+  feat1: '链路实时检测', feat2: '设备与流量监控', feat3: '智能告警中心', feat4: 'AI 巡检报告'
 }

@@ -8,6 +8,7 @@ export default {
   upDown: 'Up/Down', prefixRcvd: 'Prefix Rcvd', prefixSent: 'Prefix Sent',
   updatedAt: 'Updated',
   sshUser: 'SSH User', sshPass: 'SSH Password', sshPort: 'SSH Port', bgpEnable: 'Enable BGP Monitor',
+  enableHint: 'Enabled — neighbor status will show on the BGP/VPNv4 Monitor page',
   goDevice: 'Go to Device Monitoring',
   emptyHint: 'No BGP peers. Add a router in Device Monitoring and enable "BGP Monitor" with SSH credentials.',
   testBtn: 'Test Collect',

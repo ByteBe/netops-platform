@@ -18,6 +18,7 @@ export default {
   noAlerts: 'No Alerts', serverTotal: 'Servers', serverOnline: 'Servers Online',
   linkOnlineRate: 'Link Online Rate',
   linkNoTask: 'No link detection tasks configured', linkNoData: 'No link probe data yet', goConfig: 'Go Configure',
+  vendorNoData: 'No vendor data', hostNoData: 'No host resource data', alertNoData: 'No alert data',
   // Dashboard v3: Ops Visualization Screen
   refresh: 'Refresh',
   deviceUnit: 'dev', alertUnit: 'alerts', templateUnit: 'tpl',
@@ -37,8 +38,10 @@ export default {
   devSwitch: 'Switch', devRouter: 'Router', devServer: 'Server', devFirewall: 'Firewall', devOther: 'Other',
   // Device Geo Map
   geoMap: 'Device Geo Map', geoManage: 'Manage', geoNoImage: 'No base map uploaded, click "Upload" or paste an image URL',
-  geoUpload: 'Upload Base Map', geoUploadHint: 'Click or drag an image here to upload (local file, png/jpg/webp, ≤5MB)', geoSelectDevice: 'Select Device', geoClickPlace: 'Click blank area on the map to place the selected device',
+  geoUpload: 'Upload Base Map', geoUploadHint: 'Click or drag an image here to upload (local file, png/jpg/webp, ≤20MB)', geoSelectDevice: 'Select Device', geoClickPlace: 'Click blank area on the map to place the selected device',
   geoRemove: 'Remove', geoPlaced: 'Placed',
   geoUrlPlaceholder: 'Paste image URL to import', geoImportUrl: 'Import URL',
+  geoReloadFail: 'Upload succeeded but base map failed to load, please refresh and retry',
+  geoZoomReset: 'Fit', geoZoomTip: 'Scroll to zoom, drag to pan, click to place', geoViewTip: 'Double-click to view large map', geoViewerTip: 'Scroll to zoom · double-click to zoom · drag to pan',
   alertCenter: 'Alert Center'
 }

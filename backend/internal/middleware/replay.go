@@ -36,8 +36,8 @@ var (
 func ReplayProtection() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		path := c.Request.URL.Path
-		// 静态资源、PDF下载（浏览器原生链接无自定义头）不校验
-		if !isAPI(path) || strings.HasSuffix(path, "/pdf") {
+		// 静态资源、PDF下载、地理图底图（浏览器原生链接无自定义头）不校验
+		if !isAPI(path) || strings.HasSuffix(path, "/pdf") || strings.HasSuffix(path, "/geomap/image") {
 			c.Next()
 			return
 		}

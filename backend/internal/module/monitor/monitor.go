@@ -16,6 +16,15 @@ import (
 	"netops/internal/tsdb"
 )
 
+// isNetworkDeviceType 判断设备类型是否支持 SSH 采集 / BGP 监控（交换机、路由器、防火墙）
+func isNetworkDeviceType(t string) bool {
+	switch t {
+	case "switch", "router", "firewall":
+		return true
+	}
+	return false
+}
+
 // RegisterProtected 路由
 func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 	// 设备列表（支持按分组过滤）
@@ -97,6 +106,12 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		if d.SNMPVersion == "" {
 			d.SNMPVersion = "2c"
 		}
+		// BGP 监控仅网络设备支持，服务器强制关闭
+		if !isNetworkDeviceType(d.Type) {
+			d.BgpEnable = false
+			d.SshUser = ""
+			d.SshPass = ""
+		}
 		if err := a.DB.Create(&d).Error; err != nil {
 			response.Err(c, err)
 			return
@@ -117,6 +132,12 @@ func RegisterProtected(a *core.App, g *gin.RouterGroup) {
 		if err := c.ShouldBindJSON(&req); err != nil {
 			response.Bad(c, "参数错误")
 			return
+		}
+		// BGP 监控仅网络设备支持，服务器强制关闭
+		if !isNetworkDeviceType(req.Type) {
+			req.BgpEnable = false
+			req.SshUser = ""
+			req.SshPass = ""
 		}
 		a.DB.Model(&d).Updates(map[string]any{
 			"group_id": req.GroupID, "name": req.Name, "ip": req.IP, "type": req.Type,

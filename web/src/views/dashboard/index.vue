@@ -56,6 +56,78 @@ const now = ref(Date.now())
 const geo = ref<{ image: string; points: GeoPoint[] }>({ image: '', points: [] })
 const manageOpen = ref(false)
 const placingDevice = ref<number | undefined>()
+const geoZoom = ref(1)
+const geoScaleRef = ref<HTMLElement>()
+function zoomIn() { geoZoom.value = Math.min(4, +((geoZoom.value * 1.25).toFixed(2))) }
+function zoomOut() { geoZoom.value = Math.max(0.5, +((geoZoom.value / 1.25).toFixed(2))) }
+function resetZoom() { geoZoom.value = 1 }
+function onGeoCanvasWheel(e: WheelEvent) {
+  e.preventDefault()
+  if (!geo.value.image) return
+  geoZoom.value = Math.min(4, Math.max(0.5, +((geoZoom.value * (e.deltaY < 0 ? 1.15 : 0.87)).toFixed(2))))
+}
+// 大屏展示面板：双击弹出大图查看器（面板本身保持铺满展示）
+const geoViewOpen = ref(false)
+function openGeoView() {
+  if (!geo.value.image) return
+  resetViewer()
+  geoViewOpen.value = true
+}
+// 大图查看器：滚轮缩放 + 双击缩放 + 拖动平移
+const viewerZoom = ref(1)
+const viewerOffset = ref({ x: 0, y: 0 })
+const viewerDragging = ref(false)
+let viewerDrag: { sx: number; sy: number; ox: number; oy: number; moved: boolean } | null = null
+function resetViewer() { viewerZoom.value = 1; viewerOffset.value = { x: 0, y: 0 } }
+function onViewerWheel(e: WheelEvent) {
+  e.preventDefault()
+  viewerZoom.value = Math.min(4, Math.max(0.5, +((viewerZoom.value * (e.deltaY < 0 ? 1.15 : 0.87)).toFixed(2))))
+}
+function onViewerDown(e: PointerEvent) {
+  viewerDragging.value = true
+  viewerDrag = { sx: e.clientX, sy: e.clientY, ox: viewerOffset.value.x, oy: viewerOffset.value.y, moved: false }
+  ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+}
+function onViewerMove(e: PointerEvent) {
+  if (!viewerDrag) return
+  const dx = e.clientX - viewerDrag.sx
+  const dy = e.clientY - viewerDrag.sy
+  if (Math.abs(dx) > 4 || Math.abs(dy) > 4) viewerDrag.moved = true
+  if (viewerDrag.moved) viewerOffset.value = { x: viewerDrag.ox + dx, y: viewerDrag.oy + dy }
+}
+function onViewerUp() { viewerDrag = null; viewerDragging.value = false }
+function toggleViewerZoom() {
+  const levels = [1, 2, 3]
+  const i = levels.indexOf(viewerZoom.value)
+  viewerZoom.value = levels[(i + 1) % levels.length]
+  if (viewerZoom.value === 1) viewerOffset.value = { x: 0, y: 0 }
+}
+function viewerZoomIn() { viewerZoom.value = Math.min(4, +((viewerZoom.value * 1.25).toFixed(2))) }
+function viewerZoomOut() { viewerZoom.value = Math.max(0.5, +((viewerZoom.value / 1.25).toFixed(2))) }
+// 管理弹窗：拖动平移（需与"点击放置"区分）
+const geoCanvasOffset = ref({ x: 0, y: 0 })
+const geoCanvasDragging = ref(false)
+let geoCanvasDrag: { sx: number; sy: number; ox: number; oy: number; moved: boolean } | null = null
+function onGeoCanvasDown(e: PointerEvent) {
+  if (!geo.value.image) return
+  geoCanvasDragging.value = true
+  geoCanvasDrag = { sx: e.clientX, sy: e.clientY, ox: geoCanvasOffset.value.x, oy: geoCanvasOffset.value.y, moved: false }
+  ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+}
+function onGeoCanvasMove(e: PointerEvent) {
+  if (!geoCanvasDrag) return
+  const dx = e.clientX - geoCanvasDrag.sx
+  const dy = e.clientY - geoCanvasDrag.sy
+  if (Math.abs(dx) > 4 || Math.abs(dy) > 4) geoCanvasDrag.moved = true
+  if (geoCanvasDrag.moved) geoCanvasOffset.value = { x: geoCanvasDrag.ox + dx, y: geoCanvasDrag.oy + dy }
+}
+function onGeoCanvasUp(e: PointerEvent) {
+  const d = geoCanvasDrag
+  geoCanvasDrag = null
+  geoCanvasDragging.value = false
+  if (d?.moved) return // 拖动过则不触发放置
+  onGeoCanvasClick(e)
+}
 const deviceOptions = computed(() =>
   (data.value?.device_rank ?? []).map((d) => ({ device_id: d.device_id, name: d.name || d.ip || 'device-' + d.device_id }))
 )
@@ -74,10 +146,16 @@ async function uploadGeoImage(options: { file: File }) {
     await http.post('/dashboard/geomap/upload', fd, {
       headers: { 'Content-Type': 'multipart/form-data', 'X-No-Enc': '1' }
     })
-    ElMessage.success(t('common.success'))
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || e?.message || t('common.failed'))
+    return
+  }
+  ElMessage.success(t('common.success'))
+  manageOpen.value = false
+  try {
     await loadGeoMap()
-  } catch {
-    ElMessage.error(t('common.failed'))
+  } catch (e: any) {
+    ElMessage.error(t('dashboard.geoReloadFail'))
   }
 }
 const geoUrl = ref('')
@@ -86,27 +164,35 @@ async function importGeoUrl() {
   if (!url) return
   try {
     await postEnc('/dashboard/geomap/import-url', { url })
-    ElMessage.success(t('common.success'))
-    geoUrl.value = ''
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || e?.message || t('common.failed'))
+    return
+  }
+  ElMessage.success(t('common.success'))
+  geoUrl.value = ''
+  manageOpen.value = false
+  try {
     await loadGeoMap()
-  } catch {
-    ElMessage.error(t('common.failed'))
+  } catch (e: any) {
+    ElMessage.error(t('dashboard.geoReloadFail'))
   }
 }
 function onGeoCanvasClick(e: MouseEvent) {
   if (!placingDevice.value) return
-  const el = e.currentTarget as HTMLElement
+  // 坐标按缩放层（底图铺满）归一化：缩放只影响视觉，百分比即底图坐标
+  const el = geoScaleRef.value
+  if (!el) return
   const rect = el.getBoundingClientRect()
   const x = Math.min(100, Math.max(0, Math.round(((e.clientX - rect.left) / rect.width) * 10000) / 100))
   const y = Math.min(100, Math.max(0, Math.round(((e.clientY - rect.top) / rect.height) * 10000) / 100))
   void putEnc('/dashboard/geomap/points', [{ device_id: placingDevice.value, x, y }])
     .then(() => loadGeoMap())
-    .catch(() => ElMessage.error(t('common.failed')))
+    .catch((e: any) => ElMessage.error(e?.response?.data?.message || e?.message || t('common.failed')))
 }
 function removeGeoPoint(deviceId: number) {
   void delEnc(`/dashboard/geomap/points/${deviceId}`)
     .then(() => loadGeoMap())
-    .catch(() => ElMessage.error(t('common.failed')))
+    .catch((e: any) => ElMessage.error(e?.response?.data?.message || e?.message || t('common.failed')))
 }
 
 // ---------- 图表引用 ----------
@@ -124,6 +210,8 @@ let hostChart: echarts.ECharts | null = null
 let alertTrendChart: echarts.ECharts | null = null
 let ws: WSClient | null = null
 let timer: number | null = null
+let clockTimer: number | null = null
+let linkTimer: number | null = null
 let wsTimer: number | null = null
 let ro: ResizeObserver | null = null
 
@@ -139,6 +227,8 @@ function bindHoverPause(el: HTMLDivElement | undefined) {
 async function loadScreen() {
   data.value = await getEnc<ScreenData>('/dashboard/screen')
   now.value = Date.now()
+  // 等 Vue 完成 DOM 更新（v-if=data 的主体首次渲染）后再绘制图表，避免 refs 未就绪
+  await nextTick()
   renderAll()
 }
 async function loadAlerts() {
@@ -190,7 +280,7 @@ function renderVendor() {
   if (!vendorRef.value || !data.value) return
   if (hoverPaused) return
   vendorChart ??= echarts.init(vendorRef.value)
-  const list = data.value.vendor_dist
+  const list = Array.isArray(data.value.vendor_dist) ? data.value.vendor_dist : []
   const sig = JSON.stringify(list)
   if (sig === lastVendorSig) return
   lastVendorSig = sig
@@ -327,7 +417,7 @@ function renderHost() {
   if (!hostRef.value || !data.value) return
   if (hoverPaused) return
   hostChart ??= echarts.init(hostRef.value)
-  const h = data.value.host_res
+  const h = data.value.host_res ?? { cpu: 0, mem: 0, disk: 0 }
   const sig = JSON.stringify(h)
   if (sig === lastHostSig) return
   lastHostSig = sig
@@ -419,11 +509,6 @@ function ipRate(): string {
   if (!k || !k.ip_total) return '--'
   return `${Math.round((k.ip_used / k.ip_total) * 100)}%`
 }
-function ifRate(): string {
-  const k = data.value?.kpi
-  if (!k || !k.if_total) return '--'
-  return `${Math.round((k.if_up / k.if_total) * 100)}%`
-}
 function devRate(): string {
   const k = data.value?.kpi
   if (!k || !k.device_total) return '--'
@@ -463,10 +548,14 @@ onMounted(async () => {
   for (const el of [vendorRef.value, typeRef.value, linkTrendRef.value, trafficRef.value, hostRef.value, alertTrendRef.value]) {
     bindHoverPause(el)
   }
-  try { await loadScreen() } catch (e) { console.error('screen', e) }
-  try { await loadAlerts() } catch (e) { console.error('alerts', e) }
-  try { await loadLinkTrends() } catch (e) { console.error('link-trends', e) }
-  // 图表容器稳定后初始化
+  // 并行加载四大数据源（screen 聚合/告警/链路/地理图），避免串行叠加延迟
+  await Promise.all([
+    loadScreen().catch((e) => console.error('screen', e)),
+    loadAlerts().catch((e) => console.error('alerts', e)),
+    loadLinkTrends().catch((e) => console.error('link-trends', e)),
+    loadGeoMap().catch((e) => console.error('geomap', e)),
+  ])
+  // 图表容器稳定后初始化（重建实例后重置签名，避免 setOption 被 lastSig 跳过导致实例空绘）
   for (const refMap of [[vendorRef, vendorChart], [typeRef, typeChart], [linkTrendRef, linkTrendChart], [trafficRef, trafficChart], [hostRef, hostChart], [alertTrendRef, alertTrendChart]] as Array<[typeof vendorRef, echarts.ECharts | null]>) {
     if (refMap[0].value) {
       refMap[1]?.dispose()
@@ -479,6 +568,7 @@ onMounted(async () => {
       else alertTrendChart = ch
     }
   }
+  lastVendorSig = lastTypeSig = lastLinkTrendSig = lastTrafficSig = lastHostSig = lastAlertTrendSig = ''
   renderAll()
   setTimeout(() => {
     vendorChart?.resize(); typeChart?.resize(); linkTrendChart?.resize(); trafficChart?.resize()
@@ -499,12 +589,19 @@ onMounted(async () => {
     ws.on('traffic', 'if_rate', () => wsReload())
     ws.connect()
   } catch (e) { console.error('ws', e) }
+  // 顶部时间每秒实时走动
+  clockTimer = window.setInterval(() => {
+    now.value = Date.now()
+  }, 1000)
   timer = window.setInterval(() => {
     void loadScreen().catch(() => {})
     void loadAlerts().catch(() => {})
     void loadGeoMap().catch(() => {})
-    void loadLinkTrends().catch(() => {})
   }, 30000)
+  // 链路检测独立 5s 刷新（比探测节奏更快，末端数据实时可见）
+  linkTimer = window.setInterval(() => {
+    void loadLinkTrends().catch(() => {})
+  }, 5000)
 })
 
 function onResize() {
@@ -515,6 +612,8 @@ function onResize() {
 onBeforeUnmount(() => {
   ws?.close()
   if (timer) window.clearInterval(timer)
+  if (clockTimer) window.clearInterval(clockTimer)
+  if (linkTimer) window.clearInterval(linkTimer)
   if (wsTimer) window.clearTimeout(wsTimer)
   window.removeEventListener('resize', onResize)
   ro?.disconnect()
@@ -567,16 +666,6 @@ onBeforeUnmount(() => {
         <div class="np-kpi-main"><span class="np-kpi-big">{{ ipRate() }}</span></div>
         <div class="np-kpi-sub">{{ t('dashboard.ipUsedCount') }} {{ data.kpi.ip_used }}/{{ data.kpi.ip_total }}</div>
       </div>
-      <div class="np-kpi">
-        <div class="np-kpi-head"><span class="np-kpi-ico np-ico-if"></span>{{ t('dashboard.interfaceRate') }}</div>
-        <div class="np-kpi-main"><span class="np-kpi-big">{{ ifRate() }}</span></div>
-        <div class="np-kpi-sub">{{ t('dashboard.onlineCount') }} {{ data.kpi.if_up }}/{{ data.kpi.if_total }}</div>
-      </div>
-      <div class="np-kpi">
-        <div class="np-kpi-head"><span class="np-kpi-ico np-ico-tpl"></span>{{ t('dashboard.templates') }}</div>
-        <div class="np-kpi-main"><span class="np-kpi-big">{{ data.kpi.template_total }}</span><span class="np-kpi-unit">{{ t('dashboard.templateUnit') }}</span></div>
-        <div class="np-kpi-sub">{{ t('dashboard.templateCount') }} {{ data.kpi.template_total }}</div>
-      </div>
     </div>
     <div v-else class="np-empty">{{ t('common.loading') }}</div>
 
@@ -586,7 +675,10 @@ onBeforeUnmount(() => {
       <div class="np-col np-col-left">
         <div class="np-panel">
           <div class="np-panel-head"><span class="np-panel-tick"></span>{{ t('dashboard.vendorDist') }}</div>
-          <div ref="vendorRef" class="np-chart np-chart-pie"></div>
+          <div class="np-chart-wrap np-chart-wrap-static">
+            <div ref="vendorRef" class="np-chart np-chart-pie"></div>
+            <div v-if="!(data.vendor_dist || []).length" class="np-chart-empty np-chart-empty-static">{{ t('dashboard.vendorNoData') }}</div>
+          </div>
         </div>
         <div class="np-panel">
           <div class="np-panel-head"><span class="np-panel-tick"></span>{{ t('dashboard.typeDist') }}</div>
@@ -623,13 +715,16 @@ onBeforeUnmount(() => {
             <span class="np-panel-hint">{{ t('dashboard.geoPlaced') }} {{ geo.points.length }}</span>
             <el-button class="np-geo-manage" size="small" @click="openManage">{{ t('dashboard.geoManage') }}</el-button>
           </div>
-          <div class="np-geo">
-            <img v-if="geo.image" :src="geo.image" class="np-geo-bg" alt="" />
-            <div v-else class="np-geo-empty" @click="openManage">{{ t('dashboard.geoNoImage') }}</div>
-            <div v-for="p in geo.points" :key="p.device_id" class="np-geo-point" :class="p.up ? 'up' : 'down'" :style="{ left: p.x + '%', top: p.y + '%' }">
-              <span class="np-geo-dot"></span>
-              <span class="np-geo-name">{{ p.name }}</span>
+          <div class="np-geo" @dblclick="openGeoView" :title="t('dashboard.geoViewTip')">
+            <div v-if="geo.image" class="np-geo-view">
+              <img :src="geo.image" class="np-geo-bg" alt="" />
+              <div v-for="p in geo.points" :key="p.device_id" class="np-geo-point" :class="p.up ? 'up' : 'down'" :style="{ left: p.x + '%', top: p.y + '%' }">
+                <span class="np-geo-dot"></span>
+                <span class="np-geo-name">{{ p.name }}</span>
+              </div>
             </div>
+            <div v-else class="np-geo-empty" @click="openManage">{{ t('dashboard.geoNoImage') }}</div>
+            <span v-if="geo.image" class="np-geo-zoom-tag">{{ t('dashboard.geoViewTip') }}</span>
           </div>
         </div>
         <div class="np-panel">
@@ -651,11 +746,17 @@ onBeforeUnmount(() => {
       <div class="np-col np-col-right">
         <div class="np-panel">
           <div class="np-panel-head"><span class="np-panel-tick"></span>{{ t('dashboard.hostRes') }}</div>
-          <div ref="hostRef" class="np-chart np-chart-host"></div>
+          <div class="np-chart-wrap np-chart-wrap-static">
+            <div ref="hostRef" class="np-chart np-chart-host"></div>
+            <div v-if="(data.host_res || { cpu: 0, mem: 0, disk: 0 }).cpu === 0 && (data.host_res || { cpu: 0, mem: 0, disk: 0 }).mem === 0 && (data.host_res || { cpu: 0, mem: 0, disk: 0 }).disk === 0" class="np-chart-empty np-chart-empty-static">{{ t('dashboard.hostNoData') }}</div>
+          </div>
         </div>
         <div class="np-panel">
           <div class="np-panel-head"><span class="np-panel-tick"></span>{{ t('dashboard.alertTrend') }}</div>
-          <div ref="alertTrendRef" class="np-chart np-chart-min"></div>
+          <div class="np-chart-wrap np-chart-wrap-static">
+            <div ref="alertTrendRef" class="np-chart np-chart-min"></div>
+            <div v-if="!data.alert_trend.some((x) => x.count > 0)" class="np-chart-empty np-chart-empty-static">{{ t('dashboard.alertNoData') }}</div>
+          </div>
         </div>
         <div class="np-panel">
           <div class="np-panel-head"><span class="np-panel-tick"></span>{{ t('dashboard.trafficTrend') }}</div>
@@ -730,15 +831,22 @@ onBeforeUnmount(() => {
           <el-select v-model="placingDevice" size="small" :placeholder="t('dashboard.geoSelectDevice')" clearable style="width: 200px">
             <el-option v-for="d in deviceOptions" :key="d.device_id" :label="d.name" :value="d.device_id" />
           </el-select>
-          <span class="np-geo-tip">{{ t('dashboard.geoClickPlace') }}</span>
+          <el-button-group>
+            <el-button size="small" :disabled="!geo.image" @click="zoomOut">−</el-button>
+            <el-button size="small" :disabled="!geo.image" @click="resetZoom">{{ t('dashboard.geoZoomReset') }}</el-button>
+            <el-button size="small" :disabled="!geo.image" @click="zoomIn">＋</el-button>
+          </el-button-group>
+          <span class="np-geo-tip">{{ t('dashboard.geoZoomTip') }} · {{ t('dashboard.geoClickPlace') }}</span>
         </div>
-        <div class="np-geo-canvas" :class="{ 'np-geo-canvas-empty': !geo.image }" @click="onGeoCanvasClick">
-          <img v-if="geo.image" :src="geo.image" class="np-geo-canvas-bg" alt="" />
-          <div v-else class="np-geo-empty">{{ t('dashboard.geoNoImage') }}</div>
-          <div v-for="p in geo.points" :key="p.device_id" class="np-geo-point" :class="p.up ? 'up' : 'down'" :style="{ left: p.x + '%', top: p.y + '%' }">
-            <span class="np-geo-dot"></span>
-            <span class="np-geo-name">{{ p.name }}</span>
+        <div class="np-geo-canvas" :class="{ 'np-geo-canvas-empty': !geo.image }" @wheel.prevent="onGeoCanvasWheel" @pointerdown="onGeoCanvasDown" @pointermove="onGeoCanvasMove" @pointerup="onGeoCanvasUp" @pointercancel="onGeoCanvasUp" @dblclick="zoomIn">
+          <div v-if="geo.image" ref="geoScaleRef" class="np-geo-scaled" :class="{ dragging: geoCanvasDragging }" :style="{ transform: `translate(${geoCanvasOffset.x}px, ${geoCanvasOffset.y}px) scale(${geoZoom})` }">
+            <img :src="geo.image" class="np-geo-canvas-bg" alt="" />
+            <div v-for="p in geo.points" :key="p.device_id" class="np-geo-point" :class="p.up ? 'up' : 'down'" :style="{ left: p.x + '%', top: p.y + '%' }">
+              <span class="np-geo-dot"></span>
+              <span class="np-geo-name">{{ p.name }}</span>
+            </div>
           </div>
+          <div v-else class="np-geo-empty">{{ t('dashboard.geoNoImage') }}</div>
         </div>
         <div class="np-geo-list">
           <div v-for="p in geo.points" :key="p.device_id" class="np-geo-row">
@@ -748,6 +856,29 @@ onBeforeUnmount(() => {
             <el-button size="small" type="danger" link @click="removeGeoPoint(p.device_id)">{{ t('dashboard.geoRemove') }}</el-button>
           </div>
           <div v-if="!geo.points.length" class="np-empty">{{ t('common.noData') }}</div>
+        </div>
+      </div>
+    </el-dialog>
+
+    <!-- 设备地理图大图查看器（双击面板弹出） -->
+    <el-dialog v-model="geoViewOpen" :title="t('dashboard.geoMap')" width="90%" top="4vh" append-to-body class="np-geo-viewer-dialog">
+      <div class="np-geo-viewer">
+        <div class="np-geo-viewer-toolbar">
+          <el-button-group>
+            <el-button size="small" @click="viewerZoomOut">−</el-button>
+            <el-button size="small" @click="resetViewer">{{ t('dashboard.geoZoomReset') }}</el-button>
+            <el-button size="small" @click="viewerZoomIn">＋</el-button>
+          </el-button-group>
+          <span class="np-geo-tip">{{ t('dashboard.geoViewerTip') }}</span>
+        </div>
+        <div class="np-geo-viewer-canvas" @wheel.prevent="onViewerWheel" @pointerdown="onViewerDown" @pointermove="onViewerMove" @pointerup="onViewerUp" @pointercancel="onViewerUp" @dblclick="toggleViewerZoom">
+          <div class="np-geo-viewer-stage" :class="{ dragging: viewerDragging }" :style="{ transform: `translate(${viewerOffset.x}px, ${viewerOffset.y}px) scale(${viewerZoom})` }">
+            <img :src="geo.image" class="np-geo-viewer-bg" alt="" />
+            <div v-for="p in geo.points" :key="p.device_id" class="np-geo-point" :class="p.up ? 'up' : 'down'" :style="{ left: p.x + '%', top: p.y + '%' }">
+              <span class="np-geo-dot"></span>
+              <span class="np-geo-name">{{ p.name }}</span>
+            </div>
+          </div>
         </div>
       </div>
     </el-dialog>
@@ -780,8 +911,8 @@ onBeforeUnmount(() => {
   .np-clock { font-size: 14px; font-variant-numeric: tabular-nums; color: var(--np-text-1); font-weight: 600; }
   .np-updated { font-size: 12px; color: var(--np-text-3); font-variant-numeric: tabular-nums; }
 
-  // KPI 带（7 卡）
-  .np-kpis { display: grid; grid-template-columns: repeat(7, 1fr); gap: 12px; }
+  // KPI 带（5 卡）
+  .np-kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
   .np-kpi {
     background: var(--np-card-bg); border: 1px solid var(--np-border); border-radius: $radius-lg;
     padding: 12px 14px; box-shadow: var(--np-shadow-sm); min-width: 0;
@@ -789,7 +920,20 @@ onBeforeUnmount(() => {
     &:hover { border-color: var(--np-border-strong); }
   }
   .np-kpi-head { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--np-text-2); letter-spacing: 0.04em; white-space: nowrap; }
-  .np-kpi-ico { width: 14px; height: 14px; flex: none; border-radius: 4px; background: color-mix(in oklch, var(--np-primary) 12%, transparent); }
+  .np-kpi-ico {
+    width: 18px; height: 18px; flex: none; border-radius: 6px; position: relative;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+    &::after {
+      content: ''; position: absolute; inset: 0; border-radius: inherit;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0) 55%);
+      pointer-events: none;
+    }
+  }
+  .np-ico-dev { background: linear-gradient(145deg, #4db8ff, #1270e0); }
+  .np-ico-rate { background: linear-gradient(145deg, #3fe0c0, #0aa5a5); }
+  .np-ico-alert { background: linear-gradient(145deg, #ffb84d, #ef7b0a); }
+  .np-ico-crit { background: linear-gradient(145deg, #ff6b6b, #d92626); }
+  .np-ico-ip { background: linear-gradient(145deg, #d39aff, #7a3fe0); }
   .np-kpi-main { display: flex; align-items: baseline; gap: 5px; margin: 8px 0 4px; }
   .np-kpi-big { font-size: 28px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; color: var(--np-text-1); &.np-bad { color: var(--np-danger); } }
   .np-kpi-unit { font-size: 12px; color: var(--np-text-3); }
@@ -838,6 +982,9 @@ onBeforeUnmount(() => {
     }
     &:hover { color: var(--np-primary); }
   }
+  // 静态空态（厂商/主机/告警三卡，非点击，不变色）
+  .np-chart-wrap-static { position: relative; }
+  .np-chart-empty-static { cursor: default; &:hover { color: var(--np-text-3); } }
 
   // 设备地理图
   .np-panel-geo { flex: 2.2; }
@@ -845,55 +992,20 @@ onBeforeUnmount(() => {
   .np-geo {
     position: relative; flex: 1; min-height: 0; overflow: hidden;
     border-radius: $radius-sm; background: var(--np-surface-1); border: 1px solid var(--np-border);
-    img.np-geo-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
-  }
-  .np-geo-empty {
-    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-    color: var(--np-text-3); font-size: 13px; cursor: pointer;
-    &:hover { color: var(--np-primary); }
-  }
-  .np-geo-point {
-    position: absolute; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 4px;
-    z-index: 2; cursor: default; user-select: none;
-    .np-geo-dot {
-      width: 12px; height: 12px; border-radius: 50%; flex: none;
-      box-shadow: 0 0 0 3px color-mix(in oklch, var(--np-success) 22%, transparent), 0 0 8px color-mix(in oklch, var(--np-success) 55%, transparent);
+    cursor: pointer;
+    .np-geo-view {
+      position: absolute; inset: 0;
+      img.np-geo-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; pointer-events: none; user-select: none; }
     }
-    &.down .np-geo-dot {
-      background: var(--np-danger);
-      box-shadow: 0 0 0 3px color-mix(in oklch, var(--np-danger) 22%, transparent), 0 0 8px color-mix(in oklch, var(--np-danger) 55%, transparent);
-    }
-    &.up .np-geo-dot { background: var(--np-success); }
-    .np-geo-name {
-      font-size: 11px; color: var(--np-text-1); max-width: 110px; @include ellipsis;
-      padding: 1px 6px; border-radius: 999px; background: color-mix(in oklch, var(--np-card-bg) 88%, transparent);
+    .np-geo-zoom-tag {
+      position: absolute; right: 8px; bottom: 8px; z-index: 3;
+      font-size: 11px; color: var(--np-text-1); font-variant-numeric: tabular-nums;
+      padding: 1px 7px; border-radius: 999px;
+      background: color-mix(in oklch, var(--np-card-bg) 82%, transparent);
+      border: 1px solid var(--np-border);
     }
   }
-
-  // 地理图管理弹窗
-  .np-geo-editor { display: flex; flex-direction: column; gap: 10px; }
-  .np-geo-upload { width: 100%; }
-  .np-geo-upload :deep(.el-upload-dragger) { padding: 14px 0; }
-  .np-geo-upload-inner { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-  .np-geo-upload-title { font-size: 13px; font-weight: 600; color: var(--np-primary); }
-  .np-geo-upload-hint { font-size: 12px; color: var(--np-text-3); }
-  .np-geo-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .np-geo-tip { font-size: 12px; color: var(--np-text-3); }
-  .np-geo-canvas {
-    position: relative; width: 100%; height: 380px; overflow: hidden; cursor: crosshair;
-    border-radius: $radius-sm; background: var(--np-surface-1); border: 1px solid var(--np-border);
-    img.np-geo-canvas-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
-    &.np-geo-canvas-empty { cursor: default; }
-  }
-  .np-geo-list { display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow-y: auto; }
-  .np-geo-row {
-    display: flex; align-items: center; gap: 12px; padding: 5px 10px;
-    border-radius: $radius-sm; background: var(--np-surface-1); border: 1px solid var(--np-border);
-    font-size: 12px; color: var(--np-text-1);
-    .np-geo-row-name { font-weight: 600; flex: 1; @include ellipsis; }
-    .np-geo-row-pos { color: var(--np-text-2); font-variant-numeric: tabular-nums; }
-    .np-geo-row-status { font-size: 11px; &.up { color: var(--np-success); } &.down { color: var(--np-danger); } }
-  }
+  // 弹窗（append-to-body）用样式见顶层：.np-geo-empty/.np-geo-point/.np-geo-editor/.np-geo-viewer 等
 
   // 最新告警（左列，带分级统计条）
   .np-panel-alerts { flex: 1; }
@@ -948,5 +1060,82 @@ onBeforeUnmount(() => {
   .np-summary-sub { font-size: 11px; color: var(--np-text-2); font-variant-numeric: tabular-nums; }
 
   .np-empty { color: var(--np-text-3); font-size: 13px; padding: 16px 0; text-align: center; }
+}
+
+// ============ 设备地理图弹窗样式（append-to-body，需顶层作用域） ============
+.np-geo-empty {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  color: var(--np-text-3); font-size: 13px; cursor: pointer;
+  &:hover { color: var(--np-primary); }
+}
+.np-geo-point {
+  position: absolute; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 4px;
+  z-index: 2; cursor: default; user-select: none;
+  .np-geo-dot {
+    width: 12px; height: 12px; border-radius: 50%; flex: none;
+    box-shadow: 0 0 0 3px color-mix(in oklch, var(--np-success) 22%, transparent), 0 0 8px color-mix(in oklch, var(--np-success) 55%, transparent);
+  }
+  &.down .np-geo-dot {
+    background: var(--np-danger);
+    box-shadow: 0 0 0 3px color-mix(in oklch, var(--np-danger) 22%, transparent), 0 0 8px color-mix(in oklch, var(--np-danger) 55%, transparent);
+  }
+  &.up .np-geo-dot { background: var(--np-success); }
+  .np-geo-name {
+    font-size: 11px; color: var(--np-text-1); max-width: 110px; @include ellipsis;
+    padding: 1px 6px; border-radius: 999px; background: color-mix(in oklch, var(--np-card-bg) 88%, transparent);
+  }
+}
+// 地理图管理弹窗
+.np-geo-editor { display: flex; flex-direction: column; gap: 10px; }
+.np-geo-upload { width: 100%; }
+.np-geo-upload :deep(.el-upload-dragger) { padding: 14px 0; }
+.np-geo-upload-inner { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.np-geo-upload-title { font-size: 13px; font-weight: 600; color: var(--np-primary); }
+.np-geo-upload-hint { font-size: 12px; color: var(--np-text-3); }
+.np-geo-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.np-geo-tip { font-size: 12px; color: var(--np-text-3); }
+.np-geo-canvas {
+  position: relative; width: 100%; height: 380px; overflow: hidden; cursor: crosshair;
+  border-radius: $radius-sm; background: var(--np-surface-1); border: 1px solid var(--np-border);
+  &.np-geo-canvas-empty { cursor: default; }
+  .np-geo-scaled {
+    position: absolute; inset: 0; transform-origin: center center;
+    transition: transform 0.12s ease-out;
+    &.dragging { transition: none; }
+    img.np-geo-canvas-bg {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      object-fit: fill; pointer-events: none; user-select: none;
+    }
+  }
+}
+.np-geo-list { display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow-y: auto; }
+.np-geo-row {
+  display: flex; align-items: center; gap: 12px; padding: 5px 10px;
+  border-radius: $radius-sm; background: var(--np-surface-1); border: 1px solid var(--np-border);
+  font-size: 12px; color: var(--np-text-1);
+  .np-geo-row-name { font-weight: 600; flex: 1; @include ellipsis; }
+  .np-geo-row-pos { color: var(--np-text-2); font-variant-numeric: tabular-nums; }
+  .np-geo-row-status { font-size: 11px; &.up { color: var(--np-success); } &.down { color: var(--np-danger); } }
+}
+// 大图查看器（双击设备地理图面板弹出）
+.np-geo-viewer-dialog {
+  :deep(.el-dialog) { border-radius: $radius-lg; }
+  :deep(.el-dialog__body) { padding: 12px 16px 16px; }
+}
+.np-geo-viewer { display: flex; flex-direction: column; gap: 10px; }
+.np-geo-viewer-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.np-geo-viewer-canvas {
+  position: relative; width: 100%; height: 72vh; overflow: hidden; cursor: grab;
+  border-radius: $radius-sm; background: var(--np-surface-1); border: 1px solid var(--np-border);
+  &:active { cursor: grabbing; }
+  .np-geo-viewer-stage {
+    position: absolute; inset: 0; transform-origin: center center;
+    transition: transform 0.12s ease-out;
+    &.dragging { transition: none; cursor: grabbing; }
+    img.np-geo-viewer-bg {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      object-fit: fill; pointer-events: none; user-select: none;
+    }
+  }
 }
 </style>

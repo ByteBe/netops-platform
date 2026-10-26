@@ -143,7 +143,7 @@ function miShadow(name: string) {
           </template>
           <el-menu-item v-for="m in g.items" :key="m.name" :index="'/' + m.name">
             <span class="np-mi" :style="{ background: miBg(m.name), boxShadow: miShadow(m.name) }">
-              <el-icon :size="16"><component :is="m.icon" /></el-icon>
+              <el-icon :size="18"><component :is="m.icon" /></el-icon>
             </span>
             <template #title>{{ m.title }}</template>
           </el-menu-item>
@@ -164,7 +164,7 @@ function miShadow(name: string) {
         <div class="np-header-right">
           <!-- 数据大屏入口：固定在右上角，左侧导航不设入口 -->
           <el-button type="primary" class="np-dashboard-entry" @click="goDashboard">
-            <el-icon><DataBoard /></el-icon>
+            <span class="np-dash-ico"><el-icon><DataBoard /></el-icon></span>
             <span>{{ t('dashboard.entry') }}</span>
           </el-button>
 
@@ -282,22 +282,33 @@ function miShadow(name: string) {
 
   // 彩色立体图标
   .np-mi {
-    width: 26px;
-    height: 26px;
-    border-radius: 7px;
+    width: 28px;
+    height: 28px;
+    border-radius: 9px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     color: #fff;
     flex: none;
     margin-right: 8px;
-    transition: transform 0.18s ease-out, box-shadow 0.18s ease-out;
+    position: relative;
+    transition: transform 0.18s ease-out, box-shadow 0.18s ease-out, filter 0.18s ease-out;
+    &::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.38) 0%, rgba(255, 255, 255, 0.12) 38%, rgba(255, 255, 255, 0) 62%);
+      pointer-events: none;
+    }
+    :deep(.el-icon) { position: relative; z-index: 1; }
   }
   .el-menu-item:hover .np-mi {
-    transform: translateY(-1px) scale(1.06);
+    transform: translateY(-1px) scale(1.08);
+    filter: brightness(1.1);
   }
   .el-menu-item.is-active .np-mi {
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 0 0 2px rgba(255, 255, 255, 0.35);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.24), 0 8px 18px -4px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.55), 0 0 0 2px rgba(255, 255, 255, 0.45);
   }
 }
 
@@ -378,6 +389,55 @@ function miShadow(name: string) {
 
 .np-dashboard-entry {
   font-weight: 600;
+  border: none;
+  border-radius: 10px;
+  padding: 8px 16px;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--np-primary), color-mix(in oklch, var(--np-primary) 55%, var(--np-info))) !important;
+  box-shadow: 0 3px 10px -2px color-mix(in oklch, var(--np-primary) 55%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transition: transform 0.18s ease-out, box-shadow 0.18s ease-out, filter 0.18s ease-out;
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0) 50%);
+    pointer-events: none;
+  }
+  :deep(.el-icon) {
+    position: relative;
+    z-index: 1;
+    margin-right: 0;
+  }
+  .np-dash-ico {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    margin-right: 6px;
+    background: rgba(255, 255, 255, 0.28);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 1px 3px rgba(0, 0, 0, 0.18);
+    :deep(.el-icon) {
+      font-size: 13px;
+      color: #fff;
+    }
+  }
+  :deep(span) {
+    position: relative;
+    z-index: 1;
+  }
+  &:hover {
+    transform: translateY(-1px);
+    filter: brightness(1.08);
+    box-shadow: 0 6px 16px -3px color-mix(in oklch, var(--np-primary) 60%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  }
+  &:active {
+    transform: translateY(0);
+  }
 }
 
 .np-user {
