@@ -37,7 +37,8 @@ Copy-Item $readmeLin (Join-Path $t "README.md") -Force
 Copy-Item "E:\IDEA\netops-platform\install.sh" (Join-Path $t "install.sh") -Force
 Compress-Archive -Path (Join-Path $t "*") -DestinationPath (Join-Path $dist ("netops-kylin-amd64-v" + $Version + ".zip")) -CompressionLevel Optimal
 Compress-Archive -Path (Join-Path $t "*") -DestinationPath (Join-Path $dist ("netops-uos-amd64-v" + $Version + ".zip")) -CompressionLevel Optimal
-Write-Output ("packed: netops-kylin-amd64-v" + $Version + ".zip + netops-uos-amd64-v" + $Version + ".zip")
+Compress-Archive -Path (Join-Path $t "*") -DestinationPath (Join-Path $dist ("netops-linux-amd64-v" + $Version + ".zip")) -CompressionLevel Optimal
+Write-Output ("packed: netops-kylin-amd64-v" + $Version + ".zip + netops-uos-amd64-v" + $Version + ".zip + netops-linux-amd64-v" + $Version + ".zip")
 Remove-Item $t -Recurse -Force
 
 # 3) Linux arm64（麒麟 / 统信）
@@ -50,7 +51,8 @@ Copy-Item $readmeLin (Join-Path $t "README.md") -Force
 Copy-Item "E:\IDEA\netops-platform\install.sh" (Join-Path $t "install.sh") -Force
 Compress-Archive -Path (Join-Path $t "*") -DestinationPath (Join-Path $dist ("netops-kylin-arm64-v" + $Version + ".zip")) -CompressionLevel Optimal
 Compress-Archive -Path (Join-Path $t "*") -DestinationPath (Join-Path $dist ("netops-uos-arm64-v" + $Version + ".zip")) -CompressionLevel Optimal
-Write-Output ("packed: netops-kylin-arm64-v" + $Version + ".zip + netops-uos-arm64-v" + $Version + ".zip")
+Compress-Archive -Path (Join-Path $t "*") -DestinationPath (Join-Path $dist ("netops-linux-arm64-v" + $Version + ".zip")) -CompressionLevel Optimal
+Write-Output ("packed: netops-kylin-arm64-v" + $Version + ".zip + netops-uos-arm64-v" + $Version + ".zip + netops-linux-arm64-v" + $Version + ".zip")
 Remove-Item $t -Recurse -Force
 
 Write-Output "DONE"
